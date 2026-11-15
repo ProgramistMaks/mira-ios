@@ -19,12 +19,26 @@ jobs:
         run: bash Scripts/build-ios.sh
       - name: Run native tests
         run: bash Scripts/test-ios.sh
+      - name: Export native screenshots
+        if: always()
+        run: |
+          if [ -d build/Tests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-test-evidence
+          path: |
+            build/Tests.xcresult
+            build/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: mira-internal-unsigned
           path: |
             build/Mira-unsigned.ipa
-            build/Tests.xcresult
           retention-days: 7
       - name: Quality status
         run: echo 'Internal build only. Visual parity, voice quality and physical-device checks are still required.'

@@ -40,10 +40,19 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  CompanionUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Companion
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   Companion:
     build:
       targets:
         Companion: all
     test:
-      targets: [CompanionTests]
+      targets: [CompanionTests, CompanionUITests]

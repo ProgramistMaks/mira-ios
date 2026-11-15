@@ -14,7 +14,8 @@ struct CommandsView: View {
         NavigationStack {
             Form {
                 Section("Что сделать?") {
-                    TextField("Запрос, заметка или напоминание", text: $text, axis: .vertical).lineLimit(3...6)
+                    TextField("Запрос, заметка или напоминание", text: $text, axis: .vertical)
+                        .lineLimit(3...6).accessibilityIdentifier("command.input")
                     Button("Найти в интернете", systemImage: "magnifyingglass") {
                         var components = URLComponents(string: "https://www.google.com/search")!
                         components.queryItems = [URLQueryItem(name: "q", value: value)]
@@ -27,7 +28,7 @@ struct CommandsView: View {
                     Button("Сохранить заметку", systemImage: "note.text") {
                         do { try store.addNote(value); text = ""; result = "Заметка сохранена в Мире." }
                         catch { result = error.localizedDescription }
-                    }.disabled(value.isEmpty)
+                    }.disabled(value.isEmpty).accessibilityIdentifier("command.saveNote")
                 }
                 Section("Напоминание") {
                     DatePicker("Когда", selection: $date, in: Date()...)

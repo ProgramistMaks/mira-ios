@@ -103,6 +103,7 @@ struct CompanionView: View {
             .background(.ultraThinMaterial, in: Capsule()).padding(.bottom, 16)
         }
         .accessibilityElement(children: .ignore).accessibilityLabel("Мира. \(status)")
+        .accessibilityIdentifier(store.characterReady ? "avatar.ready" : "avatar.loading")
     }
     private var conversation: some View {
         VStack(spacing: 0) {
