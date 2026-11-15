@@ -35,6 +35,8 @@ try {
       assert.equal(await page.evaluate(() => window.companion.phase), phase);
     }
     await page.evaluate(() => window.companion.setState('idle', true));
+    // Let spring bones settle before visual inspection.
+    await page.waitForTimeout(1000);
     await page.screenshot({ path: `/tmp/companion-review/avatar-${width}.png` });
     assert.equal(await page.locator('canvas').count(), 1);
   }

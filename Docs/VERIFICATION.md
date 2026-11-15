@@ -1,5 +1,20 @@
 # Verification — 2026-11-15
 
+## macOS CI update
+
+The user created private repository `ProgramistMaks/mira-ios` and granted access.
+Source was pushed with authorization; manual workflow run `43764306154` succeeded.
+Xcode 16.4 / iOS 18.5 SDK compiled the unsigned device archive and all four native
+unit tests passed. The artifact is internal, not a deliverable approved against the videos.
+
+Run `43764534875` adds native UI coverage for WKWebView avatar readiness, note
+persistence, settings and portrait/landscape screenshots. Its result is pending.
+Latest local asset candidate is Vita (CC0), verified in Chromium with corrected
+VRM0 orientation and resting pose; older runs contain the previous technical model.
+Physical iPhone Duo / iOS 27.3 testing remains unperformed.
+
+## Earlier local checks and initial access blocker
+
 Completed locally on Linux:
 
 - `npm run check`: TypeScript type check passed.

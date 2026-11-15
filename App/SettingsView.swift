@@ -39,6 +39,10 @@ struct SettingsView: View {
                     Text("История и заметки сохраняются на этом устройстве.").font(.footnote)
                     Button("Удалить историю разговора", role: .destructive) { confirmDelete = true }
                 }
+                Section("Персонаж") {
+                    Text("Vita · VRoid Project / pixiv")
+                    Link("Условия использования · CC0", destination: URL(string: "https://creativecommons.org/publicdomain/zero/1.0/")!)
+                }
             }
             .navigationTitle("Настройки")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { voice.stop(); dismiss() } } }

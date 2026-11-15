@@ -50,9 +50,11 @@ async function main() {
   // Bring the sample's T-pose into a relaxed resting pose.
   const left = avatar.humanoid.getNormalizedBoneNode('leftUpperArm');
   const right = avatar.humanoid.getNormalizedBoneNode('rightUpperArm');
-  if (left) left.rotation.z = -1.2;
-  if (right) right.rotation.z = 1.2;
-  scene.add(avatar.scene);
+  const armSign = avatar.meta.metaVersion === '0' ? 1 : -1;
+  if (left) left.rotation.z = armSign * 1.2;
+  if (right) right.rotation.z = -armSign * 1.2;
+  // Keep the VRM0 orientation correction; user rotation belongs on a parent node.
+  const turntable = new THREE.Group(); turntable.add(avatar.scene); scene.add(turntable);
   avatar.update(0);
   const bounds = new THREE.Box3().setFromObject(avatar.scene);
   const height = bounds.max.y - bounds.min.y;
@@ -91,7 +93,7 @@ async function main() {
     if (document.hidden) return;
     elapsed += delta;
     const pose = motion(elapsed, phase, reduced);
-    avatar.scene.rotation.y = THREE.MathUtils.damp(avatar.scene.rotation.y, rotation, 6, delta);
+    turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
     if (spine) spine.rotation.x = pose.breathe;
     if (head) head.rotation.z = pose.head;
     avatar.expressionManager?.setValue('blink', pose.blink);

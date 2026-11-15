@@ -9,7 +9,7 @@ Videos sampled visually on 2026-11-15. Full audio/transcript review still pendin
 
 ## Required before delivery
 
-- [ ] Final high-quality anime model with hair/clothing dynamics, accurate material rendering and documented asset terms. Current pixiv constraint sample is a technical fixture.
+- [ ] Final high-quality anime model with hair/clothing dynamics, accurate material rendering and documented asset terms. Vita (CC0) is the current candidate; visual parity still unapproved.
 - [ ] Authored idle, listening, thinking, speaking, greeting and touch-reaction animation clips with smooth blending. Current procedural breathing/tilt is a first pass only.
 - [ ] Speech-driven mouth animation synchronized to audible output. Current synthesized mouth envelope is NOT lip sync.
 - [ ] Natural Russian voice, interruptible playback, no feedback loop into microphone. Current Apple TTS is a functional baseline, not demonstrated parity.
@@ -29,6 +29,6 @@ Notes are app-local; reminders use EventKit; web search opens a browser. No sear
 
 ## Current blockers
 
-This workspace is Linux; Xcode and Apple SDKs are absent. A macOS CI workflow is prepared but has not run.
+This workspace is Linux. macOS CI now compiles the app successfully with Xcode 16.4/iOS 18.5 SDK; four unit tests passed. Native UI tests and latest-character review are in progress. Actual Duo/iOS 27.3 verification is still required.
 User has a signing certificate and can sign/test IPA. Do not collect private keys or passwords in chat.
-Need an explicitly selected repository/runner to execute CI. No public repository or external deployment has been created.
+The user's private repository is ProgramistMaks/mira-ios; cloud builds are internal. No public release has been created.
