@@ -14,7 +14,7 @@ previous saved settings without a mode remain cloud. There is no automatic cloud
 - 4096-token context; oldest messages are removed until the prompt fits 3072 tokens. Default response cap is 512 tokens; a length stop is visibly marked interrupted.
 - Local mode requires on-device Apple dictation and never silently falls back to Apple's servers. Where Russian on-device recognition is unavailable, the app offers text input. Cloud-mode dictation may use Apple's servers. Web search inherently requires internet.
 
-CI compiles both iOS and the local-runtime smoke executable, downloads/verifies the exact model and executes a short Russian arithmetic prompt. Passing the smoke check does not certify Russian dialogue quality, iPhone latency, thermal behavior or energy use.
+CI run `43766167802` compiled both iOS and the local-runtime smoke executable, downloaded/verified the exact model and answered a short Russian arithmetic prompt with `4`. Six native unit tests and the UI test also passed. Passing the smoke check does not certify Russian dialogue quality, iPhone latency, thermal behavior or energy use.
 
 ## Tavily
 

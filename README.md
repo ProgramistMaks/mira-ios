@@ -1,8 +1,8 @@
 # Мира — iOS companion, internal work in progress
 
-Native SwiftUI shell, Russian speech recognition / Apple TTS, streaming chat with an explicitly configured HTTPS Chat Completions endpoint, Keychain credential storage, local history/notes and confirmed EventKit reminders. A bundled Three.js/VRM scene runs inside an isolated WKWebView. It receives only animation state, never conversation text or credentials. This renderer is reusable for later Android/desktop hosts.
+Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud streaming chat, Russian speech recognition / Apple TTS, Tavily search, Keychain credential storage, local history/notes and confirmed EventKit reminders. A bundled Three.js/VRM scene runs inside an isolated WKWebView. It receives only animation state, never conversation text or credentials. This renderer is reusable for later Android/desktop hosts.
 
-**Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA has been compiled on macOS CI and four native unit tests passed; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
+**Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the local runtime has been compiled on macOS CI, and real Qwen inference passed on the macOS runner. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
 
 ## Renderer checks
 
@@ -30,16 +30,17 @@ The workflow assumes this directory is the repository root. The user authorized 
 
 ## Configuration and limitations
 
-- Chat endpoint and model start empty; there is no fake response mode. The user chooses a compatible provider. API key is entered on device and stored only in Keychain.
-- Apple speech recognition may send audio to Apple; the permission copy discloses this. Microphone is activated only by the recording control and stopped on background/interruption.
-- Conversation history is bounded to the last 40 non-interrupted messages for requests; long-term semantic memory is not implemented.
+- New installations default to local mode. Download the pinned Qwen model once over Wi-Fi (1.12 GB); subsequent text inference runs on device without a cloud key or automatic cloud fallback. See [local AI](Docs/LOCAL-AI.md).
+- Optional cloud chat requires a compatible provider, endpoint, model and key. Keys are entered on device and stored in Keychain. Tavily provides search, not the conversational model.
+- Local-mode dictation requires on-device recognition; if unavailable, text input remains available. Cloud-mode dictation may send audio to Apple. Microphone is activated only by the recording control and stopped on background/interruption.
+- Cloud requests use at most 40 non-interrupted messages; local requests use at most 12, trimmed to the token budget. Long-term semantic memory is not implemented.
 - The app has manual search/note/reminder actions; natural-language action execution and integrated web answers remain unfinished.
 - Natural voice parity, authored motions, real lip sync and final character acceptance remain open. UI automation covers startup, local notes and adaptive layout screenshots.
 
 ## Sources
 
 - [Three VRM](https://github.com/pixiv/three-vrm)
-- [Sample avatar license](https://github.com/vrm-c/vrm-specification/tree/master/samples/VRM1_Constraint_Twist_Sample)
+- [Vita avatar provenance and license](Renderer/public/ASSET-LICENSE.md)
 - [Apple: distributing apps to registered devices](https://developer.apple.com/documentation/xcode/distributing-your-app-to-registered-devices/)
 
 No secrets, paid API use, third-party messages or external releases are part of the local implementation.

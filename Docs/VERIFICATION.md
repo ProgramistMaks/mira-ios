@@ -1,40 +1,50 @@
 # Verification — 2026-11-15
 
-## macOS CI update
+## Current implementation
 
-The user created private repository `ProgramistMaks/mira-ios` and granted access.
-Source was pushed with authorization; manual workflow run `43764306154` succeeded.
-Xcode 16.4 / iOS 18.5 SDK compiled the unsigned device archive and all four native
-unit tests passed. The artifact is internal, not a deliverable approved against the videos.
+Source is in the user-authorized private repository `ProgramistMaks/mira-ios`.
+The app is internal work in progress; no reference-quality approval or public release exists.
 
-Run `43764534875` adds native UI coverage for WKWebView avatar readiness, note
-persistence, settings and portrait/landscape screenshots. Its result is pending.
-Latest local asset candidate is Vita (CC0), verified in Chromium with corrected
-VRM0 orientation and resting pose; older runs contain the previous technical model.
-Physical iPhone Duo / iOS 27.3 testing remains unperformed.
+Run `43766167802`, commit `c4b76dcf79c7eedd406ee8d4762b60966f0f1f5f`:
 
-## Earlier local checks and initial access blocker
+- Unsigned iOS device archive compiled successfully with Xcode 16.4 / iOS 18.5 SDK, including the llama.cpp XCFramework.
+- Exact pinned Qwen2.5 1.5B Q4_K_M weights downloaded, SHA256 verified and actual inference completed successfully on the macOS runner.
+- Six native unit tests and one native UI test passed with zero failures on the iPhone 16 Pro simulator.
+- Portrait, landscape and settings screenshots were reviewed internally. Vita remains visible after rotation, and local/cloud controls are present. Character framing still needs polish: the status badge overlaps the feet.
+- Internal unsigned IPA and native test evidence were generated. Workflow completed successfully in 9m37s.
 
-Completed locally on Linux:
+The inference smoke test executes a real Russian prompt and rejects empty output.
+The observed answer to “Сколько будет два плюс два? Ответь одним числом.” was `4`.
+It does not prove Russian dialogue quality, airplane-mode behavior on iPhone,
+Metal performance, memory use or thermal behavior on the target device.
 
-- `npm run check`: TypeScript type check passed.
-- `npm test`: motion tests passed (silent states, reduced motion, expression bounds).
-- `npm run build`: offline renderer bundle generated successfully.
-- `Scripts/check-renderer.mjs`: real Chromium/WebGL loaded the 10.3 MiB VRM model, switched through four states at three viewport sizes, made no external network requests, and reported an error for a missing model.
-- Internal screenshots inspected. First pass exposed incorrect arm pose and excessive light; both corrected and browser check repeated successfully. This sample remains visually below the reference and is not approved for delivery.
-- Project/workflow YAML parsed; shell scripts passed `bash -n`.
+## Local checks
 
-Not completed:
+- TypeScript type check, four motion tests and renderer bundle build passed.
+- Chromium/WebGL loaded the actual Vita VRM model, exercised four states and three viewport sizes, checked native viewport resizing, and made no external renderer requests.
+- A missing model produced the expected explicit failure.
+- Browser screenshots were reviewed internally for pose, materials, framing and greeting.
+- Project/workflow YAML and shell syntax were checked.
 
-- Swift compile and XCTest: no Xcode or iOS SDK in Linux environment.
-- WKWebView custom scheme, microphone, TTS, EventKit and live API integration tests.
-- Physical iPhone Duo checks, full native UI review, reference-quality animation/voice review.
-- Signed or unsigned IPA creation.
+## Native regression evidence
 
-GitHub:
+Earlier run `43764534875` passed four unit tests and a native UI test covering
+WKWebView startup, settings, note persistence across restart and rotation.
+Its screenshots exposed a blank landscape scene despite the readiness flag.
+The current code preserves WKWebView identity across layout changes, explicitly
+synchronizes its viewport and adds a pixel-presence assertion to prevent that
+false-positive. Current screenshots confirm that the blank-scene regression is fixed in this simulator run; this does not approve overall visual quality.
 
-- User explicitly authorized creation of a private repository.
-- `gh auth status` confirms the connected GitHub account.
-- `gh repo create ProgramistMaks/mira-ios --private` was rejected by GitHub: `Resource not accessible by integration (createRepository)`.
-- No repository was created; no source was uploaded; no workflow was executed; no signing key was requested.
-- User must create a private repo and expose it to the integration, or provide another supported repository-creation authentication path. Existing unrelated repositories were not modified.
+Current native unit tests cover SSE parsing, HTTPS endpoints, persisted messages,
+settings migration and search result URL validation. The UI test covers character
+pixels, settings, note persistence and portrait/landscape screenshots.
+
+## Still unverified
+
+- Installation after user signing and cold launch on the physical target device.
+- Device model download/cancellation, sustained Metal inference, memory and temperature.
+- Microphone permissions, on-device Russian dictation availability, Bluetooth, TTS and EventKit on device.
+- Real cloud chat provider and live Tavily requests. The credential pasted in chat was not used or stored in the repository.
+- Complete reference-video audio review, final animation/voice quality and visual parity.
+
+See QUALITY.md for the full delivery gate. Successful CI does not clear it.
