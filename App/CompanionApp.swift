@@ -10,7 +10,7 @@ struct CompanionApp: App {
             CompanionView(store: store, voice: store.voice)
                 .preferredColorScheme(.dark)
                 .onChange(of: scenePhase) { _, phase in
-                    if phase != .active { store.cancel() }
+                    if phase == .background { store.cancel() }
                 }
         }
     }
@@ -46,23 +46,19 @@ struct CompanionView: View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 header.padding(.horizontal, 24).padding(.vertical, 14)
-                if geometry.size.width >= 700 {
-                    HStack(spacing: 0) {
-                        stage.frame(width: geometry.size.width * 0.46)
-                        conversation.padding(.trailing, 20)
-                    }
-                } else {
-                    VStack(spacing: 0) {
-                        stage.frame(height: max(160, geometry.size.height * 0.40))
-                        conversation
-                    }
+                let wide = geometry.size.width >= 700
+                let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                layout {
+                    stage.frame(width: wide ? geometry.size.width * 0.46 : nil,
+                                height: wide ? nil : max(160, geometry.size.height * 0.40))
+                    conversation.padding(.trailing, wide ? 20 : 0)
                 }
             }
             .background(Palette.background)
         }
         .tint(Palette.lavender)
-        .sheet(isPresented: $showSettings) { SettingsView(store: store, voice: voice) }
-        .sheet(isPresented: $showCommands) { CommandsView(store: store) }
+        .sheet(isPresented: $showSettings) { SettingsView(store: store, voice: voice).tint(Palette.lavender) }
+        .sheet(isPresented: $showCommands) { CommandsView(store: store).tint(Palette.lavender) }
         .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
         } message: { Text(store.error ?? "") }

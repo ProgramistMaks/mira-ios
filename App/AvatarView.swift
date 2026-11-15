@@ -12,9 +12,10 @@ struct AvatarView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(BundleScheme(), forURLScheme: "companion")
         configuration.userContentController.add(context.coordinator, name: "avatar")
-        let view = WKWebView(frame: .zero, configuration: configuration)
+        let view = AvatarWebView(frame: .zero, configuration: configuration)
         view.isOpaque = false; view.backgroundColor = .clear
         view.scrollView.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
+        view.scrollView.contentInsetAdjustmentBehavior = .never
         view.navigationDelegate = context.coordinator
         view.load(URLRequest(url: URL(string: "companion://local/index.html")!))
         return view
@@ -37,10 +38,16 @@ struct AvatarView: UIViewRepresentable {
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: String], message.frameInfo.isMainFrame else { return }
-            if body["type"] == "ready" { parent.ready = true; parent.error = nil }
+            if body["type"] == "ready" {
+                parent.ready = true; parent.error = nil
+                (message.webView as? AvatarWebView)?.syncViewport(force: true)
+            }
             if body["type"] == "error" { parent.ready = false; parent.error = "Не удалось загрузить персонажа. Попробуй перезапустить приложение." }
         }
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { loaded = true; update(webView) }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            loaded = true; update(webView)
+            (webView as? AvatarWebView)?.syncViewport(force: true)
+        }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             parent.error = "Не удалось открыть сцену персонажа."
         }
@@ -51,6 +58,17 @@ struct AvatarView: UIViewRepresentable {
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             decisionHandler(navigationAction.request.url?.scheme == "companion" ? .allow : .cancel)
         }
+    }
+}
+
+private final class AvatarWebView: WKWebView {
+    private var previousSize: CGSize = .zero
+    override func layoutSubviews() { super.layoutSubviews(); syncViewport() }
+    func syncViewport(force: Bool = false) {
+        let size = bounds.size
+        guard size.width > 0, size.height > 0, force || size != previousSize else { return }
+        previousSize = size
+        evaluateJavaScript("window.companion?.setViewport(\(Double(size.width)), \(Double(size.height)))", completionHandler: nil)
     }
 }
 

@@ -6,7 +6,8 @@ import { motion, greetingEnvelope } from './motion.mjs';
 declare global {
   interface Window {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
-    companion: { setState(phase: string, reduceMotion: boolean): void; ready: boolean; phase: string };
+    companion: { setState(phase: string, reduceMotion: boolean): void;
+      setViewport(width: number, height: number): void; ready: boolean; phase: string };
   }
 }
 
@@ -16,9 +17,15 @@ const report = (type: string, detail = '') => {
 };
 let phase = 'idle';
 let reduced = false;
+let nativeSize: { width: number; height: number } | undefined;
+let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   phase,
+  setViewport(width, height) {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+    nativeSize = { width, height }; applyResize?.();
+  },
   setState(next, reduceMotion) {
     if (!['idle', 'listening', 'thinking', 'speaking'].includes(next)) return;
     phase = next; reduced = reduceMotion; window.companion.phase = phase;
@@ -63,14 +70,15 @@ async function main() {
   scene.add(target);
   if (avatar.lookAt) avatar.lookAt.target = target;
   const resize = () => {
-    const width = Math.max(1, innerWidth), viewportHeight = Math.max(1, innerHeight);
+    const width = Math.max(1, nativeSize?.width ?? innerWidth);
+    const viewportHeight = Math.max(1, nativeSize?.height ?? innerHeight);
     renderer.setSize(width, viewportHeight);
     camera.aspect = width / viewportHeight;
     const distance = height * 0.58 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     camera.position.set(0, center.y + height * 0.03, distance * Math.max(1, 0.65 / camera.aspect));
     camera.lookAt(0, center.y, 0); camera.updateProjectionMatrix();
   };
-  resize(); addEventListener('resize', resize);
+  applyResize = resize; resize(); addEventListener('resize', resize);
   let rotation = 0, pointerX: number | null = null, pointerStart = 0, moved = false;
   let elapsed = 0, gestureStart = 0;
   renderer.domElement.addEventListener('pointerdown', event => {
@@ -113,8 +121,8 @@ async function main() {
     avatar.expressionManager?.setValue('happy', pose.smile + wave * 0.12);
     avatar.update(delta);
     renderer.render(scene, camera);
+    if (!window.companion.ready) { window.companion.ready = true; report('ready'); }
   });
-  window.companion.ready = true; report('ready');
 }
 
 main().catch(error => {

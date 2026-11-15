@@ -33,6 +33,7 @@ try {
   await page.screenshot({ path: '/tmp/companion-review/greeting.png' });
   for (const [width, height] of [[390, 420], [700, 800], [300, 400]]) {
     await page.setViewportSize({ width, height });
+    await page.evaluate(({ width, height }) => window.companion.setViewport(width, height), { width, height });
     for (const phase of ['idle', 'listening', 'thinking', 'speaking']) {
       await page.evaluate(phase => window.companion.setState(phase, false), phase);
       assert.equal(await page.evaluate(() => window.companion.phase), phase);

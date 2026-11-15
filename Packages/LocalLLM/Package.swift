@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "LocalLLM",
-    platforms: [.iOS(.v18), .macOS(.v14)],
+    platforms: [.iOS("18.0"), .macOS(.v14)],
     products: [.library(name: "LocalLLM", targets: ["LocalLLM"]),
                .executable(name: "LocalLLMSmoke", targets: ["LocalLLMSmoke"])],
     targets: [

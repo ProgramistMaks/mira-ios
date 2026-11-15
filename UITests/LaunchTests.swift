@@ -36,6 +36,7 @@ final class LaunchTests: XCTestCase {
 
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Настройки"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 60))
         capture("Landscape — adaptive two-column layout")
         XCUIDevice.shared.orientation = .portrait
     }
