@@ -57,6 +57,9 @@ public actor LocalGenerator {
         var tokens: [llama_token] = []
         while true {
             let prompt = Self.prompt(history)
+            if prompt.utf8.count >= 100_000 && history.count > 1 {
+                history.removeFirst(); continue
+            }
             tokens = try Self.tokenize(prompt, vocab: vocab)
             if tokens.count <= 3072 { break }
             guard history.count > 1 else { throw LocalError.promptTooLong }

@@ -12,7 +12,7 @@ previous saved settings without a mode remain cloud. There is no automatic cloud
 - Download is optional, foreground, Wi-Fi only, cancellable, with progress and integrity checking. Model is excluded from backups and removable in settings. No weights are embedded in the IPA or Git repository.
 - Inference uses Metal on iOS devices and CPU on simulators/macOS smoke tests. Model/context are released after each response. Cancellation is checked between decode batches/tokens.
 - 4096-token context; oldest messages are removed until the prompt fits 3072 tokens. Default response cap is 512 tokens; a length stop is visibly marked interrupted.
-- Network-free text generation is separate from Apple dictation, which may require Apple's servers, and from web search, which inherently requires internet.
+- Local mode requires on-device Apple dictation and never silently falls back to Apple's servers. Where Russian on-device recognition is unavailable, the app offers text input. Cloud-mode dictation may use Apple's servers. Web search inherently requires internet.
 
 CI compiles both iOS and the local-runtime smoke executable, downloads/verifies the exact model and executes a short Russian arithmetic prompt. Passing the smoke check does not certify Russian dialogue quality, iPhone latency, thermal behavior or energy use.
 

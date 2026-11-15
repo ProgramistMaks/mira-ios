@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 final class LaunchTests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
@@ -9,6 +10,7 @@ final class LaunchTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 60),
                       "Bundled VRM must actually load inside WKWebView")
+        assertAvatarVisible(app)
         capture("Portrait — native app and loaded character")
 
         app.buttons["Настройки"].tap()
@@ -37,6 +39,7 @@ final class LaunchTests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Настройки"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 60))
+        assertAvatarVisible(app)
         capture("Landscape — adaptive two-column layout")
         XCUIDevice.shared.orientation = .portrait
     }
@@ -45,5 +48,37 @@ final class LaunchTests: XCTestCase {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func assertAvatarVisible(_ app: XCUIApplication) {
+        // Verify pixels too: a stale ready flag previously hid a blank scene after rotation.
+        for attempt in 0..<5 {
+            let frame = app.descendants(matching: .any)["avatar.ready"].frame
+            if let source = XCUIScreen.main.screenshot().image.cgImage {
+                let scaleX = CGFloat(source.width) / app.frame.width
+                let scaleY = CGFloat(source.height) / app.frame.height
+                let region = CGRect(x: frame.minX * scaleX, y: frame.minY * scaleY,
+                                    width: frame.width * scaleX, height: frame.height * scaleY * 0.72).integral
+                if let crop = source.cropping(to: region) {
+                    var pixels = [UInt8](repeating: 0, count: crop.width * crop.height * 4)
+                    let colorful = pixels.withUnsafeMutableBytes { raw -> Int in
+                        guard let context = CGContext(data: raw.baseAddress, width: crop.width, height: crop.height,
+                            bitsPerComponent: 8, bytesPerRow: crop.width * 4,
+                            space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return 0 }
+                        context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+                        let buffer = raw.bindMemory(to: UInt8.self)
+                        var count = 0
+                        for index in stride(from: 0, to: buffer.count, by: 4) {
+                            if max(buffer[index], max(buffer[index + 1], buffer[index + 2])) > 115 { count += 1 }
+                        }
+                        return count
+                    }
+                    if colorful > crop.width * crop.height / 300 { return }
+                }
+            }
+            if attempt < 4 { Thread.sleep(forTimeInterval: 0.4) }
+        }
+        XCTFail("Character pixels missing from the upper scene; readiness alone is insufficient")
     }
 }

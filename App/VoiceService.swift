@@ -21,7 +21,7 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
         AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("ru") }
             .sorted { $0.quality.rawValue > $1.quality.rawValue }
     }
-    func startRecording() async throws {
+    func startRecording(offlineOnly: Bool = false) async throws {
         stop()
         let id = UUID(); generation = id
         let speech = await withCheckedContinuation { continuation in
@@ -33,11 +33,13 @@ final class VoiceService: NSObject, ObservableObject, AVSpeechSynthesizerDelegat
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU")), recognizer.isAvailable else {
             throw CompanionError.noSpeech
         }
+        if offlineOnly && !recognizer.supportsOnDeviceRecognition { throw CompanionError.offlineSpeechUnavailable }
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .measurement, options: [])
         try session.setActive(true)
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
+        request.requiresOnDeviceRecognition = offlineOnly
         self.request = request
         transcript = ""
         let node = engine.inputNode

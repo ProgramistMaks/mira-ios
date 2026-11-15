@@ -19,7 +19,7 @@ struct SettingsView: View {
                         Text("На iPhone").tag(InferenceMode.local)
                         Text("В облаке").tag(InferenceMode.cloud)
                     }.disabled(store.thinking)
-                    Text("В локальном режиме текст обрабатывается на iPhone. Облачный ИИ и поиск используют интернет. Распознавание голоса Apple может требовать интернет независимо от режима ИИ.")
+                    Text("В локальном режиме текст и доступное на устройстве распознавание речи работают на iPhone. Если локальная диктовка недоступна, можно написать сообщение. Облачный режим и поиск используют интернет.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 LocalModelSection(model: store.localModel, busy: store.thinking)

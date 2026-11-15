@@ -46,7 +46,7 @@ struct CompanionView: View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 header.padding(.horizontal, 24).padding(.vertical, 14)
-                let wide = geometry.size.width >= 700
+                let wide = geometry.size.width >= 600
                 let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
                 layout {
                     stage.frame(width: wide ? geometry.size.width * 0.46 : nil,
@@ -139,7 +139,12 @@ struct CompanionView: View {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
                 if voice.recording { voice.stopRecording() }
-                else { Task { do { try await voice.startRecording() } catch { store.error = error.localizedDescription } } }
+                else {
+                    Task {
+                        do { try await voice.startRecording(offlineOnly: store.settings.inferenceMode == .local) }
+                        catch { store.error = error.localizedDescription }
+                    }
+                }
             } label: {
                 Image(systemName: voice.recording ? "stop.circle.fill" : "mic")
                     .font(.title3).frame(width: 44, height: 44)

@@ -33,7 +33,7 @@ struct ConnectionSettings: Codable {
 }
 
 enum CompanionError: LocalizedError {
-    case configuration, authorization, server(Int), invalidResponse, noSpeech, permission, storage
+    case configuration, authorization, server(Int), invalidResponse, noSpeech, offlineSpeechUnavailable, permission, storage
     var errorDescription: String? {
         switch self {
         case .configuration: return "Укажи HTTPS-адрес API, модель и ключ в настройках подключения."
@@ -41,6 +41,7 @@ enum CompanionError: LocalizedError {
         case .server(let code): return "Сервис временно недоступен (\(code)). Попробуй ещё раз."
         case .invalidResponse: return "Сервис вернул неполный или неподдерживаемый ответ."
         case .noSpeech: return "Распознавание речи сейчас недоступно. Можно написать сообщение."
+        case .offlineSpeechUnavailable: return "На этом устройстве недоступно локальное распознавание русской речи. В локальном режиме можно написать сообщение; запись в облако отправлена не будет."
         case .permission: return "Нет разрешения. Его можно включить в настройках iPhone."
         case .storage: return "Не удалось сохранить данные на устройстве."
         }
