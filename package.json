@@ -1,0 +1,21 @@
+{
+  "name": "mira-companion-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node Scripts/build-renderer.mjs",
+    "test": "node --test Renderer/*.test.mjs",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "3.4.4",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0",
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3",
+    "@playwright/test": "1.56.1"
+  }
+}

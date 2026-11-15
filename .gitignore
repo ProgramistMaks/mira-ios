@@ -1,0 +1,10 @@
+build/
+*.xcodeproj/
+node_modules/
+.DS_Store
+*.p12
+*.mobileprovision
+*.ipa
+*.xcarchive
+.env*
+Resources/Web/

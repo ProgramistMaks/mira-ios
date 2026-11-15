@@ -1,0 +1,110 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+import { motion } from './motion.mjs';
+
+declare global {
+  interface Window {
+    webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
+    companion: { setState(phase: string, reduceMotion: boolean): void; ready: boolean; phase: string };
+  }
+}
+
+const report = (type: string, detail = '') => {
+  window.webkit?.messageHandlers.avatar.postMessage({ type, detail });
+  document.documentElement.dataset.status = type;
+};
+let phase = 'idle';
+let reduced = false;
+window.companion = {
+  ready: false,
+  phase,
+  setState(next, reduceMotion) {
+    if (!['idle', 'listening', 'thinking', 'speaking'].includes(next)) return;
+    phase = next; reduced = reduceMotion; window.companion.phase = phase;
+  },
+};
+
+async function main() {
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'default' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
+  const key = new THREE.DirectionalLight(0xfff0e4, 1.25);
+  key.position.set(2, 3, 4); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x9e8bff, 0.6);
+  rim.position.set(-2, 2, -2); scene.add(rim);
+  scene.add(new THREE.HemisphereLight(0xe4e0ff, 0x3a314f, 0.75));
+  const loader = new GLTFLoader();
+  loader.register(parser => new VRMLoaderPlugin(parser));
+  const gltf = await loader.loadAsync('character.vrm');
+  const avatar = gltf.userData.vrm as VRM | undefined;
+  if (!avatar) throw new Error('No VRM avatar');
+  VRMUtils.rotateVRM0(avatar);
+  VRMUtils.removeUnnecessaryVertices(avatar.scene);
+  VRMUtils.combineSkeletons(avatar.scene);
+  avatar.scene.traverse(object => { object.frustumCulled = false; });
+  // Bring the sample's T-pose into a relaxed resting pose.
+  const left = avatar.humanoid.getNormalizedBoneNode('leftUpperArm');
+  const right = avatar.humanoid.getNormalizedBoneNode('rightUpperArm');
+  if (left) left.rotation.z = -1.2;
+  if (right) right.rotation.z = 1.2;
+  scene.add(avatar.scene);
+  avatar.update(0);
+  const bounds = new THREE.Box3().setFromObject(avatar.scene);
+  const height = bounds.max.y - bounds.min.y;
+  const center = bounds.getCenter(new THREE.Vector3());
+  const target = new THREE.Object3D(); target.position.set(0, center.y + height * 0.24, 3);
+  scene.add(target);
+  if (avatar.lookAt) avatar.lookAt.target = target;
+  const resize = () => {
+    const width = Math.max(1, innerWidth), viewportHeight = Math.max(1, innerHeight);
+    renderer.setSize(width, viewportHeight);
+    camera.aspect = width / viewportHeight;
+    const distance = height * 0.58 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    camera.position.set(0, center.y + height * 0.03, distance * Math.max(1, 0.65 / camera.aspect));
+    camera.lookAt(0, center.y, 0); camera.updateProjectionMatrix();
+  };
+  resize(); addEventListener('resize', resize);
+  let rotation = 0, pointerX: number | null = null;
+  renderer.domElement.addEventListener('pointerdown', event => {
+    pointerX = event.clientX; renderer.domElement.setPointerCapture(event.pointerId);
+  });
+  renderer.domElement.addEventListener('pointermove', event => {
+    if (pointerX === null) return;
+    rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointerX) * 0.006, -0.65, 0.65);
+    pointerX = event.clientX;
+  });
+  const release = () => { pointerX = null; };
+  renderer.domElement.addEventListener('pointerup', release);
+  renderer.domElement.addEventListener('pointercancel', release);
+  renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); report('error', 'context lost'); });
+  renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
+  const head = avatar.humanoid.getNormalizedBoneNode('head');
+  const spine = avatar.humanoid.getNormalizedBoneNode('spine');
+  const clock = new THREE.Clock(); let elapsed = 0;
+  renderer.setAnimationLoop(() => {
+    const delta = Math.min(clock.getDelta(), 0.05);
+    if (document.hidden) return;
+    elapsed += delta;
+    const pose = motion(elapsed, phase, reduced);
+    avatar.scene.rotation.y = THREE.MathUtils.damp(avatar.scene.rotation.y, rotation, 6, delta);
+    if (spine) spine.rotation.x = pose.breathe;
+    if (head) head.rotation.z = pose.head;
+    avatar.expressionManager?.setValue('blink', pose.blink);
+    avatar.expressionManager?.setValue('aa', pose.mouth);
+    avatar.expressionManager?.setValue('happy', pose.smile);
+    avatar.update(delta);
+    renderer.render(scene, camera);
+  });
+  window.companion.ready = true; report('ready');
+}
+
+main().catch(error => {
+  report('error', String(error));
+  const message = document.createElement('p'); message.id = 'error';
+  message.textContent = 'Персонаж не загрузился'; document.body.appendChild(message);
+});

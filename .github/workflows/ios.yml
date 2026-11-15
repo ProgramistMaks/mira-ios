@@ -1,0 +1,30 @@
+name: iOS compile and test (internal)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Compile unsigned device archive
+        run: bash Scripts/build-ios.sh
+      - name: Run native tests
+        run: bash Scripts/test-ios.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mira-internal-unsigned
+          path: |
+            build/Mira-unsigned.ipa
+            build/Tests.xcresult
+          retention-days: 7
+      - name: Quality status
+        run: echo 'Internal build only. Visual parity, voice quality and physical-device checks are still required.'
