@@ -33,4 +33,17 @@ final class ConversationTests: XCTestCase {
         let message = Message(role: .assistant, content: "Неполный ответ", interrupted: true)
         XCTAssertEqual(try JSONDecoder().decode(Message.self, from: JSONEncoder().encode(message)), message)
     }
+    func testExistingCloudSettingsMigrateWithoutLosingConnection() throws {
+        let old = Data(#"{"baseURL":"https://example.com/v1","model":"model","voiceID":"","speakReplies":true}"#.utf8)
+        let settings = try JSONDecoder().decode(ConnectionSettings.self, from: old)
+        XCTAssertEqual(settings.inferenceMode ?? .cloud, .cloud)
+        XCTAssertEqual(settings.model, "model")
+    }
+    func testSearchLinksRejectExecutableAndCredentialURLs() throws {
+        for url in ["javascript:alert(1)", "file:///etc/passwd", "https://secret@example.com", "http://example.com"] {
+            let hit = SearchHit(title: "Source", url: url, content: "Excerpt")
+            XCTAssertNil(hit.safeURL)
+        }
+        XCTAssertEqual(SearchHit(title: "Source", url: "https://example.com/article", content: "Excerpt").safeURL?.host, "example.com")
+    }
 }

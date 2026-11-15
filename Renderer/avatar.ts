@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-import { motion } from './motion.mjs';
+import { motion, greetingEnvelope } from './motion.mjs';
 
 declare global {
   interface Window {
@@ -71,34 +71,46 @@ async function main() {
     camera.lookAt(0, center.y, 0); camera.updateProjectionMatrix();
   };
   resize(); addEventListener('resize', resize);
-  let rotation = 0, pointerX: number | null = null;
+  let rotation = 0, pointerX: number | null = null, pointerStart = 0, moved = false;
+  let elapsed = 0, gestureStart = 0;
   renderer.domElement.addEventListener('pointerdown', event => {
-    pointerX = event.clientX; renderer.domElement.setPointerCapture(event.pointerId);
+    pointerX = event.clientX; pointerStart = event.clientX; moved = false;
+    renderer.domElement.setPointerCapture(event.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', event => {
     if (pointerX === null) return;
     rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointerX) * 0.006, -0.65, 0.65);
+    if (Math.abs(event.clientX - pointerStart) > 8) moved = true;
     pointerX = event.clientX;
   });
-  const release = () => { pointerX = null; };
-  renderer.domElement.addEventListener('pointerup', release);
-  renderer.domElement.addEventListener('pointercancel', release);
+  renderer.domElement.addEventListener('pointerup', () => {
+    if (!moved) gestureStart = elapsed;
+    pointerX = null;
+  });
+  renderer.domElement.addEventListener('pointercancel', () => { pointerX = null; });
   renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); report('error', 'context lost'); });
   renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
   const head = avatar.humanoid.getNormalizedBoneNode('head');
   const spine = avatar.humanoid.getNormalizedBoneNode('spine');
-  const clock = new THREE.Clock(); let elapsed = 0;
+  const elbow = avatar.humanoid.getNormalizedBoneNode('leftLowerArm');
+  const wrist = avatar.humanoid.getNormalizedBoneNode('leftHand');
+  const clock = new THREE.Clock();
   renderer.setAnimationLoop(() => {
     const delta = Math.min(clock.getDelta(), 0.05);
     if (document.hidden) return;
     elapsed += delta;
     const pose = motion(elapsed, phase, reduced);
+    const wave = greetingEnvelope(elapsed - gestureStart, reduced);
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
+    if (left) left.rotation.z = armSign * (1.2 - wave * 1.4 + pose.handSway);
+    if (right) right.rotation.z = -armSign * (1.2 + pose.handSway);
+    if (elbow) elbow.rotation.z = -armSign * wave * 1.25;
+    if (wrist) wrist.rotation.z = armSign * wave * 0.18 * Math.sin(elapsed * 16);
     if (spine) spine.rotation.x = pose.breathe;
     if (head) head.rotation.z = pose.head;
     avatar.expressionManager?.setValue('blink', pose.blink);
     avatar.expressionManager?.setValue('aa', pose.mouth);
-    avatar.expressionManager?.setValue('happy', pose.smile);
+    avatar.expressionManager?.setValue('happy', pose.smile + wave * 0.12);
     avatar.update(delta);
     renderer.render(scene, camera);
   });

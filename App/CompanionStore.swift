@@ -1,5 +1,6 @@
 import SwiftUI
 import EventKit
+import LocalLLM
 
 struct Note: Codable, Identifiable {
     var id = UUID()
@@ -18,6 +19,8 @@ final class CompanionStore: ObservableObject {
     @Published var characterReady = false
     @Published var characterError: String?
     let voice = VoiceService()
+    let localModel = LocalModelStore()
+    private let localGenerator = LocalGenerator()
     private var storage: LocalStore?
     private var work: Task<Void, Never>?
     private var activeID: UUID?
@@ -36,7 +39,15 @@ final class CompanionStore: ObservableObject {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty && !thinking && !voice.recording else { return }
         guard text.count <= 12000 else { error = "Сообщение слишком длинное: максимум 12 000 символов."; return }
-        do { _ = try settings.endpoint(); guard !SecretStore.read().isEmpty else { throw CompanionError.configuration } }
+        let mode = settings.inferenceMode ?? .cloud
+        do {
+            if mode == .local {
+                guard localModel.installed else { throw LocalError.missingModel }
+            } else {
+                _ = try settings.endpoint()
+                guard !SecretStore.read().isEmpty else { throw CompanionError.configuration }
+            }
+        }
         catch { self.error = error.localizedDescription; return }
         voice.stop()
         messages.append(Message(role: .user, content: text)); draft = ""
@@ -48,15 +59,23 @@ final class CompanionStore: ObservableObject {
         work = Task { [weak self] in
             guard let self else { return }
             do {
-                try await ChatClient().stream(settings: connection, key: key, history: history) { [weak self] text in
-                    guard let self, self.activeID == reply.id,
-                          let index = self.messages.firstIndex(where: { $0.id == reply.id }) else { return }
-                    self.messages[index].content += text
+                let receive: @Sendable (String) async -> Void = { [weak self] text in
+                    await self?.append(text, to: reply.id)
+                }
+                var completed = true
+                if mode == .local {
+                    completed = try await self.localGenerator.generate(modelURL: LocalModelFile.installed(),
+                        turns: history.filter { !$0.interrupted }.map { LocalTurn(role: $0.role.rawValue, text: $0.content) },
+                        onText: receive)
+                } else {
+                    try await ChatClient().stream(settings: connection, key: key, history: history) { [weak self] text in
+                        self?.append(text, to: reply.id)
+                    }
                 }
                 try Task.checkCancellation()
                 guard self.activeID == reply.id,
                       let index = self.messages.firstIndex(where: { $0.id == reply.id }) else { return }
-                self.messages[index].interrupted = false
+                self.messages[index].interrupted = !completed
                 self.thinking = false; self.activeID = nil; self.work = nil
                 self.saveConversation()
                 if self.settings.speakReplies {
@@ -70,6 +89,10 @@ final class CompanionStore: ObservableObject {
                 if !(error is CancellationError) { self.error = error.localizedDescription }
             }
         }
+    }
+    private func append(_ text: String, to id: UUID) {
+        guard activeID == id, let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        messages[index].content += text
     }
     func cancel() {
         activeID = nil; work?.cancel(); work = nil; thinking = false

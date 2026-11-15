@@ -9,8 +9,10 @@ struct Message: Codable, Identifiable, Equatable {
 }
 
 enum CompanionPhase: String { case idle, listening, thinking, speaking }
+enum InferenceMode: String, Codable, CaseIterable { case local, cloud }
 
 struct ConnectionSettings: Codable {
+    var inferenceMode: InferenceMode? = .local
     var baseURL = ""
     var model = ""
     var voiceID = ""
@@ -133,7 +135,7 @@ struct ChatClient {
     }
 }
 
-private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+final class NoRedirects: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest,

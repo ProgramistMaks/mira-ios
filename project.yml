@@ -8,10 +8,16 @@ settings:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1,2'
     ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  LocalLLM:
+    path: Packages/LocalLLM
 targets:
   Companion:
     type: application
     platform: iOS
+    dependencies:
+      - package: LocalLLM
+        product: LocalLLM
     sources:
       - App
       - Core

@@ -9,6 +9,9 @@ struct CommandsView: View {
     @State private var confirmation = false
     @State private var saving = false
     @State private var result: String?
+    @State private var hits: [SearchHit] = []
+    @State private var searching = false
+    @State private var searchTask: Task<Void, Never>?
     private var value: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
     var body: some View {
         NavigationStack {
@@ -16,6 +19,18 @@ struct CommandsView: View {
                 Section("Что сделать?") {
                     TextField("Запрос, заметка или напоминание", text: $text, axis: .vertical)
                         .lineLimit(3...6).accessibilityIdentifier("command.input")
+                    Button(searching ? "Ищу…" : "Искать через Tavily", systemImage: "sparkle.magnifyingglass") {
+                        let query = value; searching = true; hits = []
+                        searchTask = Task {
+                            defer { searching = false }
+                            do {
+                                let found = try await WebSearch().search(query, key: SecretStore.read(account: "tavily"))
+                                try Task.checkCancellation()
+                                hits = found
+                                if found.isEmpty { result = "По этому запросу ничего не найдено." }
+                            } catch { if !Task.isCancelled { result = error.localizedDescription } }
+                        }
+                    }.disabled(value.isEmpty || searching)
                     Button("Найти в интернете", systemImage: "magnifyingglass") {
                         var components = URLComponents(string: "https://www.google.com/search")!
                         components.queryItems = [URLQueryItem(name: "q", value: value)]
@@ -29,6 +44,19 @@ struct CommandsView: View {
                         do { try store.addNote(value); text = ""; result = "Заметка сохранена в Мире." }
                         catch { result = error.localizedDescription }
                     }.disabled(value.isEmpty).accessibilityIdentifier("command.saveNote")
+                }
+                if !hits.isEmpty {
+                    Section("Источники · Tavily") {
+                        ForEach(hits) { hit in
+                            if let url = hit.safeURL {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Link(hit.title, destination: url).font(.headline)
+                                    Text(hit.content).font(.callout).lineLimit(6)
+                                    Text(url.host ?? "").font(.caption).foregroundStyle(.secondary)
+                                }.padding(.vertical, 6)
+                            }
+                        }
+                    }
                 }
                 Section("Напоминание") {
                     DatePicker("Когда", selection: $date, in: Date()...)
@@ -46,6 +74,7 @@ struct CommandsView: View {
                     }
                 }
             }.navigationTitle("Команды")
+            .onDisappear { searchTask?.cancel() }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } } }
             .confirmationDialog("Добавить «\(value)» на \(date.formatted(date: .abbreviated, time: .shortened))?",
                                 isPresented: $confirmation, titleVisibility: .visible) {

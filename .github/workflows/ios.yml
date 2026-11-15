@@ -17,6 +17,8 @@ jobs:
         run: brew install xcodegen
       - name: Compile unsigned device archive
         run: bash Scripts/build-ios.sh
+      - name: Verify actual local model inference
+        run: bash Scripts/test-local-model.sh
       - name: Run native tests
         run: bash Scripts/test-ios.sh
       - name: Export native screenshots

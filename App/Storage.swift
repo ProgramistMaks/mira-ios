@@ -3,18 +3,18 @@ import Security
 
 enum SecretStore {
     private static let service = "app.personal.companion.connection"
-    static func read() -> String {
+    static func read(account: String = "api-key") -> String {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service, kSecAttrAccount as String: "api-key",
+            kSecAttrService as String: service, kSecAttrAccount as String: account,
             kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { return "" }
         return String(decoding: data, as: UTF8.self)
     }
-    static func write(_ key: String) throws {
+    static func write(_ key: String, account: String = "api-key") throws {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service, kSecAttrAccount as String: "api-key"]
+            kSecAttrService as String: service, kSecAttrAccount as String: account]
         if key.isEmpty {
             let status = SecItemDelete(query as CFDictionary)
             guard status == errSecSuccess || status == errSecItemNotFound else { throw CompanionError.storage }

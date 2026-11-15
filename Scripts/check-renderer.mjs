@@ -28,6 +28,9 @@ try {
   await page.waitForFunction(() => window.companion?.ready === true, undefined, { timeout: 30000 });
   await page.evaluate(() => { document.body.style.background = '#0e0e13'; });
   await mkdir('/tmp/companion-review', { recursive: true });
+  await page.setViewportSize({ width: 390, height: 420 });
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: '/tmp/companion-review/greeting.png' });
   for (const [width, height] of [[390, 420], [700, 800], [300, 400]]) {
     await page.setViewportSize({ width, height });
     for (const phase of ['idle', 'listening', 'thinking', 'speaking']) {

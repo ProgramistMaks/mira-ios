@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { motion } from './motion.mjs';
+import { motion, greetingEnvelope } from './motion.mjs';
 
 test('silent phases never move the mouth', () => {
   for (const phase of ['idle', 'thinking', 'listening']) {
@@ -16,4 +16,12 @@ test('expression weights stay finite and within valid bounds', () => {
     const pose = motion(t, 'speaking', false);
     for (const key of ['blink', 'mouth', 'smile']) assert.ok(pose[key] >= 0 && pose[key] <= 1);
   }
+});
+test('greeting eases into and out of the resting pose and obeys reduced motion', () => {
+  assert.equal(greetingEnvelope(0, false), 0);
+  assert.equal(greetingEnvelope(0.7, false), 1);
+  assert.equal(greetingEnvelope(2.8, false), 0);
+  assert.equal(greetingEnvelope(1, true), 0);
+  assert.ok(greetingEnvelope(0.001, false) < 0.00001);
+  assert.ok(greetingEnvelope(2.799, false) < 0.00001);
 });
