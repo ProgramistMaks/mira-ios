@@ -96,6 +96,8 @@ jobs:
           path: |
             build/Tests.xcresult
             build/screenshots
+            build/simulator-boot.log
+            build/native-tests.log
           if-no-files-found: ignore
           retention-days: 7
       - name: Quality status

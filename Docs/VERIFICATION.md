@@ -1,6 +1,6 @@
 # Verification — 2026-11-16
 
-## 0.2 automatic-conversation rebuild — native verification pending
+## 0.2 automatic-conversation rebuild — archive passed, test-launch repair
 
 User rejected the delivered candidate and confirmed automatic turn-taking plus a
 large character/minimal controls. Branch `rebuild/voice-first` replaces the old
@@ -11,6 +11,20 @@ All 79 portable tests passed locally (2026-11-16); changed Swift sources also pa
 Native tests now exercise the new home/chat flow and playback completion/cancellation.
 No live Tavily credentials, microphone result or visual parity is claimed by these
 local checks. Model downloads/runtime are unchanged; weights remain outside the IPA.
+Run `43970432109` for source `d6a2c3d` passed the macOS portable suite,
+renderer checks, actual device compilation and package validation. Internal artifact
+`14278950881` was downloaded and checked again against the CI report. Version 0.2.0
+(build 2), 15,846,409 bytes; SHA256
+`d977c5cb05402398ef8b347d1849ddd481ef8f35e143354e29098592c51510c2`.
+The original package declares device families `[1, 2]` and all four orientations.
+Native execution failed before xcodebuild: the macOS Bash 3.2 script raised
+`test_selection[@]: unbound variable` when full scope expanded an empty array under
+`set -u`. This is a test-launch bug, not a native assertion result. The script now
+uses positional arguments, whose empty expansion is safe; both full/focused argument
+paths are checked locally. Simulator and xcodebuild logs are now uploaded even when
+no XCResult exists, so CI finalization does not hide the error. This internal IPA
+has not been handed to the user as a completed replacement.
+
 The simulator boot budget is seven minutes because the previous four-minute run
 was still finishing first-boot migration. The overall job remains bounded.
 

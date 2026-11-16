@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mkdir -p build
 device_id=$(xcrun simctl list devices available -j | python3 -c '
 import json,sys,os
 devices=json.load(sys.stdin)["devices"]
@@ -11,15 +12,16 @@ if not candidates: raise SystemExit("No available iPhone simulator for iOS "+ver
 candidates.sort(key=lambda d: (d["name"] != "iPhone 16 Pro", d["name"]))
 print(candidates[0]["udid"])
 ')
-python3 - "$device_id" <<'PY'
+python3 - "$device_id" <<'PY' 2>&1 | tee build/simulator-boot.log
 import subprocess,sys
 subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=420)
 PY
-test_selection=()
+# Positional arguments handle an empty selection under macOS Bash 3.2 + nounset.
+set --
 case "${MIRA_NATIVE_TEST_SCOPE:-full}" in
   full) ;;
   voice_and_routes)
-    test_selection=(-only-testing:CompanionUITests/VoiceConversationTests -only-testing:CompanionUITests/WidgetRouteTests)
+    set -- -only-testing:CompanionUITests/VoiceConversationTests -only-testing:CompanionUITests/WidgetRouteTests
     ;;
   *) echo 'Unknown native test scope' >&2; exit 2 ;;
 esac
@@ -29,4 +31,4 @@ xcodebuild -project Companion.xcodeproj -scheme Companion \
   -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
   -test-timeouts-enabled YES -default-test-execution-time-allowance 1200 \
   -maximum-test-execution-time-allowance 1200 \
-  -resultBundlePath build/Tests.xcresult "${test_selection[@]}" CODE_SIGNING_ALLOWED=NO test
+  -resultBundlePath build/Tests.xcresult "$@" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/native-tests.log
