@@ -104,29 +104,33 @@ struct CompanionView: View {
                         }
                         ToolbarItem(placement: .confirmationAction) { Button("Готово") { showChat = false } }
                     }
-            }.tint(Palette.lavender).miraSheet()
+            }
+            .confirmationDialog("Заменить черновик исходным вопросом?", isPresented: Binding(
+                get: { questionToRestore != nil }, set: { if !$0 { questionToRestore = nil } }
+            ), titleVisibility: .visible, presenting: questionToRestore) { id in
+                Button("Заменить черновик") {
+                    if store.restoreQuestion(for: id, replacingDraft: true) {
+                        composerFocused = true
+                    }
+                    questionToRestore = nil
+                }
+                Button("Отмена", role: .cancel) { questionToRestore = nil }
+            } message: { _ in
+                Text("Вопрос появится в поле ввода. Отправка начнётся только после нажатия «Отправить».")
+            }
+            .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
+                Button("Понятно") { store.error = nil }
+            } message: { Text(store.error ?? "") }
+            .tint(Palette.lavender).miraSheet()
         }
         .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice, screenMaximumFPS: screenMaximumFPS).tint(Palette.lavender).miraSheet() }
         .sheet(item: Binding(get: { showChat ? nil : store.proposedCommand }, set: { store.proposedCommand = $0 }), onDismiss: didDismissSheet) { proposal in
             CommandsView(store: store, proposal: proposal).tint(Palette.lavender).miraSheet()
         }
         .sheet(isPresented: $showCommands, onDismiss: didDismissSheet) { CommandsView(store: store).tint(Palette.lavender).miraSheet() }
-        .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
+        .alert("Не получилось", isPresented: Binding(get: { store.error != nil && !showChat && !showSettings }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
         } message: { Text(store.error ?? "") }
-        .confirmationDialog("Заменить черновик исходным вопросом?", isPresented: Binding(
-            get: { questionToRestore != nil }, set: { if !$0 { questionToRestore = nil } }
-        ), titleVisibility: .visible, presenting: questionToRestore) { id in
-            Button("Заменить черновик") {
-                if store.restoreQuestion(for: id, replacingDraft: true) {
-                    composerFocused = true
-                }
-                questionToRestore = nil
-            }
-            Button("Отмена", role: .cancel) { questionToRestore = nil }
-        } message: { _ in
-            Text("Вопрос появится в поле ввода. Отправка начнётся только после нажатия «Отправить».")
-        }
         .onAppear { updateFrameRate() }
         .onOpenURL { url in
             guard let route = MiraRoute(url: url) else { return }

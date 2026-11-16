@@ -28,6 +28,12 @@ final class VoiceConversationTests: XCTestCase {
         app.buttons["conversation.searchMode"].tap()
         XCTAssertTrue(app.navigationBars["Поиск"].exists)
         XCTAssertEqual(input.value as? String, text)
+        app.buttons["Отправить"].tap()
+        let searchError = app.alerts["Не получилось"]
+        XCTAssertTrue(searchError.waitForExistence(timeout: 5), "Search setup errors must appear over the chat sheet")
+        XCTAssertTrue(searchError.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Tavily")).firstMatch.exists)
+        searchError.buttons["Понятно"].tap()
+        XCTAssertEqual(input.value as? String, text, "Missing search setup must preserve the query")
         app.buttons["Готово"].tap()
         app.buttons["Настройки"].tap()
         app.buttons["Готово"].tap()

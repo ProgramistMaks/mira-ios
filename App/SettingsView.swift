@@ -109,9 +109,9 @@ struct SettingsView: View {
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { voice.stop(); dismiss() } } }
             .onAppear { key = SecretStore.read(); searchKey = SecretStore.read(account: "tavily") }
             .onDisappear { searchProbe?.cancel(); voice.stop(); store.persistPreferences(); store.refreshConnections() }
-            .alert("Ошибка", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("Понятно") { error = nil }
-            } message: { Text(error ?? "") }
+            .alert("Ошибка", isPresented: Binding(get: { error != nil || store.error != nil }, set: { if !$0 { error = nil; store.error = nil } })) {
+                Button("Понятно") { error = nil; store.error = nil }
+            } message: { Text(error ?? store.error ?? "") }
             .confirmationDialog("Удалить весь разговор?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Удалить", role: .destructive) { store.clearConversation() }
             }

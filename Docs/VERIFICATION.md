@@ -25,6 +25,14 @@ paths are checked locally. Simulator and xcodebuild logs are now uploaded even w
 no XCResult exists, so CI finalization does not hide the error. This internal IPA
 has not been handed to the user as a completed replacement.
 
+Follow-up `43972238536` passed portable checks, then was intentionally cancelled
+during device archiving to include a modal error-reporting correction before native
+execution. Chat now owns its search/provider error alert and draft-replacement
+dialog; settings also displays voice-service errors while presented. The updated UI
+case submits a search without a key, verifies a visible Tavily setup error over the
+chat sheet and verifies that the query is retained. No native result is claimed for
+that cancelled run.
+
 The simulator boot budget is seven minutes because the previous four-minute run
 was still finishing first-boot migration. The overall job remains bounded.
 
