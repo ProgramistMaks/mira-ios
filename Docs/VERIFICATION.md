@@ -22,6 +22,14 @@ Playback never automatically reopens the microphone.
   are unnecessary for this batch. A single combined native workflow is appropriate
   under the user's request to validate substantial additions rather than each edit.
 
+One combined native run was dispatched for source
+`f755eee1319642cbc6ef3407f871f6e9b407970f`:
+https://github.com/ProgramistMaks/mira-ios/actions/runs/43950455692
+Inputs: macos-15-intel, Xcode 26.2, iOS 26.2, real model inference disabled because
+the runtime/model pins did not change. At the last check the run was **queued**
+with no executed steps. This is not compilation/test evidence. Do not dispatch a
+duplicate run while it remains pending; inspect this run when resuming work.
+
 ## Animation pause/resume — shared display timeline
 
 The renderer now uses the display callback timestamp for a shared pose/physics
