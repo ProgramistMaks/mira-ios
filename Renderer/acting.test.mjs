@@ -43,12 +43,17 @@ test('reduced motion settles into a quiet pose and rejects decorative gestures',
   const pose = actor.pose; advance(actor, 5, true); assert.deepEqual(actor.pose, pose);
 });
 
-test('30 fps and 60 fps reach the same authored pose; invalid or stalled clocks cannot leap ahead', () => {
+test('30/60/120/240 fps reach the same authored pose; invalid or stalled clocks cannot leap ahead', () => {
   const low = new ActingController(), high = new ActingController();
   low.setPhase('speaking'); high.setPhase('speaking');
   for (let i = 0; i < 90; i++) low.update(1 / 30);
   for (let i = 0; i < 180; i++) high.update(1 / 60);
   assert.ok(distance(low.pose, high.pose) < 1e-9);
+  for (const rate of [120, 240]) {
+    const actor = new ActingController(); actor.setPhase('speaking');
+    for (let i = 0; i < rate * 3; i++) actor.update(1 / rate);
+    assert.ok(distance(low.pose, actor.pose) < 1e-9);
+  }
   const time = low.time;
   for (const value of [NaN, Infinity, -1]) low.update(value);
   assert.equal(low.time, time);

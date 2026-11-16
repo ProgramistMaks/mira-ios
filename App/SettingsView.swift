@@ -4,6 +4,8 @@ import ActivityKit
 struct SettingsView: View {
     @ObservedObject var store: CompanionStore
     @ObservedObject var voice: VoiceService
+    var screenMaximumFPS: Int = 60
+    @AppStorage("animationFrameRate") private var requestedFrameRate = 120
     @Environment(\.dismiss) private var dismiss
     @State private var key = ""
     @State private var searchKey = ""
@@ -68,6 +70,14 @@ struct SettingsView: View {
                     Button("Удалить историю разговора", role: .destructive) { confirmDelete = true }
                 }
                 Section("Персонаж") {
+                    Picker("Плавность анимации", selection: $requestedFrameRate) {
+                        ForEach([30, 60, 120, 240], id: \.self) { rate in
+                            Text(rate <= screenMaximumFPS ? "До \(rate) кадров/с" : "До \(rate) кадров/с · недоступно")
+                                .tag(rate).disabled(rate > screenMaximumFPS)
+                        }
+                    }
+                    Text("Экран: до \(screenMaximumFPS) Гц. Предел анимации: до \(min(requestedFrameRate, screenMaximumFPS)) кадров/с. Фактическая плавность зависит от системы и нагрузки. Энергосбережение, сильный нагрев и уменьшение движения снижают предел до 30 кадров/с.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     Text("Vita · VRoid Project / pixiv")
                     Link("Условия использования · CC0", destination: URL(string: "https://creativecommons.org/publicdomain/zero/1.0/")!)
                 }

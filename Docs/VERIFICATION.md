@@ -1,5 +1,27 @@
 # Verification — 2026-11-16
 
+## Requested 120/240 fps animation modes — local checks only
+
+Animation settings now persist a 120 fps default request with 30/60/120/240 options.
+The scene reports its actual window screen's maximum; unsupported options are
+disabled and native scheduling clamps to that limit. ProMotion opt-in is present
+in Info.plist. The renderer no longer hard-caps normal animation at 60 or thinking
+at 30; low power, serious heat and Reduce Motion retain the 30 fps cap.
+
+- TypeScript checking, all renderer unit tests, the Safari-targeted bundle build,
+  Swift syntax parsing for the three changed app files and plist parsing passed.
+  Four new pacing cases cover 30/60/120/240 targets on simulated 30/60/90/120/144/240
+  Hz callbacks, fractional timestamp jitter, changing rates, stalls and invalid
+  input. The acting test now verifies identical elapsed-time poses through 240 fps.
+- No native build, browser benchmark or device measurement was run for this setting
+  change, respecting the user's build budget. Existing browser results below
+  predate the new pacer. Apple SDK type checking, the native picker and screen
+  callback, and sustained high-refresh behavior remain pending.
+- These tests establish scheduling arithmetic, not delivered 120/240 fps. WebKit,
+  iOS, GPU load and the physical display still determine actual frame delivery.
+  Apple's screen API documentation currently specifies up to 120 fps on iOS
+  ProMotion. The 240 option remains unavailable unless the host reports support.
+
 ## Bounded mouth updates — portable and browser checks
 
 The audio bridge now retains one in-flight JavaScript evaluation and only the newest

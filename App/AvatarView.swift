@@ -8,6 +8,7 @@ struct AvatarView: UIViewRepresentable {
     let reduceMotion: Bool
     let frameRate: Int
     let active: Bool
+    @Binding var screenMaximumFPS: Int
     @Binding var ready: Bool
     @Binding var error: String?
 
@@ -21,6 +22,10 @@ struct AvatarView: UIViewRepresentable {
         view.scrollView.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
         view.scrollView.contentInsetAdjustmentBehavior = .never
         view.navigationDelegate = context.coordinator
+        view.onScreenRateChange = { [weak coordinator = context.coordinator] maximum in
+            // Window/layout callbacks can occur during a SwiftUI update.
+            Task { @MainActor in coordinator?.parent.screenMaximumFPS = maximum }
+        }
         let bridge = MouthBridge { [weak view] frame, finish in
             guard let view else { finish(); return }
             view.evaluateJavaScript("window.companion?.setSpeech(\(frame.level), \(frame.sampledAt), \(frame.sequence))") { _, _ in
@@ -41,6 +46,7 @@ struct AvatarView: UIViewRepresentable {
         coordinator.mouthSubscription?.cancel()
         coordinator.mouthBridge?.reset()
         coordinator.parent.voice.setSceneActive(false)
+        (view as? AvatarWebView)?.onScreenRateChange = nil
         view.stopLoading()
     }
     @MainActor
@@ -97,7 +103,16 @@ struct AvatarView: UIViewRepresentable {
 
 private final class AvatarWebView: WKWebView {
     private var previousSize: CGSize = .zero
-    override func layoutSubviews() { super.layoutSubviews(); syncViewport() }
+    private var previousScreenRate: Int?
+    var onScreenRateChange: ((Int) -> Void)?
+    override func didMoveToWindow() { super.didMoveToWindow(); syncScreenRate() }
+    override func layoutSubviews() { super.layoutSubviews(); syncScreenRate(); syncViewport() }
+    private func syncScreenRate() {
+        guard let screen = window?.screen else { return }
+        let maximum = max(1, screen.maximumFramesPerSecond)
+        guard maximum != previousScreenRate else { return }
+        previousScreenRate = maximum; onScreenRateChange?(maximum)
+    }
     func syncViewport(force: Bool = false) {
         let size = bounds.size
         guard size.width > 0, size.height > 0, force || size != previousSize else { return }

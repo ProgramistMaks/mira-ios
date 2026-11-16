@@ -19,7 +19,7 @@ Videos sampled visually on 2026-11-15; full audio was machine-transcribed locall
 - [ ] Character and voice selection beyond a single sample avatar.
 - [ ] Responsive chat/character/settings layouts checked on the actual outer and inner Duo screens, rotation, Split View, keyboard and large text.
 - [ ] Fresh macOS compile, native tests, installation after user signing and cold launch on iPhone Duo iOS 27.3.
-- [ ] Ten-minute device session with measured frame times, thermal behavior and memory. Target stable 60 fps normally, 30 fps under thermal/low-power constraints; no crashes or unreleased microphone session.
+- [ ] Ten-minute device session with measured frame times, thermal behavior and memory. User-requested target is 120 fps on supported displays; renderer scheduling also accepts 240 for a capable future host/display. Measure actual WKWebView callback/render rates before claiming support: Info.plist opt-in and screen capability alone do not establish it. Fall back to the available display/host rate and 30 fps under thermal/low-power constraints; no crashes or unreleased microphone session.
 - [ ] Side-by-side recorded review against references, checking animation, framing, visual polish, voice and interaction. No assertion of “not worse” without this evidence.
 
 ## Platform boundary

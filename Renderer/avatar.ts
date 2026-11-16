@@ -4,6 +4,7 @@ import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, SpeechSamples } from './motion.mjs';
 import { ActingController } from './acting.mjs';
 import { PlantedStance } from './stance.mjs';
+import { FramePacer } from './frame-pacer.mjs';
 
 declare global {
   interface Window {
@@ -32,7 +33,7 @@ window.companion = {
     active = value === true;
     speechSamples.setActive(active);
   },
-  setFrameRate(fps) { if (fps === 30 || fps === 60) frameRate = fps; },
+  setFrameRate(fps) { if (Number.isInteger(fps) && fps >= 1 && fps <= 240) frameRate = fps; },
   setSpeech(level, capturedAt, sequence) { speechSamples.receive(level, capturedAt, sequence); },
   setViewport(width, height) {
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
@@ -148,13 +149,13 @@ async function main() {
       right: bone(`right${finger}${joint}` as Parameters<typeof bone>[0]), scale: [0.8, 0.9, 0.55][index],
     })));
   const clock = new THREE.Clock();
-  let mouth = 0, elapsed = 0, previousFrame = -Infinity;
+  let mouth = 0, elapsed = 0;
+  const pacer = new FramePacer();
   acting.update(0, reduced); acting.trigger('greeting');
   renderer.setAnimationLoop(timestamp => {
     // A cap is a target, not a claim about measured device performance.
-    const cap = Math.min(frameRate, phase === 'thinking' || reduced ? 30 : 60);
-    if (timestamp - previousFrame < 1000 / cap - 1) return;
-    previousFrame = timestamp;
+    const cap = reduced ? Math.min(frameRate, 30) : frameRate;
+    if (!pacer.shouldRender(timestamp, cap)) return;
     const delta = Math.min(clock.getDelta(), 0.05);
     if (document.hidden || !active || contextLost || renderer.getContext().isContextLost()) return;
     elapsed += delta;

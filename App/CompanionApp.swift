@@ -34,6 +34,8 @@ struct CompanionView: View {
     @ObservedObject var store: CompanionStore
     @ObservedObject var voice: VoiceService
     @State private var frameRate = 60
+    @State private var screenMaximumFPS = 60
+    @AppStorage("animationFrameRate") private var requestedFrameRate = 120
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var showCommands = false
@@ -73,7 +75,7 @@ struct CompanionView: View {
             .background(Palette.background)
         }
         .tint(Palette.lavender)
-        .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice).tint(Palette.lavender).miraSheet() }
+        .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice, screenMaximumFPS: screenMaximumFPS).tint(Palette.lavender).miraSheet() }
         .sheet(item: $store.proposedCommand, onDismiss: didDismissSheet) { proposal in
             CommandsView(store: store, proposal: proposal).tint(Palette.lavender).miraSheet()
         }
@@ -103,7 +105,9 @@ struct CompanionView: View {
                 showSettings = false; showCommands = false; store.proposedCommand = nil
             } else { consumeRoute() }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { consumeRoute() } }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { updateFrameRate(); consumeRoute() } }
+        .onChange(of: requestedFrameRate) { _, _ in updateFrameRate() }
+        .onChange(of: screenMaximumFPS) { _, _ in updateFrameRate() }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in updateFrameRate() }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in updateFrameRate() }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notification in
@@ -128,7 +132,9 @@ struct CompanionView: View {
     }
     private func updateFrameRate() {
         let device = ProcessInfo.processInfo
-        frameRate = device.isLowPowerModeEnabled || device.thermalState == .serious || device.thermalState == .critical ? 30 : 60
+        let requested = [30, 60, 120, 240].contains(requestedFrameRate) ? requestedFrameRate : 120
+        let constrained = device.isLowPowerModeEnabled || device.thermalState == .serious || device.thermalState == .critical
+        frameRate = min(max(1, screenMaximumFPS), constrained ? 30 : requested)
     }
     private var header: some View {
         HStack(spacing: 12) {
@@ -155,6 +161,7 @@ struct CompanionView: View {
                 AvatarView(phase: phase, voice: voice, reduceMotion: reduceMotion,
                            frameRate: frameRate,
                            active: scenePhase == .active && !showSettings && !showCommands && store.proposedCommand == nil,
+                           screenMaximumFPS: $screenMaximumFPS,
                            ready: $store.characterReady, error: $store.characterError)
                 Color.clear.frame(height: 54)
             }
