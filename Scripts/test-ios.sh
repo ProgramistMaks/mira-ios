@@ -11,6 +11,13 @@ if not candidates: raise SystemExit("No available iPhone simulator for iOS "+ver
 candidates.sort(key=lambda d: (d["name"] != "iPhone 16 Pro", d["name"]))
 print(candidates[0]["udid"])
 ')
+python3 - "$device_id" <<'PY'
+import subprocess,sys
+subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=240)
+PY
 xcodebuild -project Companion.xcodeproj -scheme Companion \
   -destination "platform=iOS Simulator,id=$device_id" \
+  -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
+  -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
+  -maximum-test-execution-time-allowance 600 \
   -resultBundlePath build/Tests.xcresult CODE_SIGNING_ALLOWED=NO test
