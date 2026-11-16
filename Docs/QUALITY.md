@@ -5,17 +5,17 @@ Compiling, passing unit tests, or rendering an avatar is NOT visual/behavioral a
 Do not describe this source tree, test model, screenshots, or unsigned artifacts as the finished app.
 
 Reference files: Google Drive folder 1kaSsqA1c3jj7hpR_9N2PKzQ6EIAWP239.
-Videos sampled visually on 2026-11-15. Full audio/transcript review still pending.
+Videos sampled visually on 2026-11-15; full audio was machine-transcribed locally and the feature review updated on 2026-11-16. See REFERENCE-REVIEW.md. Perceived voice-quality comparison remains pending.
 
 ## Required before delivery
 
 - [ ] Final high-quality anime model with hair/clothing dynamics, accurate material rendering and documented asset terms. Vita (CC0) is the current candidate; visual parity still unapproved.
 - [ ] Authored idle, listening, thinking, speaking, greeting and touch-reaction animation clips with smooth blending. Current procedural breathing/tilt is a first pass only.
-- [ ] Speech-driven mouth animation synchronized to audible output. Current synthesized mouth envelope is NOT lip sync.
+- [ ] Phoneme-aware mouth animation and device-verified audiovisual timing. Actual PCM amplitude now drives mouth opening; this is not phoneme lip sync. See SPEECH.md.
 - [ ] Natural Russian voice, interruptible playback, no feedback loop into microphone. Current Apple TTS is a functional baseline, not demonstrated parity.
 - [ ] Voice activation / push-to-talk UX and transcripts validated on device with Bluetooth, interruption, permission denial and network loss.
 - [ ] Local model download, cancellation and sustained inference checked on device; optional cloud connection configured and tested against a real provider; disconnect must preserve partial text and never claim completion.
-- [ ] Intent-to-command routing with explicit action previews and result acknowledgement. Current commands are manual forms; the model cannot execute them.
+- [ ] Broader intent-to-command coverage and on-device voice-command verification. Explicit Russian note/reminder/search commands now route offline to review forms and acknowledge actual results; arbitrary model-generated actions and the reference block editor are not implemented.
 - [ ] Character and voice selection beyond a single sample avatar.
 - [ ] Responsive chat/character/settings layouts checked on the actual outer and inner Duo screens, rotation, Split View, keyboard and large text.
 - [ ] Fresh macOS compile, native tests, installation after user signing and cold launch on iPhone Duo iOS 27.3.

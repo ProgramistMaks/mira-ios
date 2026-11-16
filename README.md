@@ -1,8 +1,8 @@
 # Мира — iOS companion, internal work in progress
 
-Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud streaming chat, Russian speech recognition / Apple TTS, Tavily search, Keychain credential storage, local history/notes and confirmed EventKit reminders. A bundled Three.js/VRM scene runs inside an isolated WKWebView. It receives only animation state, never conversation text or credentials. This renderer is reusable for later Android/desktop hosts.
+Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud streaming chat, Russian speech recognition / Apple TTS, Tavily search, Keychain credential storage, local history/notes and confirmed EventKit reminders. A bundled Three.js/VRM scene runs inside an isolated WKWebView. It receives only animation state and audio-derived mouth amplitude, never conversation text or credentials. See [speech synchronization](Docs/SPEECH.md). This renderer is reusable for later Android/desktop hosts.
 
-**Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the local runtime has been compiled on macOS CI, and real Qwen inference passed on the macOS runner. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
+**Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the local runtime has been compiled on macOS CI. Real Qwen inference, eleven native unit tests and one UI test passed; speech playback and offline command review are covered. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
 
 ## Renderer checks
 
@@ -34,7 +34,7 @@ The workflow assumes this directory is the repository root. The user authorized 
 - Optional cloud chat requires a compatible provider, endpoint, model and key. Keys are entered on device and stored in Keychain. Tavily provides search, not the conversational model.
 - Local-mode dictation requires on-device recognition; if unavailable, text input remains available. Cloud-mode dictation may send audio to Apple. Microphone is activated only by the recording control and stopped on background/interruption.
 - Cloud requests use at most 40 non-interrupted messages; local requests use at most 12, trimmed to the token budget. Long-term semantic memory is not implemented.
-- The app has manual search/note/reminder actions; natural-language action execution and integrated web answers remain unfinished.
+- Explicit Russian note/reminder/search commands work without an LLM and require action review. Manual forms remain available. Open-ended model tool use, a block editor and integrated web answers remain unfinished.
 - Natural voice parity, authored motions, real lip sync and final character acceptance remain open. UI automation covers startup, local notes and adaptive layout screenshots.
 
 ## Sources
