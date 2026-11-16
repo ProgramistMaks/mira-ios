@@ -1,10 +1,22 @@
 # Verification — 2026-11-16
 
+## Activity lifecycle race fixes — portable Swift tests passed
+
+The lifecycle implementation is now separated from the ActivityKit/UIKit adapter and compiled directly into both native targets. Each explicit user interaction invalidates the previous logical session synchronously. This closes a window where an old activity retained during asynchronous cleanup could still authorize cancellation of a newly started conversation. Reconciliation also rechecks state after a delayed end, preventing obsolete activity creation.
+
+- Installed the official Swift 6.2.3 Linux toolchain in the temporary workspace. `swift test` compiled the actual `ActivityCore` source and passed all thirteen XCTest cases, with zero failures. Tests use an injected effect driver and explicit continuations to exercise delayed update/end operations, not time-based approximations or a duplicate implementation.
+- Coverage includes old Stop rejection before cleanup completes; a third interaction superseding a second while the first ends; cancellation during an update; phase handovers without duplicates; background speech completion/Stop; no background request; late recording/inference updates; permission/preference denial; manual dismissal; request failure/recovery; idle cleanup; rapid changes; and widget URLs.
+- The Swift compiler parsed twenty-five app/shared/widget/test files without syntax errors. YAML/plist/workflow wiring and whitespace checks passed. This parser check does not type-check Apple SDK calls.
+- The source now stops the 30 Hz mouth clock while the app scene is inactive and resumes from actual playback time. Player release precedes audio-session deactivation. An extended native speech test is prepared, but these audio integration changes have not run on iOS.
+- CI now runs the portable package before native archive preparation and includes the same lifecycle tests in the native unit-test target. No new hosted workflow was dispatched while the confirmed billing/spending-limit block remains unresolved.
+
+This provides compiled/tested lifecycle logic, **not** a compiled iOS extension, a working-system ActivityKit certification, physical-device audio evidence or visual acceptance. Earlier native results do not certify these source changes. No IPA or screenshots were delivered.
+
 ## WidgetKit and Dynamic Island — native verification pending
 
 Source now includes a WidgetKit app extension (five widget families), ActivityKit status/Stop controls, guarded deep links and a persisted Live Activities preference. The app embeds the extension; an archive checker requires the actual nested executable, correct extension point, versions, Live Activities flag and URL scheme before packaging. Details and native acceptance steps are in WIDGETS.md.
 
-Local validation checked YAML/plist structure, extension wiring, shell syntax, Python syntax, Swift grammar and whitespace. The archive checker accepted a synthetic valid fixture and rejected incorrect versions/IDs and a missing executable; this does not validate a compiled bundle. Swift grammar parsing is **not** Apple SDK type checking or compilation. Four native unit tests cover route validation, actual-phase selection, settings migration and the public status payload. A native UI test covers cold/warm routes, sheet transitions and draft preservation. These newly added native tests have **not run**; neither the extension nor the changed app source has compiled in Xcode yet.
+Initial validation at `8aca164` checked YAML/plist structure, extension wiring, shell syntax, Python syntax, Swift grammar and whitespace. The archive checker accepted a synthetic valid fixture and rejected incorrect versions/IDs and a missing executable; this does not validate a compiled bundle. Four native unit tests initially covered route validation, actual-phase selection, settings migration and the public status payload; route validation has since moved into the portable/native lifecycle suite above. A native UI test covers cold/warm routes, sheet transitions and draft preservation. Neither the extension nor the changed app source has compiled in Xcode yet.
 
 GitHub's previously confirmed billing/spending-limit block still prevents native validation; no new hosted run was dispatched for this change. Device Live Activities, interactive Stop, widget rendering/tints and signing remain unverified. The source now permits already-playing speech to continue in the declared audio background mode; recording, inference and speech preparation still stop when backgrounded. Actual playback continuity, Lock Screen Stop and natural completion in the background also await native/device checks. No finished IPA or widget screenshots were delivered.
 

@@ -2,14 +2,6 @@ import XCTest
 @testable import Companion
 
 final class WidgetIntegrationTests: XCTestCase {
-    func testWidgetLinksOnlyNavigateToKnownRoutes() {
-        for route in MiraRoute.allCases { XCTAssertEqual(MiraRoute(url: route.url), route) }
-        for value in ["https://chat", "mira://delete", "mira://chat/send", "mira://chat?text=hello",
-                      "mira://chat#send", "mira://user@chat", "mira://chat:123", "mira:///chat"] {
-            XCTAssertNil(MiraRoute(url: URL(string: value)!), value)
-        }
-    }
-
     func testLiveActivityUsesActualWorkAndEndsWhenIdle() {
         XCTAssertNil(MiraActivityPhase.current(thinking: false, recording: false, preparing: false, speaking: false))
         XCTAssertEqual(MiraActivityPhase.current(thinking: false, recording: true, preparing: false, speaking: false), .listening)

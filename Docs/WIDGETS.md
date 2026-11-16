@@ -1,6 +1,6 @@
 # Widgets and Dynamic Island
 
-Implementation is present in source; native compilation and device/UI acceptance are pending. See VERIFICATION.md. No widget screenshot or IPA is approved for delivery.
+Implementation is present in source; the shared lifecycle compiles and passes thirteen Swift tests on Linux. Native compilation and device/UI acceptance are pending. See VERIFICATION.md. No widget screenshot or IPA is approved for delivery.
 
 ## Surfaces and interactions
 
@@ -17,6 +17,8 @@ Already-playing speech continues when the app is backgrounded or the screen is l
 
 Updates are serialized and phase transitions are coalesced for 120 ms to avoid recreating activities between synchronous speech handovers. While the app is running (including actual audible playback), a 30-second heartbeat renews a 90-second stale deadline. If the process disappears before ending the activity, stale UI replaces the running status with an invitation to open Mira; it does not claim the microphone is still active. A user-dismissed activity is not recreated until a later interaction. App launch removes orphaned activities. A short UIKit background task allows ActivityKit's final end operation to complete; it is not used to keep inference, a microphone or silent audio running. Interruptions still stop speech.
 
+Each explicit send, recording start or voice preview rotates the logical session ID synchronously. A queued/slow ActivityKit end operation cannot leave an old Stop button authorized to cancel a new interaction. Serial reconciliation rechecks its revision after awaiting retirement of an old activity, so an intermediate conversation superseded during that wait is never requested. The actual 30 Hz mouth clock is suspended while the scene is inactive; returning to the scene resumes from the player's current position.
+
 Widget backgrounds use the system's WidgetKit container and accent handling. Dynamic Island uses its system presentation, with lavender accents and readable action labels. Native iOS 26 glass/tint behavior, increased text size and Lock Screen presentation still need visual review.
 
 ## Building and signing
@@ -25,9 +27,15 @@ XcodeGen embeds `MiraWidgets.appex` in `Companion.app/PlugIns`. The extension's 
 
 Re-sign the main application **and the nested extension**, using profiles/identifiers appropriate for the same team. A signing tool that removes `PlugIns`, or a profile that covers only the main app, cannot produce working widgets. No certificate or provisioning profile is committed to the repository. The current local implementation needs no push/App Group entitlement.
 
+## Portable lifecycle verification
+
+Run `swift test` from the repository root (Swift 5.10+; locally tested using Swift 6.2.3). `ActivityCore` is compiled directly into the app and extension by XcodeGen. The standalone package tests the same sources using an injected driver that records requests/updates/ends and can suspend an effect until explicitly resumed. It does not emulate ActivityKit or audio hardware.
+
+Thirteen tests cover stale Stop rejection before asynchronous cleanup, superseding a conversation during a delayed end, cancellation during a delayed update, single-activity speech handovers, background completion/Stop, refusal to request activities in the background, late microphone/inference state delivery, system denial, preferences, manual dismissal, request failure, idle cleanup, rapid phase coalescing and widget URL validation. The same tests are included in the native test target. Hosted CI runs the portable package before preparing the inference runtime.
+
 ## Pending native acceptance
 
-1. Compile/archive both targets and run `WidgetIntegrationTests` and `WidgetRouteTests` on iOS 18 and iOS 26. The archive checker must pass against the compiled app, not fixtures.
+1. Compile/archive both targets and run `MiraActivityLifecycleTests`, `WidgetIntegrationTests`, `WidgetRouteTests` and the extended `SpeechTests` on iOS 18 and iOS 26. The archive checker must pass against the compiled app, not fixtures.
 2. Add all five widget families through the system gallery; inspect standard/tinted/clear appearances, light/dark themes, VoiceOver and larger text. Verify each medium-widget link and cold/warm navigation with a draft present.
 3. Exercise real recording, inference, speech preparation and playback, including Stop from an expanded island and from the Lock Screen. Verify no duplicate activities during speech handovers and no stale button cancelling a newer conversation.
 4. Verify system Live Activities denial, the app toggle, manual dismissal, backgrounding, foreground return, process termination, stale UI and relaunch cleanup. Verify actual continued audio through locking/Home, Stop during background audio, audio interruptions and the final activity end when audio naturally finishes. Test actual signing/installation with the extension retained.

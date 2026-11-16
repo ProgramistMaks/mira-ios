@@ -11,6 +11,8 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
     private var render: SpeechRenderSession?
     private var playbackClock: Task<Void, Never>?
+    private var playbackEnvelope: SpeechEnvelope?
+    private var sceneActive = true
     private var renderTimeout: Task<Void, Never>?
     @Published private(set) var recording = false
     @Published private(set) var transcript = ""
@@ -107,7 +109,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 guard let result = try render.consume(pcm) else { return }
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == id else { return }
-                    do { try self.play(result, generation: id) }
+                    do { try self.play(result) }
                     catch { self.stop(); self.onError?(error.localizedDescription) }
                 }
             } catch {
@@ -119,28 +121,44 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             }
         }
     }
-    private func play(_ speech: RenderedSpeech, generation id: UUID) throws {
+    private func play(_ speech: RenderedSpeech) throws {
         renderTimeout?.cancel(); renderTimeout = nil
         let player = try AVAudioPlayer(contentsOf: speech.url)
         player.delegate = self
         guard player.prepareToPlay(), player.play() else { throw SpeechPlaybackError.unavailable }
         self.player = player; preparing = false; speaking = true
+        playbackEnvelope = speech.envelope
+        startPlaybackClock()
+    }
+    func setSceneActive(_ active: Bool) {
+        sceneActive = active
+        if active { startPlaybackClock() }
+        else {
+            playbackClock?.cancel(); playbackClock = nil
+            mouthEvents.send(0)
+        }
+    }
+    private func startPlaybackClock() {
+        guard sceneActive, speaking, playbackClock == nil, let envelope = playbackEnvelope else { return }
+        let id = generation
         playbackClock = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, self.generation == id, let player = self.player else { return }
                 // Read actual playback time, never elapsed wall time or synthetic syllables.
-                self.mouthEvents.send(player.isPlaying ? speech.envelope.level(at: player.currentTime) : 0)
+                self.mouthEvents.send(player.isPlaying ? envelope.level(at: player.currentTime) : 0)
                 try? await Task.sleep(for: .milliseconds(33))
             }
         }
     }
     func stop() {
-        stopRecording()
         synth.stopSpeaking(at: .immediate)
         playbackClock?.cancel(); playbackClock = nil
         renderTimeout?.cancel(); renderTimeout = nil
-        player?.stop(); player = nil
+        player?.stop(); player = nil; playbackEnvelope = nil
         render?.cancel(); render = nil
+        // Release playback before deactivating the shared audio session. Otherwise
+        // setActive(false) may fail while AVAudioPlayer still owns audio I/O.
+        stopRecording()
         speaking = false; preparing = false; mouthEvents.send(0)
     }
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {

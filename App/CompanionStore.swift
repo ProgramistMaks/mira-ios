@@ -73,6 +73,7 @@ final class CompanionStore: ObservableObject {
             }
         }
         catch { self.error = error.localizedDescription; return }
+        liveActivities.beginInteraction()
         voice.stop()
         messages.append(Message(role: .user, content: text)); draft = ""
         let history = messages

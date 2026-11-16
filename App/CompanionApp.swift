@@ -10,6 +10,7 @@ struct CompanionApp: App {
             CompanionView(store: store, voice: store.voice)
                 .preferredColorScheme(.dark)
                 .onChange(of: scenePhase, initial: true) { _, phase in
+                    store.voice.setSceneActive(phase == .active)
                     if phase == .active { store.liveActivities.setForeground(true) }
                     if phase == .background {
                         let continueSpeech = store.voice.speaking
@@ -201,6 +202,7 @@ struct CompanionView: View {
             Button {
                 if voice.recording { voice.stopRecording() }
                 else {
+                    store.liveActivities.beginInteraction()
                     Task {
                         do { try await voice.startRecording(offlineOnly: store.settings.inferenceMode == .local) }
                         catch { store.error = error.localizedDescription }

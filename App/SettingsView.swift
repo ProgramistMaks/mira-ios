@@ -45,6 +45,7 @@ struct SettingsView: View {
                     }
                     Button(voice.busy ? "Остановить голос" : "Послушать голос") {
                         if voice.busy { voice.stop(); return }
+                        store.liveActivities.beginInteraction()
                         do { try voice.say("Привет. Я Мира. Рада тебя слышать.", voiceID: store.settings.voiceID) }
                         catch { self.error = error.localizedDescription }
                     }

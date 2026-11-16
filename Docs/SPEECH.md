@@ -14,6 +14,13 @@ or credentials. The renderer smooths mouth opening, closes it outside the speaki
 state, and expires missing bridge updates after 180 ms. There is no random speech
 oscillator. Reduced Motion still permits speech feedback.
 
+The scene-active signal now cancels the mouth clock and sends a closed-mouth value
+while the view is inactive, without stopping already-playing audio. Returning to
+the scene restarts sampling at `AVAudioPlayer.currentTime`, not at the start of the
+utterance. Stop releases the player before deactivating the shared audio session.
+The native playback test now exercises visibility suspension/resumption, but this
+new test and the changed audio integration still await Xcode/device validation.
+
 Stopping or audio interruption cancels synthesis, playback and the clock, resets
 the mouth and deletes the temporary audio. Playback completion does the same.
 The widget/island update declares background audio: already-playing speech may

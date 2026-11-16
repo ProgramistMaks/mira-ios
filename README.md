@@ -10,6 +10,8 @@ Subsequent renderer changes reduce facial morph data and fix readiness/reload be
 
 [Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The new extension, lifecycle and route tests await native compilation/QA because hosted macOS builds remain blocked. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
 
+The shared activity lifecycle now compiles and passes thirteen portable Swift tests, including cancellation races and background-state transitions. Run `swift test` at the repository root. The app/extension use those same lifecycle sources; their Apple framework integration and updated audio behavior still need native verification.
+
 ## Renderer checks
 
 ```sh

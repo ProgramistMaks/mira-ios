@@ -46,13 +46,26 @@ final class SpeechTests: XCTestCase {
         let subscription = voice.mouthEvents.sink { highestLevel = max(highestLevel, $0) }
         voice.onError = { failure = $0 }
         defer { voice.stop(); subscription.cancel() }
-        try voice.say("Привет. Я Мира. Рада тебя слышать. Давай поговорим.", voiceID: "")
+        let sample = String(repeating: "Привет. Я Мира. Рада тебя слышать. Давай поговорим. ", count: 3)
+        try voice.say(sample, voiceID: "")
         let deadline = Date().addingTimeInterval(40)
         while highestLevel == 0 && failure == nil && Date() < deadline {
             try await Task.sleep(for: .milliseconds(100))
         }
         XCTAssertNil(failure)
         XCTAssertGreaterThan(highestLevel, 0, "Real synthesized audio must drive the mouth during actual playback")
+        voice.setSceneActive(false)
+        XCTAssertEqual(voice.mouthEvents.value, 0)
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertTrue(voice.speaking, "Hiding the renderer must not stop already-playing speech")
+        XCTAssertEqual(voice.mouthEvents.value, 0, "A hidden scene must not keep receiving mouth frames")
+        highestLevel = 0
+        voice.setSceneActive(true)
+        let resumeDeadline = Date().addingTimeInterval(3)
+        while highestLevel == 0 && voice.speaking && Date() < resumeDeadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertGreaterThan(highestLevel, 0, "Returning to the scene must resume actual playback-derived mouth levels")
         voice.stop()
         XCTAssertFalse(voice.busy)
         XCTAssertEqual(voice.mouthEvents.value, 0)
