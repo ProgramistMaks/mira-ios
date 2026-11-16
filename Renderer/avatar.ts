@@ -4,7 +4,7 @@ import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, SpeechSamples } from './motion.mjs';
 import { ActingController } from './acting.mjs';
 import { PlantedStance } from './stance.mjs';
-import { FramePacer } from './frame-pacer.mjs';
+import { AnimationTimeline } from './animation-timeline.mjs';
 
 declare global {
   interface Window {
@@ -24,6 +24,14 @@ let active = true;
 let phase = 'idle';
 let reduced = false;
 const speechSamples = new SpeechSamples();
+const timeline = new AnimationTimeline();
+const syncVisibility = () => {
+  const visible = active && !document.hidden;
+  timeline.setActive(visible);
+  speechSamples.setActive(visible);
+};
+document.addEventListener('visibilitychange', syncVisibility);
+syncVisibility();
 let nativeSize: { width: number; height: number } | undefined;
 let applyResize: (() => void) | undefined;
 window.companion = {
@@ -31,7 +39,7 @@ window.companion = {
   phase,
   setActive(value) {
     active = value === true;
-    speechSamples.setActive(active);
+    syncVisibility();
   },
   setFrameRate(fps) { if (Number.isInteger(fps) && fps >= 1 && fps <= 240) frameRate = fps; },
   setSpeech(level, capturedAt, sequence) { speechSamples.receive(level, capturedAt, sequence); },
@@ -59,6 +67,7 @@ async function main() {
     event.preventDefault(); contextLost = true;
     window.companion.ready = false;
     speechSamples.setActive(false);
+    timeline.setActive(false);
     report('error', 'context lost');
   });
   // Rebuild GPU resources and let the native host resend its current state.
@@ -148,16 +157,14 @@ async function main() {
       left: bone(`left${finger}${joint}` as Parameters<typeof bone>[0]),
       right: bone(`right${finger}${joint}` as Parameters<typeof bone>[0]), scale: [0.8, 0.9, 0.55][index],
     })));
-  const clock = new THREE.Clock();
   let mouth = 0, elapsed = 0;
-  const pacer = new FramePacer();
   acting.update(0, reduced); acting.trigger('greeting');
   renderer.setAnimationLoop(timestamp => {
     // A cap is a target, not a claim about measured device performance.
     const cap = reduced ? Math.min(frameRate, 30) : frameRate;
-    if (!pacer.shouldRender(timestamp, cap)) return;
-    const delta = Math.min(clock.getDelta(), 0.05);
-    if (document.hidden || !active || contextLost || renderer.getContext().isContextLost()) return;
+    if (contextLost || renderer.getContext().isContextLost()) return;
+    const delta = timeline.advance(timestamp, cap);
+    if (delta === null) return;
     elapsed += delta;
     const pose = acting.update(delta, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;

@@ -1,5 +1,31 @@
 # Verification — 2026-11-16
 
+## Animation pause/resume — shared display timeline
+
+The renderer now uses the display callback timestamp for a shared pose/physics
+timeline. Native scene activation and browser visibility reset the time origin;
+the first resumed frame advances by zero rather than applying up to 50 ms of hidden
+time. Repeated active-state updates do not restart the clock. Skipped callbacks
+preserve elapsed time, while visible stalls retain the existing 50 ms step bound.
+
+- TypeScript checking, renderer unit tests and the Safari-targeted bundle build
+  passed. Four new timeline cases cover a greeting pose across a long pause with
+  no hidden callbacks, repeated state updates, hidden callbacks, elapsed motion at
+  30/60/120/240, rate changes, invalid timestamps and visible stalls.
+- The production scene browser probe passed with controlled display timestamps:
+  it preserves scene time on resume, advances by 1/120 and 1/240 seconds at the
+  injected intervals, and stays paused across a long gap. Existing actual VRM
+  mouth checks also passed. The timestamp injection and read-only observations
+  exist only in the test harness, not the shipped renderer.
+- The full renderer browser regression passed with the new pacer/timeline: four
+  phases at three viewport sizes, touch/drag filtering, Reduced Motion, canvas
+  pause/resume, WebGL recovery and load errors. All eighteen facial morph checks
+  stayed exact and 1,188 real-model stance poses retained planted feet within the
+  existing tolerance. No external requests were observed on the production page.
+- This is local Chromium and deterministic scheduling evidence, not measured
+  120/240 fps on a physical display or WKWebView lifecycle validation. No hosted
+  iOS workflow, native test suite or model inference was run for this change.
+
 ## Requested 120/240 fps animation modes — local checks only
 
 Animation settings now persist a 120 fps default request with 30/60/120/240 options.
