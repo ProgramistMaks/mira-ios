@@ -4,6 +4,8 @@ Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud
 
 **Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the Qwen/Gemma catalogue has been compiled on macOS CI. Real Swift inference for both model families, fourteen native unit tests and two UI tests passed; model selection, speech playback and offline command review are covered. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
 
+Liquid Glass is implemented and has internal iOS 26 visual evidence. The full UI suite passed on the iOS 18 fallback; iOS 26 checks exposed cold-start timing and download-cancellation issues. Latest loading, cancellation and icon-contrast corrections await a fresh native build: GitHub blocked the next run for a billing/spending-limit issue. Earlier passing tests do not validate those latest corrections.
+
 ## Renderer checks
 
 ```sh
@@ -17,12 +19,14 @@ npm run build
 
 ## macOS build and user signing
 
-Install Xcode with iOS SDK + simulator runtime, Node 22 and XcodeGen. Run:
+Install Xcode 26.2 with the iOS 26.2 SDK and simulator runtime, Node 22 and XcodeGen. Run:
 
 ```sh
 bash Scripts/build-ios.sh
 bash Scripts/test-ios.sh
 ```
+
+The minimum deployment target remains iOS 18. Native [Liquid Glass](Docs/LIQUID-GLASS.md) is used on iOS 26+, with standard material on older systems. To test the fallback, install the iOS 18.5 simulator runtime and run `MIRA_TEST_IOS_VERSION=18.5 bash Scripts/test-ios.sh` with a fresh result-bundle directory.
 
 The first script creates `build/Mira-unsigned.ipa` from an actual device archive. It is not installable as-is: the user must re-sign it using a valid identity/profile compatible with the device and bundle ID. No certificate is needed on CI for this unsigned workflow. The workflow under `.github/workflows/ios.yml` is manual and produces an **internal** artifact only after native tests pass. It is not a release pipeline.
 

@@ -18,6 +18,6 @@ PY
 xcodebuild -project Companion.xcodeproj -scheme Companion \
   -destination "platform=iOS Simulator,id=$device_id" \
   -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
-  -test-timeouts-enabled YES -default-test-execution-time-allowance 600 \
-  -maximum-test-execution-time-allowance 600 \
+  -test-timeouts-enabled YES -default-test-execution-time-allowance 1200 \
+  -maximum-test-execution-time-allowance 1200 \
   -resultBundlePath build/Tests.xcresult CODE_SIGNING_ALLOWED=NO test

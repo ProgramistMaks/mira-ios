@@ -179,6 +179,7 @@ struct CompanionView: View {
             } label: {
                 Image(systemName: voice.recording ? "stop.circle.fill" : "mic")
                     .font(.title3).frame(width: 24, height: 28)
+                    .foregroundStyle(voice.recording ? Palette.background : Palette.lavender)
             }.miraGlassButton(prominent: voice.recording)
                 .disabled(store.thinking).accessibilityLabel(voice.recording ? "Закончить запись" : "Начать запись")
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
@@ -191,6 +192,7 @@ struct CompanionView: View {
             } label: {
                 Image(systemName: store.thinking || voice.busy ? "stop.fill" : "arrow.up")
                     .font(.system(size: 17, weight: .semibold)).frame(width: 24, height: 28)
+                    .foregroundStyle(Palette.background)
             }
             .miraGlassButton(prominent: true)
             .disabled(voice.recording || (!store.thinking && !voice.busy && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))

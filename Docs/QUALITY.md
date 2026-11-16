@@ -29,6 +29,8 @@ Notes are app-local; reminders use EventKit; explicit web search uses Tavily or 
 
 ## Current blockers
 
-This workspace is Linux. macOS CI compiles the app and local inference runtime with Xcode 16.4/iOS 18.5 SDK. Real Qwen3.5 9B and Gemma 4 E2B inference through the Swift runtime on macOS passed; see VERIFICATION.md for native test and screenshot evidence. Actual Duo/iOS 27.3 verification, local-model device performance and reference-quality review are still required.
+This workspace is Linux. macOS CI now selects Xcode 26.2/iOS 26.2 SDK for native Liquid Glass, while the minimum deployment target stays iOS 18. Prior real Qwen3.5 9B and Gemma 4 E2B inference through the Swift runtime on macOS passed; see VERIFICATION.md for exact toolchain, native test and screenshot evidence. Actual Duo/iOS 27.3 verification, local-model device performance and reference-quality review are still required.
 User has a signing certificate and can sign/test IPA. Do not collect private keys or passwords in chat.
 The user's private repository is ProgramistMaks/mira-ios; cloud builds are internal. No public release has been created.
+
+Latest hosted validation is blocked by GitHub Billing & plans: run `43850639531` did not start because GitHub reported a failed-payment or spending-limit issue. Liquid Glass has partial native visual evidence and a passing iOS 18 compatibility run, but the final loading/cancellation/contrast corrections still need native compilation and UI verification. See VERIFICATION.md for the exact tested commits and failures. No payment or spending-limit settings were changed.

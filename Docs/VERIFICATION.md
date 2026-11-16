@@ -1,5 +1,25 @@
 # Verification — 2026-11-16
 
+## Liquid Glass update — final corrections awaiting native verification
+
+Native glass on iOS 26+ and the iOS 18 material fallback were implemented in `d7b31ecfe2d1e237e246f8e280ff9d66069b366f`. See LIQUID-GLASS.md for presentation scope and Apple references. The latest source includes subsequent corrections described below; earlier passing results do not certify those corrections.
+
+**Successful compatibility check:** run `43841702974`, commit `2686db09c1c1d37fe78409a90c05af9924112a27`, used Xcode 26.2 with the iOS 18.5 simulator on Intel macOS. The unsigned device archive compiled; fourteen unit tests and two UI tests passed. Tests covered 44-point control bounds, empty/enabled sending, keyboard input, notes and command review, rotation and persisted model selection without downloading. The actual Swift model smoke checks returned `4` and completed for both Qwen3.5 9B Q4_K_M and Gemma 4 E2B Q4_K_M after verifying the pinned files. The keyboard and landscape screenshots were reviewed internally: the controls remain usable and the character remains visible. The active send icon was white on lavender; that contrast issue is corrected in subsequent source but needs a new screenshot.
+
+**Native glass evidence and failures:**
+
+- Run `43841103969`, commit `2686db0`, compiled the archive and passed fourteen unit tests on iOS 26.2, including actual speech playback. UI checks failed when the simulator timed out obtaining a screenshot, then timed out setting orientation. No visual acceptance follows from that run.
+- Run `43845997475`, commit `844d0159ba4eb4be32b828cacfa4914b27dcca29`, booted the simulator explicitly and disabled parallel test execution. All fourteen unit tests passed again. The first UI test exceeded the original sixty-second renderer-readiness wait; its recorded screen and failure hierarchy subsequently show the real character loaded. The model test reached selection and the download confirmation, but the iOS 26 popover omitted the implicit cancel button expected by the test.
+- The native iOS 26 home-screen recording and model-catalogue screenshot were inspected internally. They show the actual system glass on controls, composer/status surfaces and navigation, with the character fully visible. This is partial visual evidence; the full native-glass UI suite did not pass.
+- A similar simulator screenshot timeout is reported at https://github.com/actions/runner-images/issues/13830. This is context for investigating CI, not proof of the cause here.
+
+**Corrections after review:** `7c7c26b` adds an explicit character-loading indicator and a native download alert with separate “Скачать” / “Отмена” buttons. Cold-launch UI waits allow 120 seconds while still requiring both readiness and actual character pixels. The following review also sets prominent action icons to a dark foreground for contrast and raises the per-test CI ceiling to twenty minutes: the successful iOS 18 UI scenario took 691 seconds, exceeding the earlier ten-minute ceiling. These latest corrections have not completed a fresh native build. Shell syntax, YAML parsing and whitespace checks passed locally; no Apple SDK or Swift compiler is available in this Linux workspace.
+
+**External blocker:** run `43850639531` for `7c7c26b` never started. GitHub reported: “The job was not started because recent account payments have failed or your spending limit needs to be increased.” The owner must resolve Billing & plans before new hosted checks can run. No spending limit, payment method or account setting was changed, and no further builds were dispatched after that rejection.
+
+Apple Silicon attempt `43845119642` also failed before execution because GitHub could not acquire a hosted runner after fifteen minutes. Optional newer-Xcode attempt `43849413671` targets Xcode 26.6 / iOS 26.5 on macOS 26 Intel, on the obsolete pre-correction commit `0cab0bf`. It has no acquired job at the last check; normal and force-cancel requests returned HTTP 409 (“has not been queued yet”). It must not be treated as verification of current source. Recheck/cancel that attempt before resuming CI after billing is restored.
+
+No IPA or screenshots were delivered as a finished product. Accessibility settings, physical-device startup/graphics performance, corrected native UI behavior and reference parity remain unverified.
 
 ## Authored character acting update
 
