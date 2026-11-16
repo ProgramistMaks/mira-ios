@@ -41,43 +41,31 @@ regression justify them. The iOS workflow remains manual (`workflow_dispatch`).
 
 ## Current native status
 
-This workspace is Linux. macOS CI now selects Xcode 26.2/iOS 26.2 SDK for native Liquid Glass, while the minimum deployment target stays iOS 18. Prior real Qwen3.5 9B and Gemma 4 E2B inference through the Swift runtime on macOS passed; see VERIFICATION.md for exact toolchain, native test and screenshot evidence. Actual Duo/iOS 27.3 verification, local-model device performance and reference-quality review are still required.
-User has a signing certificate and can sign/test IPA. Do not collect private keys or passwords in chat.
-The user's private repository is ProgramistMaks/mira-ios; cloud builds are internal. No public release has been created.
+The workspace is Linux. Native builds run in the user's private repository
+`ProgramistMaks/mira-ios`, defaulting to macos-26-intel / Xcode 26.6 / iOS 26.5.
+Earlier billing and runner-capacity failures are historical; the current host has
+compiled the complete device package with native Liquid Glass and MiraWidgets.
 
-Previous hosted validation was blocked by GitHub Billing & plans: run `43927090461` did not start because GitHub reported a failed-payment or spending-limit issue. Liquid Glass has partial native visual evidence and a passing iOS 18 compatibility run, but the final loading/cancellation/contrast corrections still need native compilation and UI verification. See VERIFICATION.md for the exact tested commits and failures. No payment or spending-limit settings were changed. On 2026-11-16 the user confirmed iOS build availability, lifting the request to pause native builds.
+Run `43953994238` passed 70 native unit tests and three UI scenarios on iPhone 17 /
+iOS 26.5. The widget-route test incorrectly relaunched the app for each URL and
+failed draft retention; the overall job deadline then prevented finalizing the
+result bundle and publishing the IPA. Raw diagnostic screenshots were recovered
+and reviewed. Voice controls below the viewport prompted the pinned-control fix.
+A focused voice/routes follow-up is required before packaging completion. Exact
+run IDs, source revisions, fixture repairs and final outcomes are in VERIFICATION.md.
 
-Native execution resumed in run `43932686138`: Xcode 26.2 started and twenty-eight
-portable tests passed on macOS, but the twelve HTTP tests failed at fixture startup.
-The updated startup deadline/diagnostics pass all forty tests locally, including a
-separate delayed-start probe. Follow-up runs `43934113790` (Intel) and `43936091765`
-(Apple Silicon) both failed before execution because GitHub could not allocate a
-hosted runner; the ARM run explicitly cited capacity constraints. The fix and all
-new app/widget changes still require successful native archive/UI validation.
+Earlier real Qwen3.5 9B and Gemma 4 E2B inference through the Swift runtime on macOS
+passed. Model pins/runtime did not change, so subsequent UI/package checks do not
+repeat multi-GB inference downloads. Portable HTTP tests exercise real loopback
+transfers and resume, but device downloads, Metal performance and RAM remain open.
 
-The subsequent WidgetKit/Dynamic Island extension and its platform integration still require native compilation and UI tests. Its shared lifecycle has compiled and passed thirteen Swift tests on Linux, including deliberately delayed effects and stale Stop rejection. All widget families, real-system Stop interaction, background/stale behavior, audio continuity, accessibility, signing and actual-device presentation remain acceptance requirements; see WIDGETS.md.
+The user explicitly requested a single compact IPA for their own signing/testing,
+with model weights downloaded inside the app. The character, renderer, local AI
+runtime and widget extension belong in the package. The user has a signing
+certificate; do not request private keys or passwords in chat. An unsigned artifact
+requires correct signing of the app, framework and widget extension before install.
 
-The shared suite now also covers dictation draft preservation and cancellation between
-permission prompts (twenty-two passing Swift tests in total). The updated microphone
-permission flow, composer and interruption handling still need native/device review;
-see SPEECH.md. Portable tests do not certify Speech.framework or iOS permission UI.
-
-Resumable model transfers now have real HTTP integration coverage and a small
-successful HTTPS resume probe against the pinned Qwen URL, including separate process
-launches. Native pause/relaunch UI, Wi-Fi restrictions, complete-file verification
-and installation still require iOS acceptance. No inference runtime or model pin was
-changed by this transfer update; see LOCAL-AI.md and VERIFICATION.md.
-
-Fresh native attempt `43927090461` for transfer source `b287ced` was rejected before
-execution by the same GitHub failed-payment/spending-limit block on 2026-11-16.
-It supplies no new native validation.
-
-The portable suite now passes fifty-six tests, including six real file-verification
-cases. Verification percent and explicit pause feedback are implemented in source;
-their iOS presentation and the CryptoKit/store integration remain unverified.
-
-The new chat-recovery block adds sixteen portable tests for the actual stream
-decoder, backward-compatible message metadata, draft-preserving question restoration
-and delayed save cancellation. Native stream transport, row/confirmation/focus UI,
-disk-protection/background behavior and speech integration remain pending. See
-CHAT-RECOVERY.md. No hosted build was dispatched for this locally verified batch.
+A package for the user's device check is not a finished, reference-approved release.
+Actual Duo/iOS 27.3 installation, microphone permissions, Bluetooth, real-system
+widgets/Live Activities, sustained inference and measured display performance are
+still acceptance requirements. No public release or quality-parity claim exists.

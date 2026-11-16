@@ -17,9 +17,9 @@ on:
         type: boolean
         default: true
       native_test_scope:
-        description: 'Full by default; voice/routes only for a focused follow-up with recorded passing regression evidence'
+        description: 'Full by default; focused UI follow-up, or package-only for user signing/device testing'
         type: choice
-        options: [full, voice_and_routes]
+        options: [full, voice_and_routes, package_only]
         default: full
       test_ios_version:
         description: 'Simulator OS: native glass or material fallback'
@@ -50,6 +50,7 @@ jobs:
       - name: Install project generator
         run: brew install xcodegen
       - name: Test interaction logic and resumable downloads
+        if: inputs.native_test_scope != 'package_only'
         run: |
           python3 Scripts/check-http-fixture.py
           MIRA_TEST_PYTHON="$(python3 -c 'import sys; print(sys.executable)')" swift test --scratch-path build/activity-tests
@@ -68,10 +69,19 @@ jobs:
           key: llama-b12430-v2-${{ inputs.runner }}-xcode${{ inputs.xcode_version }}-${{ runner.arch }}
       - name: Compile unsigned device archive
         run: bash Scripts/build-ios.sh
+      - name: Save unsigned device package for user signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: mira-internal-unsigned
+          path: |
+            build/Mira-unsigned.ipa
+            build/Mira-package-report.json
+          retention-days: 7
       - name: Verify actual local model inference
         if: inputs.verify_local_inference
         run: bash Scripts/test-local-model.sh
       - name: Run native tests
+        if: inputs.native_test_scope != 'package_only'
         run: bash Scripts/test-ios.sh
       - name: Export native screenshots
         if: always()
@@ -87,13 +97,6 @@ jobs:
             build/Tests.xcresult
             build/screenshots
           if-no-files-found: ignore
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mira-internal-unsigned
-          path: |
-            build/Mira-unsigned.ipa
-            build/Mira-package-report.json
           retention-days: 7
       - name: Quality status
         run: echo 'Internal build only. Visual parity, voice quality and physical-device checks are still required.'

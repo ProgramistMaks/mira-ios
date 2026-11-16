@@ -1,5 +1,21 @@
 # Verification — 2026-11-16
 
+## User-requested faster package delivery
+
+Run `43963647091` (source `3fbfd42`) passed the repaired shared/HTTP checks,
+restored the cached runtime and compiled/validated the updated device IPA. Its
+native test step failed before creating an XCResult; no simulator artifact was
+uploaded. The job is still finalizing, so the complete failure log is pending.
+The latest pinned voice controls and corrected warm-route test remain unverified.
+
+The user explicitly asked to speed up delivery. The workflow now saves the internal
+IPA immediately after device/package validation instead of withholding it behind
+the simulator job. Full testing remains the default; an explicit `package_only`
+mode packages the same app for the user's signing/device test without repeating
+shared/native tests or model inference. This mode does not mean those checks ran
+or that reference-quality acceptance was achieved. Renderer build checks and the
+actual package validator still run as part of `build-ios.sh`.
+
 ## Controlled disconnect fixture repair
 
 Focused follow-up `43962565432` (source `9296c13`) stopped before archive/native
