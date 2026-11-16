@@ -5,8 +5,13 @@ on:
       runner:
         description: 'macOS build host (use macos-15 variants for the iOS 18.5 simulator)'
         type: choice
-        options: [macos-26, macos-15, macos-15-intel]
-        default: macos-26
+        options: [macos-26-intel, macos-26, macos-15, macos-15-intel]
+        default: macos-15-intel
+      xcode_version:
+        description: 'Xcode version (26.6 requires a macos-26 host)'
+        type: choice
+        options: ['26.2', '26.6']
+        default: '26.2'
       verify_local_inference:
         description: 'Run real Qwen/Gemma inference (keep enabled for model/runtime changes)'
         type: boolean
@@ -14,7 +19,7 @@ on:
       test_ios_version:
         description: 'Simulator OS: native glass or material fallback'
         type: choice
-        options: ['26.2', '18.5']
+        options: ['26.5', '26.2', '18.5']
         default: '26.2'
 permissions:
   contents: read
@@ -23,7 +28,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 45
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode_version }}.app/Contents/Developer
       MIRA_TEST_IOS_VERSION: ${{ inputs.test_ios_version }}
     steps:
       - uses: actions/checkout@v4
@@ -42,14 +47,14 @@ jobs:
         id: runtime-cache
         with:
           path: Packages/LocalLLM/Artifacts
-          key: llama-b12430-v2-${{ inputs.runner }}-xcode26.2-${{ runner.arch }}
+          key: llama-b12430-v2-${{ inputs.runner }}-xcode${{ inputs.xcode_version }}-${{ runner.arch }}
       - name: Prepare local runtime
         run: bash Scripts/prepare-local-runtime.sh
       - uses: actions/cache/save@v4
         if: steps.runtime-cache.outputs.cache-hit != 'true'
         with:
           path: Packages/LocalLLM/Artifacts
-          key: llama-b12430-v2-${{ inputs.runner }}-xcode26.2-${{ runner.arch }}
+          key: llama-b12430-v2-${{ inputs.runner }}-xcode${{ inputs.xcode_version }}-${{ runner.arch }}
       - name: Compile unsigned device archive
         run: bash Scripts/build-ios.sh
       - name: Verify actual local model inference
