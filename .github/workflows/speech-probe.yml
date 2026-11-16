@@ -1,0 +1,15 @@
+name: Speech marker capability probe (internal)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-15-intel
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe installed voices with synthetic text
+        run: |
+          swiftc -swift-version 5 Scripts/probe-speech-markers.swift -o "$RUNNER_TEMP/speech-marker-probe"
+          "$RUNNER_TEMP/speech-marker-probe"
