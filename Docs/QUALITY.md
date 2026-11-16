@@ -33,7 +33,7 @@ This workspace is Linux. macOS CI now selects Xcode 26.2/iOS 26.2 SDK for native
 User has a signing certificate and can sign/test IPA. Do not collect private keys or passwords in chat.
 The user's private repository is ProgramistMaks/mira-ios; cloud builds are internal. No public release has been created.
 
-Latest hosted validation is blocked by GitHub Billing & plans: run `43850639531` did not start because GitHub reported a failed-payment or spending-limit issue. Liquid Glass has partial native visual evidence and a passing iOS 18 compatibility run, but the final loading/cancellation/contrast corrections still need native compilation and UI verification. See VERIFICATION.md for the exact tested commits and failures. No payment or spending-limit settings were changed.
+Latest hosted validation is blocked by GitHub Billing & plans: run `43927090461` did not start because GitHub reported a failed-payment or spending-limit issue. Liquid Glass has partial native visual evidence and a passing iOS 18 compatibility run, but the final loading/cancellation/contrast corrections still need native compilation and UI verification. See VERIFICATION.md for the exact tested commits and failures. No payment or spending-limit settings were changed. The user will announce when iOS builds are available; do not dispatch another native build before that notification.
 
 The subsequent WidgetKit/Dynamic Island extension and its platform integration still require native compilation and UI tests. Its shared lifecycle has compiled and passed thirteen Swift tests on Linux, including deliberately delayed effects and stale Stop rejection. All widget families, real-system Stop interaction, background/stale behavior, audio continuity, accessibility, signing and actual-device presentation remain acceptance requirements; see WIDGETS.md.
 
@@ -51,3 +51,7 @@ changed by this transfer update; see LOCAL-AI.md and VERIFICATION.md.
 Fresh native attempt `43927090461` for transfer source `b287ced` was rejected before
 execution by the same GitHub failed-payment/spending-limit block on 2026-11-16.
 It supplies no new native validation.
+
+The portable suite now passes forty tests, including six real file-verification
+cases. Verification percent and explicit pause feedback are implemented in source;
+their iOS presentation and the CryptoKit/store integration remain unverified.

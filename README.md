@@ -10,7 +10,7 @@ Subsequent renderer changes reduce facial morph data and fix readiness/reload be
 
 [Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The new extension, lifecycle and route tests await native compilation/QA because hosted macOS builds remain blocked. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
 
-The shared interaction code has twenty-two passing portable Swift tests. Twelve additional HTTP integration tests cover resumable model downloads. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. The app uses those same sources; Apple framework integration, audio/composer behavior and the new download UI still need native verification.
+The portable Swift suite has forty passing tests: twenty-two interaction cases, twelve HTTP download cases and six file-verification cases. Verification now reports progress, and pausing preserves the file for another attempt. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. The app uses those same sources; Apple framework integration, audio/composer behavior and the new download UI still need native verification. Native builds are paused until the user confirms that iOS builds are available again.
 
 ## Renderer checks
 

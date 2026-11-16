@@ -50,8 +50,12 @@ retain usable bytes. The transfer session is reused across attempts; its serial
 delegate router releases each transfer when its task completes.
 
 The model store still hashes the entire completed file with CryptoKit and requires
-the exact SHA256 and size before atomic installation. A paused verification can be
-restarted without network traffic. A failed hash discards the partial file and
+the exact SHA256 and size before atomic installation. `ModelFileVerifier` reads
+1 MiB chunks off the main actor, checks cancellation between chunks and reports
+verification progress. Pausing keeps controls busy until the current operation has
+stopped; delayed download progress cannot overwrite the verification/pause display.
+A paused verification restarts from the beginning without network traffic. A complete
+saved file does not need the extra 1 GB download reserve. A failed hash discards the partial file and
 shows a model-specific retry message. A separate confirmed action discards an
 unfinished download. None of this provides background downloads: leaving the app
 requests a pause, while active speech retains its separate audio behavior.
@@ -60,7 +64,10 @@ Twelve Swift integration tests exercise real local HTTP transfers, cancellation,
 redirects, changed validators, ignored ranges, invalid ranges/totals, truncated and
 oversized bodies, saved-file identity, empty replacement responses and cleanup.
 The suite needs Swift 5.10+, Python 3 and localhost access (`swift test` from the
-repository root). A separate small HTTPS probe of the actual pinned Qwen3.5 9B URL
+repository root). Six more portable tests cover real file streaming, size/digest
+rejection, cancellation/retry and read failure with an injected digest decision;
+the CryptoKit adapter remains subject to native validation.
+A separate small HTTPS probe of the actual pinned Qwen3.5 9B URL
 also resumed across independent process launches; no complete model was downloaded
 or SHA-verified in that probe. Native UI, Wi-Fi restrictions, app suspension and
 full install/corruption behavior still require iOS validation.

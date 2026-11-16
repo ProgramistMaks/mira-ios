@@ -1,5 +1,25 @@
 # Verification — 2026-11-16
 
+## File verification progress and pause feedback
+
+The model store now uses `ModelFileVerifier` to stream completed files into the
+existing CryptoKit SHA256 check in 1 MiB chunks. The UI shows verification percent,
+an explicit pausing state until cleanup finishes, and a separate label for a
+fully downloaded file awaiting verification. Late transfer callbacks cannot replace
+verification progress or a pending pause. A complete saved file no longer requires
+the extra 1 GB download reserve before checking/installing it.
+
+- All **40 portable XCTest cases passed** with Swift 6.2.3 on Linux. Six new cases
+  exercise actual file reads: bounded chunks and exact bytes/progress, failed digest
+  approval, short/oversized/empty input, cancellation during reading and a complete
+  retry from the preserved file, cancellation before reading, and a missing file.
+  These tests inject the digest decision; they do not execute Apple's CryptoKit.
+- Changed Swift files passed syntax parsing and whitespace checks. This is not an
+  Apple SDK type check. Native progress/pause presentation and the CryptoKit/store
+  integration still need iOS validation.
+- No hosted build was started. Per the user's latest instruction, native builds
+  remain paused until they confirm availability. No IPA or screenshots delivered.
+
 ## Resumable model downloads — portable transfer verification
 
 Source now supports pausing/resuming model downloads, keeps partial data after a

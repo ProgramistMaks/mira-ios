@@ -32,6 +32,8 @@ final class LocalModelStore: ObservableObject {
     @Published private(set) var legacyInstalled = false
     @Published private(set) var downloading = false
     @Published private(set) var verifying = false
+    @Published private(set) var verificationProgress = 0.0
+    @Published private(set) var pausing = false
     @Published private(set) var progress = 0.0
     @Published private(set) var savedBytes: [String: Int64] = [:]
     @Published private(set) var receivedBytes: Int64 = 0
@@ -66,12 +68,13 @@ final class LocalModelStore: ObservableObject {
     func download() {
         guard !downloading && !installed else { return }
         let model = selected, id = UUID()
-        attempt = id; downloading = true; verifying = false; error = nil
+        attempt = id; downloading = true; verifying = false; verificationProgress = 0; pausing = false; error = nil
         receivedBytes = pausedBytes; progress = Double(pausedBytes) / Double(model.bytes); bytesPerSecond = 0
         work = Task { [weak self] in
             guard let self else { return }
             defer {
                 self.attempt = nil; self.downloading = false; self.verifying = false
+                self.pausing = false
                 self.bytesPerSecond = 0; self.work = nil; self.refresh()
             }
             do {
@@ -82,13 +85,13 @@ final class LocalModelStore: ObservableObject {
                 let required = model.bytes - saved + 1_000_000_000
                 let capacity = try directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
                     .volumeAvailableCapacityForImportantUsage
-                if let capacity, capacity < required {
+                if saved < model.bytes, let capacity, capacity < required {
                     throw NSError(domain: "LocalModel", code: 1, userInfo: [NSLocalizedDescriptionKey:
                         "Для загрузки нужно не менее \(ByteCountFormatter.string(fromByteCount: required, countStyle: .decimal)) свободного места."])
                 }
                 let transfer = ModelTransfer(resource: model.transferResource, directory: directory) { [weak self] value in
                     Task { @MainActor in
-                        guard let self, self.attempt == id else { return }
+                        guard let self, self.attempt == id, !self.verifying, !self.pausing else { return }
                         self.progress = value.fraction; self.receivedBytes = value.received
                         self.bytesPerSecond = value.bytesPerSecond
                     }
@@ -96,14 +99,18 @@ final class LocalModelStore: ObservableObject {
                 let partial = try await transfer.run()
                 try Task.checkCancellation()
                 self.verifying = true; self.bytesPerSecond = 0
-                let verification = Task.detached(priority: .utility) {
-                    let handle = try FileHandle(forReadingFrom: partial); defer { try? handle.close() }
-                    var hash = SHA256(); var count: Int64 = 0
-                    while let data = try handle.read(upToCount: 1_048_576), !data.isEmpty {
-                        try Task.checkCancellation(); hash.update(data: data); count += Int64(data.count)
-                    }
-                    let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
-                    return count == model.bytes && digest == model.sha256
+                self.receivedBytes = model.bytes; self.progress = 1
+                let verification = Task.detached(priority: .utility) { [weak self] in
+                    var hash = SHA256()
+                    return try ModelFileVerifier.verify(file: partial, expectedBytes: model.bytes,
+                        update: { hash.update(data: $0) },
+                        matches: { hash.finalize().map { String(format: "%02x", $0) }.joined() == model.sha256 },
+                        progress: { value in
+                            Task { @MainActor [weak self] in
+                                guard let self, self.attempt == id, self.verifying, !self.pausing else { return }
+                                self.verificationProgress = max(self.verificationProgress, value.fraction)
+                            }
+                        })
                 }
                 let valid = try await withTaskCancellationHandler { try await verification.value } onCancel: { verification.cancel() }
                 try Task.checkCancellation()
@@ -123,7 +130,11 @@ final class LocalModelStore: ObservableObject {
             }
         }
     }
-    func pause() { work?.cancel() }
+    func pause() {
+        guard downloading, !pausing else { return }
+        pausing = true; bytesPerSecond = 0
+        work?.cancel()
+    }
     func discardPartial() {
         guard !downloading else { return }
         do {

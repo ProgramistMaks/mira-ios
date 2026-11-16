@@ -11,7 +11,8 @@ struct LocalModelSection: View {
             if model.downloading {
                 ModelTransferStatus(model: model)
             } else if model.pausedBytes > 0 {
-                Text("Загрузка приостановлена. Можно продолжить.").font(.footnote).foregroundStyle(.secondary)
+                Text(model.pausedBytes == model.selected.bytes ? "Файл скачан. Осталось проверить и установить." :
+                     "Загрузка приостановлена. Можно продолжить.").font(.footnote).foregroundStyle(.secondary)
             }
             NavigationLink("Модели и загрузки") { LocalModelsView(model: model, busy: busy) }
                 .accessibilityIdentifier("models.open")
@@ -44,7 +45,8 @@ struct LocalModelsView: View {
                             Label("Загружена", systemImage: "internaldrive")
                                 .font(.footnote).foregroundStyle(.secondary)
                         } else if (model.savedBytes[item.id] ?? 0) > 0 && !(model.downloading && model.selected.id == item.id) {
-                            Label("Загрузка на паузе", systemImage: "pause.circle")
+                            Label(model.savedBytes[item.id] == item.bytes ? "Ожидает проверки" : "Загрузка на паузе",
+                                  systemImage: model.savedBytes[item.id] == item.bytes ? "checkmark.shield" : "pause.circle")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                         if model.selected.id == item.id {
@@ -59,7 +61,7 @@ struct LocalModelsView: View {
                     if model.selected.id == item.id {
                         if model.downloading {
                             ModelTransferStatus(model: model)
-                            Button("Приостановить") { model.pause() }
+                            Button("Приостановить") { model.pause() }.disabled(model.pausing)
                         } else if model.installed {
                             Button("Удалить с устройства", role: .destructive) { confirmDelete = true }.disabled(busy)
                         } else {
@@ -114,8 +116,13 @@ struct LocalModelsView: View {
 private struct ModelTransferStatus: View {
     @ObservedObject var model: LocalModelStore
     var body: some View {
-        if model.verifying {
-            ProgressView("Проверяю файл…")
+        if model.pausing {
+            ProgressView("Приостанавливаю…")
+        } else if model.verifying {
+            ProgressView(value: model.verificationProgress) {
+                Text("Проверяю файл · \(Int(model.verificationProgress * 100))%")
+                    .monospacedDigit()
+            }
         } else {
             ProgressView(value: model.progress)
             Text("\(ByteCountFormatter.string(fromByteCount: model.receivedBytes, countStyle: .decimal)) из \(model.selected.sizeLabel) · \(Int(model.progress * 100))%")
