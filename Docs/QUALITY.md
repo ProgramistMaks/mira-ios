@@ -41,6 +41,11 @@ regression justify them. The iOS workflow remains manual (`workflow_dispatch`).
 
 ## Current native status
 
+The 0.2 rebuild is not accepted: the initial device archive passed, but native tests
+did not execute. The latest source includes a modal error-reporting correction;
+its macOS run `43972857986` was blocked before any steps by GitHub billing/spending
+restrictions. No finished replacement was delivered. See VERIFICATION.md.
+
 The workspace is Linux. Native builds run in the user's private repository
 `ProgramistMaks/mira-ios`, defaulting to macos-26-intel / Xcode 26.6 / iOS 26.5.
 Earlier billing and runner-capacity failures are historical; the current host has

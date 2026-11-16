@@ -1,5 +1,25 @@
 # Verification — 2026-11-16
 
+## Latest status: macOS verification blocked by GitHub billing
+
+Latest application source: `561dd63` on `rebuild/voice-first` (draft PR #1).
+Run `43972857986` did not start any job steps. GitHub check annotation:
+“The job was not started because recent account payments have failed or your
+spending limit needs to be increased. Please check the 'Billing & plans' section
+in your settings”. This establishes an account billing/spending restriction;
+it does not distinguish a failed payment from a spending cap. No billing settings
+were changed and no further runs were dispatched.
+
+All 79 portable tests passed locally and on macOS. Device compilation/package
+validation passed for earlier rebuild source `d6a2c3d`; the subsequent chat/settings
+error-presentation correction at `561dd63` has only Swift syntax validation.
+The full native suite never executed for this rebuild, so automatic microphone
+turn-taking, actual updated playback callbacks and new UI screenshots are unverified.
+Live Tavily/device/provider testing and reference-quality acceptance remain open.
+No replacement IPA was delivered as finished. The internal older 0.2 artifact does
+not include the final modal-error correction and must not be presented as the latest
+validated app. See the scoped run records below.
+
 ## 0.2 automatic-conversation rebuild — archive passed, test-launch repair
 
 User rejected the delivered candidate and confirmed automatic turn-taking plus a
