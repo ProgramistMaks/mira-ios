@@ -18,6 +18,12 @@ final class CompanionStore: ObservableObject {
     @Published var error: String?
     @Published var proposedCommand: CommandProposal?
     @Published var thinking = false
+    @Published private(set) var automatic = AutomaticConversation()
+    @Published private(set) var liveTranscript = ""
+    @Published private(set) var searching = false
+    @Published private(set) var cloudConfigured = false
+    @Published private(set) var searchConfigured = false
+    private var automaticCaptureSession: UUID?
     @Published var characterReady = false
     @Published var characterError: String?
     let voice = VoiceService()
@@ -40,10 +46,18 @@ final class CompanionStore: ObservableObject {
             settings = try store.read("settings.json", as: ConnectionSettings.self) ?? ConnectionSettings()
             notes = try store.read("notes.json", as: [Note].self) ?? []
         } catch { self.error = "Не удалось прочитать сохранённые данные. \(error.localizedDescription)" }
-        voice.onError = { [weak self] in self?.error = $0 }
+        refreshConnections()
+        voice.onError = { [weak self] message in self?.failConversation(message) }
+        voice.onUtterance = { [weak self] text in
+            guard let self, let id = self.automaticCaptureSession else { return }
+            self.automaticCaptureSession = nil
+            guard self.automatic.heard(text, session: id) else { return }
+            self.send(text, speakReply: true)
+        }
         voice.onTranscript = { [weak self] text in
-            guard let self, let dictation = self.dictationDraft else { return }
-            self.draft = dictation.applying(text)
+            guard let self else { return }
+            if self.automaticCaptureSession != nil { self.liveTranscript = text }
+            else if let dictation = self.dictationDraft { self.draft = dictation.applying(text) }
         }
         voice.onRecordingFinished = { [weak self] in self?.dictationDraft = nil }
         MiraActivityActions.stop = { [weak self] sessionID in
@@ -67,11 +81,17 @@ final class CompanionStore: ObservableObject {
                                         enabled: enabled)
         }
     }
-    func send(speakReply: Bool? = nil) {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    func send(_ utterance: String? = nil, speakReply: Bool? = nil) {
+        let text = (utterance ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty && !thinking && !voice.recordingBusy else { return }
-        guard text.count <= 12000 else { error = "Сообщение слишком длинное: максимум 12 000 символов."; return }
+        guard text.count <= 12000 else { failConversation("Сообщение слишком длинное: максимум 12 000 символов."); return }
         if let proposal = CommandProposal.parse(text) {
+            if proposal.kind == .search {
+                searchWeb(proposal.text, original: text, speakReply: speakReply ?? settings.speakReplies,
+                          clearDraft: utterance == nil)
+                return
+            }
+            automatic.stop(); automaticCaptureSession = nil
             voice.stop()
             spokenCommandID = speakReply == true ? proposal.id : nil
             proposedCommand = proposal; return
@@ -85,11 +105,11 @@ final class CompanionStore: ObservableObject {
                 guard !SecretStore.read().isEmpty else { throw CompanionError.configuration }
             }
         }
-        catch { self.error = error.localizedDescription; return }
+        catch { failConversation(error.localizedDescription); return }
         liveActivities.beginInteraction()
         voice.stop()
         let question = Message(role: .user, content: text)
-        messages.append(question); draft = ""
+        messages.append(question); if utterance == nil { draft = "" }
         let history = messages
         let reply = Message(role: .assistant, content: "", interrupted: true, replyTo: question.id)
         messages.append(reply); saveConversation()
@@ -123,8 +143,9 @@ final class CompanionStore: ObservableObject {
                 self.thinking = false; self.activeID = nil; self.work = nil
                 self.saveConversation()
                 if completion == .complete && shouldSpeak {
-                    do { try self.voice.say(self.messages[index].content, voiceID: self.settings.voiceID) }
-                    catch { self.error = error.localizedDescription }
+                    self.speakAnswer(self.messages[index].content)
+                } else if self.automatic.active {
+                    self.failConversation("Ответ не завершён. Разговор приостановлен; текст сохранён.")
                 }
             } catch {
                 guard self.activeID == reply.id else { return }
@@ -135,7 +156,107 @@ final class CompanionStore: ObservableObject {
                 }
                 self.thinking = false; self.activeID = nil; self.work = nil
                 self.saveConversation()
-                if !(error is CancellationError) { self.error = error.localizedDescription }
+                if !(error is CancellationError) { self.failConversation(error.localizedDescription) }
+            }
+        }
+    }
+    func refreshConnections() {
+        cloudConfigured = (try? settings.endpoint()) != nil && !SecretStore.read().isEmpty
+        searchConfigured = !SecretStore.read(account: "tavily").isEmpty
+    }
+    func startAutomaticConversation() async {
+        guard !automatic.active, proposedCommand == nil else { return }
+        refreshConnections()
+        guard (settings.inferenceMode ?? .cloud) == .local ? localModel.installed : cloudConfigured else {
+            failConversation("Сначала скачай локальную модель или подключи ИИ в настройках. Голос можно проверить кнопкой «Послушать Миру».")
+            return
+        }
+        cancel()
+        let id = automatic.start()
+        await listenAutomatically(session: id)
+    }
+    private func listenAutomatically(session id: UUID) async {
+        guard automatic.id == id, automatic.phase == .listening else { return }
+        automaticCaptureSession = id; liveTranscript = ""
+        liveActivities.beginInteraction()
+        do {
+            try await voice.startRecording(offlineOnly: settings.offlineRecognition, automatic: true)
+            guard automatic.id == id else { return }
+            if !voice.recording { automatic.stop(); automaticCaptureSession = nil }
+        } catch {
+            guard automatic.id == id else { return }
+            failConversation(error.localizedDescription)
+        }
+    }
+    func interruptAutomaticConversation() async {
+        guard automatic.active else { return }
+        cancel()
+        let id = automatic.start()
+        await listenAutomatically(session: id)
+    }
+    func disarmAutomaticConversation() {
+        automatic.stop(); automaticCaptureSession = nil
+    }
+    private func speakAnswer(_ text: String) {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            failConversation("ИИ вернул пустой ответ. Проверь подключение или выбранную модель."); return
+        }
+        let id = automatic.id
+        let resumes = automatic.willSpeak(session: id)
+        do {
+            try voice.say(text, voiceID: settings.voiceID, onFinished: { [weak self] in
+                guard resumes, let self, self.automatic.finishedSpeaking(session: id) else { return }
+                Task { @MainActor [weak self] in await self?.listenAutomatically(session: id) }
+            })
+        } catch { failConversation(error.localizedDescription) }
+    }
+    private func failConversation(_ message: String) {
+        automatic.stop(); automaticCaptureSession = nil
+        voice.stop(); error = message
+    }
+    func previewVoice() {
+        cancel(); liveActivities.beginInteraction()
+        do { try voice.say("Привет! Я Мира. Так звучит мой голос. Давай поговорим.", voiceID: settings.voiceID) }
+        catch { failConversation(error.localizedDescription) }
+    }
+    func searchWeb(_ query: String, original: String? = nil, speakReply: Bool = true, clearDraft: Bool = false) {
+        guard !thinking, !voice.recordingBusy else { return }
+        let key = SecretStore.read(account: "tavily")
+        guard !key.isEmpty else {
+            failConversation("Поиск ещё не подключён. Открой настройки поиска, сохрани ключ Tavily и нажми «Проверить поиск».")
+            return
+        }
+        voice.stop(); liveActivities.beginInteraction()
+        let question = Message(role: .user, content: original ?? query)
+        let reply = Message(role: .assistant, content: "", interrupted: true, replyTo: question.id)
+        messages.append(contentsOf: [question, reply]); if clearDraft { draft = "" }
+        thinking = true; searching = true; activeID = reply.id; saveConversation()
+        work = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let hits = try await WebSearch().search(query, key: key)
+                try Task.checkCancellation()
+                guard self.activeID == reply.id,
+                      let index = self.messages.firstIndex(where: { $0.id == reply.id }) else { return }
+                self.messages[index].sources = hits.map { SearchSource(title: $0.title, url: $0.url) }
+                let body = hits.isEmpty ? "По запросу «\(query)» ничего не найдено." :
+                    "Нашла источники по запросу «\(query)». Выдержки из результатов:\n\n" +
+                    hits.prefix(3).enumerated().map { "[\($0.offset + 1)] \($0.element.title)\n\($0.element.content.prefix(600))" }.joined(separator: "\n\n")
+                self.messages[index].content = body; self.messages[index].interrupted = false
+                self.thinking = false; self.searching = false; self.activeID = nil; self.work = nil
+                self.saveConversation()
+                if speakReply {
+                    let spoken = hits.first.map { "Первый источник: \($0.title). \($0.content.prefix(650)). Ссылки сохранены в разговоре." } ?? body
+                    self.speakAnswer(spoken)
+                }
+            } catch {
+                guard self.activeID == reply.id else { return }
+                if let index = self.messages.firstIndex(where: { $0.id == reply.id }) {
+                    self.messages[index].interruption = .connection
+                }
+                self.thinking = false; self.searching = false; self.activeID = nil; self.work = nil
+                self.saveConversation()
+                if !Task.isCancelled { self.failConversation(error.localizedDescription) }
             }
         }
     }
@@ -144,7 +265,7 @@ final class CompanionStore: ObservableObject {
         voice.stop()
         dictationDraft = MiraDictationDraft(original: draft)
         liveActivities.beginInteraction()
-        do { try await voice.startRecording(offlineOnly: settings.inferenceMode == .local) }
+        do { try await voice.startRecording(offlineOnly: settings.offlineRecognition) }
         catch { self.error = error.localizedDescription }
     }
     func interruptAndRecord() async {
@@ -181,6 +302,7 @@ final class CompanionStore: ObservableObject {
         }
     }
     func cancel(reason: Message.Interruption = .stopped) {
+        automatic.stop(); automaticCaptureSession = nil; searching = false
         spokenCommandID = nil
         responseCheckpoint.cancel()
         if let id = activeID, let index = messages.firstIndex(where: { $0.id == id }) {
@@ -206,6 +328,7 @@ final class CompanionStore: ObservableObject {
         guard let storage else { throw CompanionError.storage }
         try SecretStore.write(key.trimmingCharacters(in: .whitespacesAndNewlines))
         try storage.write(settings, name: "settings.json")
+        refreshConnections()
     }
     func persistPreferences() {
         do {

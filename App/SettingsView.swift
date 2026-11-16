@@ -11,6 +11,9 @@ struct SettingsView: View {
     @State private var searchKey = ""
     @State private var searchSaved = false
     @State private var saved = false
+    @State private var checkingSearch = false
+    @State private var searchCheck: String?
+    @State private var searchProbe: Task<Void, Never>?
     @State private var error: String?
     @State private var confirmDelete = false
     var body: some View {
@@ -22,7 +25,7 @@ struct SettingsView: View {
                         Text("На iPhone").tag(InferenceMode.local)
                         Text("В облаке").tag(InferenceMode.cloud)
                     }.disabled(store.thinking)
-                    Text("В локальном режиме текст и доступное на устройстве распознавание речи работают на iPhone. Если локальная диктовка недоступна, можно написать сообщение. Облачный режим и поиск используют интернет.")
+                    Text("Локальная модель отвечает на iPhone после загрузки. Облачная модель требует подключения. Распознавание речи настраивается отдельно ниже.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 LocalModelSection(model: store.localModel, busy: store.thinking)
@@ -33,13 +36,33 @@ struct SettingsView: View {
                     Button(searchSaved ? "Ключ поиска сохранён" : "Сохранить ключ поиска") {
                         do {
                             try SecretStore.write(searchKey.trimmingCharacters(in: .whitespacesAndNewlines), account: "tavily")
-                            searchSaved = true
+                            searchSaved = true; searchCheck = nil; store.refreshConnections()
                         } catch { self.error = error.localizedDescription }
                     }
+                    Button(checkingSearch ? "Проверяю…" : "Проверить поиск") {
+                        checkingSearch = true; searchCheck = nil
+                        searchProbe = Task {
+                            defer { checkingSearch = false }
+                            do {
+                                let hits = try await WebSearch().search("официальный сайт Apple", key: SecretStore.read(account: "tavily"))
+                                try Task.checkCancellation()
+                                searchCheck = hits.isEmpty ? "Сервис ответил, но не вернул источники." : "Поиск работает: получено источников — \(hits.count)."
+                            } catch { if !Task.isCancelled { searchCheck = error.localizedDescription } }
+                        }
+                    }.disabled(checkingSearch || !store.searchConfigured)
+                    if let searchCheck { Text(searchCheck).font(.footnote).accessibilityIdentifier("search.checkResult") }
                 } header: { Text("Поиск в интернете") } footer: {
-                    Text("Tavily используется только по кнопке поиска. Запрос отправляется в Tavily; расход лимита зависит от тарифа. Ключ хранится в Keychain отдельно от ключа ИИ.")
+                    Text("Скажи «найди в интернете…» — источники появятся в разговоре. Проверка выполняет один тестовый запрос. Tavily использует интернет и свой лимит запросов; ключ хранится только на устройстве.")
                 }
                 Section("Голос") {
+                    Toggle("Разрешить распознавание Apple через интернет", isOn: Binding(
+                        get: { store.settings.useAppleRecognition ?? false },
+                        set: { store.settings.useAppleRecognition = $0 }
+                    ))
+                    Text(store.settings.offlineRecognition
+                         ? "Речь распознаётся только на устройстве. Если русский язык недоступен, можно разрешить обработку Apple."
+                         : "Аудио может передаваться Apple для распознавания. Выбор локальной модели ИИ от этого не меняется.")
+                        .font(.footnote).foregroundStyle(.secondary)
                     Toggle("Озвучивать ответы", isOn: $store.settings.speakReplies)
                     Picker("Голос", selection: $store.settings.voiceID) {
                         Text("Автоматически").tag("")
@@ -85,7 +108,7 @@ struct SettingsView: View {
             .navigationTitle("Настройки")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { voice.stop(); dismiss() } } }
             .onAppear { key = SecretStore.read(); searchKey = SecretStore.read(account: "tavily") }
-            .onDisappear { voice.stop(); store.persistPreferences() }
+            .onDisappear { searchProbe?.cancel(); voice.stop(); store.persistPreferences(); store.refreshConnections() }
             .alert("Ошибка", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("Понятно") { error = nil }
             } message: { Text(error ?? "") }

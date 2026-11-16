@@ -73,7 +73,8 @@ final class SpeechTests: XCTestCase {
         XCTAssertFalse(voice.busy, "Late synthesis callbacks must not restart playback after cancellation")
         XCTAssertEqual(voice.mouthEvents.value, 0)
         highestLevel = 0
-        try voice.say("Привет!", voiceID: "")
+        var completions = 0
+        try voice.say("Привет!", voiceID: "", onFinished: { completions += 1 })
         let finishDeadline = Date().addingTimeInterval(40)
         while voice.busy && failure == nil && Date() < finishDeadline {
             try await Task.sleep(for: .milliseconds(100))
@@ -82,10 +83,12 @@ final class SpeechTests: XCTestCase {
         XCTAssertGreaterThan(highestLevel, 0)
         XCTAssertFalse(voice.busy, "Playback completion must release the voice state")
         XCTAssertEqual(voice.mouthEvents.value, 0)
-        try voice.say("Этот ответ отменён до начала воспроизведения.", voiceID: "")
+        XCTAssertEqual(completions, 1, "Only completed playback may resume an automatic conversation")
+        try voice.say("Этот ответ отменён до начала воспроизведения.", voiceID: "", onFinished: { completions += 1 })
         voice.stop()
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertFalse(voice.busy)
         XCTAssertEqual(voice.mouthEvents.value, 0)
+        XCTAssertEqual(completions, 1, "Cancelled speech must never reopen the microphone")
     }
 }

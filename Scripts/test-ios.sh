@@ -13,7 +13,7 @@ print(candidates[0]["udid"])
 ')
 python3 - "$device_id" <<'PY'
 import subprocess,sys
-subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=240)
+subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=420)
 PY
 test_selection=()
 case "${MIRA_NATIVE_TEST_SCOPE:-full}" in

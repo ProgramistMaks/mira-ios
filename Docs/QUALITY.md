@@ -13,9 +13,9 @@ Videos sampled visually on 2026-11-15; full audio was machine-transcribed locall
 - [ ] Authored idle, listening, thinking, speaking, greeting and touch-reaction animation clips with smooth blending. Original torso/arm/hand/gaze clips now include pelvis weight shifts and dips with planted-foot leg IK and interruption-safe blending. Wider motion variety, native performance and recorded reference comparison remain unfinished.
 - [ ] Phoneme-aware mouth animation and device-verified audiovisual timing. Actual PCM amplitude now drives mouth opening; this is not phoneme lip sync. See SPEECH.md.
 - [ ] Natural Russian voice, interruptible playback, no feedback loop into microphone. Current Apple TTS is a functional baseline, not demonstrated parity.
-- [ ] Voice activation / push-to-talk UX and transcripts validated on device with Bluetooth, interruption, permission denial and network loss.
+- [ ] User-confirmed automatic conversation, endpoint detection, next-turn microphone restart and transcripts validated on device with Bluetooth, interruption, permission denial and network loss.
 - [ ] Local model download, cancellation and sustained inference checked on device; optional cloud connection configured and tested against a real provider; disconnect must preserve partial text and never claim completion.
-- [ ] Broader intent-to-command coverage and on-device voice-command verification. Explicit Russian note/reminder/search commands now route offline to review forms and acknowledge actual results; arbitrary model-generated actions and the reference block editor are not implemented.
+- [ ] Broader intent-to-command coverage and on-device voice-command verification. Explicit Russian note/reminder commands open review forms; search invokes Tavily and retains source excerpts; arbitrary model-generated actions and the reference block editor are not implemented.
 - [ ] Character and voice selection beyond a single sample avatar.
 - [ ] Responsive chat/character/settings layouts checked on the actual outer and inner Duo screens, rotation, Split View, keyboard and large text.
 - [ ] Fresh macOS compile, native tests, installation after user signing and cold launch on iPhone Duo iOS 27.3.

@@ -1,5 +1,20 @@
 # Verification — 2026-11-16
 
+## 0.2 automatic-conversation rebuild — native verification pending
+
+User rejected the delivered candidate and confirmed automatic turn-taking plus a
+large character/minimal controls. Branch `rebuild/voice-first` replaces the old
+manual voice panel, separates chat, adds measured silence/text endpoint detection,
+session-gated microphone restart after actual playback, direct speech fallback,
+independent Apple-recognition consent and direct Tavily search with source storage.
+All 79 portable tests passed locally (2026-11-16); changed Swift sources also parsed.
+Native tests now exercise the new home/chat flow and playback completion/cancellation.
+No live Tavily credentials, microphone result or visual parity is claimed by these
+local checks. Model downloads/runtime are unchanged; weights remain outside the IPA.
+The simulator boot budget is seven minutes because the previous four-minute run
+was still finishing first-boot migration. The overall job remains bounded.
+
+
 ## User-reported layout defect — correction not yet visually verified
 
 The user's installed-app screenshot shows a narrow portrait app window within a
@@ -53,7 +68,7 @@ acceptance remain open. No public release was created.
 Run `43963647091` (source `3fbfd42`) passed the repaired shared/HTTP checks,
 restored the cached runtime and compiled/validated the updated device IPA. Its
 native test step failed before creating an XCResult; no simulator artifact was
-uploaded. The job is still finalizing, so the complete failure log is pending.
+uploaded. The subsequently recovered log confirms a simulator first-boot timeout at 240 seconds.
 The latest pinned voice controls and corrected warm-route test remain unverified.
 
 The user explicitly asked to speed up delivery. The workflow now saves the internal

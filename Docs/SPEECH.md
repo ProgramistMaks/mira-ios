@@ -1,50 +1,38 @@
 # Speech playback and character synchronization
 
-## Voice conversation mode
+## Automatic conversation (0.2 rebuild)
 
-“Разговор голосом” opens a larger character scene and a scrollable voice panel in
-the same conversation. Entering the mode does not start recording, request a model
-answer or send an existing draft. The panel shows the current phase, an editable
-utterance, explicit Send, the latest answer and Replay for completed replies only.
-Send requests spoken output for that turn without modifying the general speech
-preference. Partial/interrupted replies are not replayable or automatically spoken.
+The home screen prioritizes a large character, one conversation control and optional
+chat. Starting a conversation explicitly enables successive turns: recognition,
+phrase endpoint, generation, actual speech playback, then listening again. A phrase
+ends only after recognized text stays unchanged for 1.35 seconds and measured voice
+energy stays quiet for at least one second. Empty silence is never sent. Capture is
+bounded to 55 seconds; final recognition drains for at most two seconds.
 
-“Перебить и говорить” cancels inference/speech, preserves the partial answer and
-starts a new microphone request after playback stops. There is also Stop without
-starting recording. “В текст” stops capture/finalization, retains the draft and
-focuses the text composer. Settings/command navigation also closes recording;
-headphone/device disconnection cancels active work. Backgrounding and audio
-interruptions retain the existing cancellation policy. The microphone does not
-automatically reopen after an answer. This is deliberate turn-taking, not wake-word
-detection, full-duplex speech or automatic silence-triggered sending.
+The session state and playback completion are checked before every microphone
+restart. Stop, errors, navigation, backgrounding, audio interruptions and headset
+disconnection disarm the loop. Late callbacks from an older session cannot restart
+it. “Перебить и говорить” explicitly cancels the current answer and starts another
+listening turn. This is turn-taking, not simultaneous full-duplex interruption or a
+background wake word. Recognized note/reminder actions stop the loop for review.
 
-The microphone meter computes RMS from the actual first input channel in 100 ms
-windows, handles interleaved PCM stride and publishes only normalized numeric
-levels. The meter view subscribes independently instead of publishing a level on
-the whole screen's observable voice state. No microphone recording file is created.
+A missing model/provider leads to setup before opening the microphone. “Послушать
+Миру” plays a real voice preview without a model or key. Russian recognition is
+configured independently of local/cloud text inference: offline recognition is the
+default; the user can explicitly allow Apple online recognition in settings if the
+device does not offer offline Russian. This option discloses audio processing by
+Apple. No silent cloud fallback is added to local model inference.
 
-“Закончить фразу” closes the audio engine/tap immediately and calls `endAudio`,
-allowing recognition to return its final revision for at most two seconds. Send
-and editing remain disabled while finishing. “Оставить текущий текст” cancels that
-wait and retains the latest transcript. A final result, cancellation or a new
-recording invalidates the old timeout; late recognition callbacks are generation
-checked. This reduces truncated endings but cannot guarantee every word is
-recognized. The existing 55-second capture limit uses the same finishing path.
+Optional chat keeps editable dictation and an explicit Send button; automatic
+conversation does not overwrite that draft. Search can be invoked with “найди в
+интернете…” or the chat search control. Tavily results are saved as source excerpts
+with links, not presented as a model-verified synthesized answer. Search setup has
+an explicit live probe; key/authentication/quota errors are visible.
 
-Local inference mode still requires on-device speech recognition. Cloud mode
-discloses possible Apple recognition and selected-provider text processing.
-Recognized commands still open their existing confirmation forms before execution.
-Successful commands submitted from voice mode speak their actual result; cancelled
-or failed actions do not get a success announcement. Capture permits a Bluetooth
-hands-free input route; actual headset route selection and latency remain untested.
-No new provider, paid speech API, auto-send or background microphone is introduced.
-
-Portable tests cover phase/action gating, meter silence/voice/stride/invalid PCM,
-recognition timeout cancellation and replacement. A native UI case covers entering
-voice mode without recording, draft preservation, explicit command review and
-returning from settings; it passed on iOS 26.5 in run `43953994238`, alongside actual synthesis/playback and mouth-level tests. The subsequent pinned control layout requires the focused follow-up. Actual microphone permissions, final recognition delivery,
-Bluetooth, large-text/accessibility and interruption behavior still require device
-verification. See VERIFICATION.md for tested scope.
+Four portable tests cover endpoint/session transitions; four cover HTTP search
+requests, errors and source persistence. The complete portable suite passed 79 tests.
+Native rebuild validation and physical microphone/voice/search testing remain open.
+Previous manual-voice UI evidence does not validate this rebuilt interaction.
 
 ## Dictation and permissions
 
@@ -54,7 +42,7 @@ portion without duplicating words or erasing typed text. An empty/no-speech resu
 retains the original draft. Final recognized text is applied synchronously before
 the recording session is released. During permission setup and recording the composer
 cannot be edited or sent; the microphone control becomes Cancel/Stop. Nothing is
-automatically sent when dictation ends.
+automatically sent when optional chat dictation ends. The explicitly enabled automatic conversation uses its separate completion callback.
 
 Permission setup has a visible pending state. The shared authorization gate validates
 the current request after every asynchronous reply: cancellation, backgrounding or a
@@ -111,7 +99,7 @@ The widget/island update declares background audio: already-playing speech may
 continue while backgrounded or locked, with an ActivityKit Stop control. Recording,
 inference and speech preparation still cancel on backgrounding. This new background
 behavior awaits native/device verification; earlier speech tests do not certify it.
-Preparation times out after 45 seconds. Whole-utterance preparation adds
+If PCM rendering fails or exceeds 45 seconds, playback falls back to actual AVSpeechSynthesizer speech. The fallback uses the same selected voice, has a bounded watchdog, and sends no invented mouth amplitude. Only natural playback completion invokes the next-turn callback; cancellation clears it. Whole-utterance preparation adds
 latency; streaming playback is a future improvement, not claimed here.
 
 This is audio-amplitude synchronization, **not phoneme recognition or finished lip

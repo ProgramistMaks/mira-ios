@@ -3,12 +3,19 @@ import Speech
 import Combine
 
 @MainActor
-final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
+final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
     @Published private(set) var speaking = false
     @Published private(set) var preparing = false
     var busy: Bool { speaking || preparing }
     let mouthEvents = CurrentValueSubject<Double, Never>(0)
     let inputLevels = CurrentValueSubject<Double, Never>(0)
+    private var playbackCompletion: (() -> Void)?
+    private var directUtterance: AVSpeechUtterance?
+    private var speechText = ""
+    private var speechVoiceID = ""
+    private var endpoint = SpeechEndpoint()
+    private var endpointClock: Task<Void, Never>?
+    var onUtterance: ((String) -> Void)?
     private var player: AVAudioPlayer?
     private var render: SpeechRenderSession?
     private var playbackClock: Task<Void, Never>?
@@ -33,12 +40,12 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var hasTap = false
     private var generation = UUID()
 
-    override init() { super.init() }
+    override init() { super.init(); synth.delegate = self }
     var voices: [AVSpeechSynthesisVoice] {
         AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("ru") }
             .sorted { $0.quality.rawValue > $1.quality.rawValue }
     }
-    func startRecording(offlineOnly: Bool = false) async throws {
+    func startRecording(offlineOnly: Bool = false, automatic: Bool = false) async throws {
         stop()
         let id = UUID(); generation = id
         requestingRecording = true
@@ -69,7 +76,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = offlineOnly
         self.request = request
-        transcript = ""
+        transcript = ""; endpoint = SpeechEndpoint()
         let node = engine.inputNode
         let format = node.outputFormat(forBus: 0)
         guard format.sampleRate > 0 && format.channelCount > 0 else { stopRecording(); throw CompanionError.noSpeech }
@@ -80,6 +87,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == id, self.recording else { return }
                     self.inputLevels.send(level)
+                    self.endpoint.level(level, at: ProcessInfo.processInfo.systemUptime)
                 }
             }
         }
@@ -89,15 +97,30 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             let finished = result?.isFinal == true
             Task { @MainActor in
                 guard let self, self.generation == id else { return }
-                if let text { self.transcript = text; self.onTranscript?(text) }
-                if finished || error != nil {
-                    self.stopRecording()
-                    if self.transcript.isEmpty { self.onError?(CompanionError.noSpeech.localizedDescription) }
+                if let text {
+                    self.transcript = text; self.onTranscript?(text)
+                    self.endpoint.transcript(text, at: ProcessInfo.processInfo.systemUptime)
+                }
+                if finished || (error != nil && self.finishingRecording) {
+                    self.completeRecording()
+                } else if let error {
+                    self.stopRecording(); self.onError?(error.localizedDescription)
                 }
             }
         }
         do { engine.prepare(); try engine.start(); recording = true }
         catch { stopRecording(); throw error }
+        if automatic {
+            endpointClock = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    guard !Task.isCancelled, let self, self.generation == id, self.recording else { return }
+                    if self.endpoint.shouldFinish(at: ProcessInfo.processInfo.systemUptime) {
+                        self.finishRecording(); return
+                    }
+                }
+            }
+        }
         timeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(55))
             guard !Task.isCancelled else { return }
@@ -115,15 +138,21 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         recognitionDrain.begin { [weak self] in
             guard let self, self.generation == id, self.finishingRecording else { return }
-            self.stopRecording()
-            if self.transcript.isEmpty { self.onError?(CompanionError.noSpeech.localizedDescription) }
+            self.completeRecording()
         }
         request?.endAudio()
+    }
+    private func completeRecording() {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        stopRecording()
+        if text.isEmpty { onError?(CompanionError.noSpeech.localizedDescription) }
+        else { onUtterance?(text) }
     }
     func stopRecording() {
         let wasRecording = recordingBusy
         generation = UUID()
         recordingAuthorization.cancel()
+        endpointClock?.cancel(); endpointClock = nil
         recognitionDrain.cancel()
         timeout?.cancel(); timeout = nil
         engine.stop()
@@ -134,13 +163,14 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         if wasRecording { onRecordingFinished?() }
     }
-    func say(_ text: String, voiceID: String) throws {
+    func say(_ text: String, voiceID: String, onFinished: (() -> Void)? = nil) throws {
         stop()
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard text.count <= 18000 else { throw SpeechPlaybackError.tooLong }
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         try session.setActive(true)
+        playbackCompletion = onFinished; speechText = text; speechVoiceID = voiceID
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(identifier: voiceID) ?? voices.first ?? AVSpeechSynthesisVoice(language: "ru-RU")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.94
@@ -150,7 +180,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         renderTimeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(45))
             guard !Task.isCancelled, let self, self.generation == id, self.preparing else { return }
-            self.stop(); self.onError?(SpeechPlaybackError.timeout.localizedDescription)
+            self.useDirectSpeechFallback()
         }
         synth.write(utterance) { [weak self, render] buffer in
             do {
@@ -159,15 +189,52 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == id else { return }
                     do { try self.play(result) }
-                    catch { self.stop(); self.onError?(error.localizedDescription) }
+                    catch { self.useDirectSpeechFallback() }
                 }
             } catch {
-                let message = error.localizedDescription
                 Task { @MainActor [weak self] in
                     guard let self, self.generation == id else { return }
-                    self.stop(); self.onError?(message)
+                    self.useDirectSpeechFallback()
                 }
             }
+        }
+    }
+    private func useDirectSpeechFallback() {
+        guard preparing, directUtterance == nil else { return }
+        renderTimeout?.cancel(); renderTimeout = nil
+        render?.cancel(); render = nil
+        synth.stopSpeaking(at: .immediate)
+        // Invalidate any late PCM callback before using actual system playback.
+        generation = UUID()
+        let utterance = AVSpeechUtterance(string: speechText)
+        utterance.voice = AVSpeechSynthesisVoice(identifier: speechVoiceID) ?? voices.first ?? AVSpeechSynthesisVoice(language: "ru-RU")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.94
+        directUtterance = utterance
+        let id = generation
+        renderTimeout = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(180))
+            guard !Task.isCancelled, let self, self.generation == id, self.directUtterance === utterance else { return }
+            self.stop(); self.onError?(SpeechPlaybackError.timeout.localizedDescription)
+        }
+        synth.speak(utterance)
+    }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            guard self.directUtterance === utterance else { return }
+            self.preparing = false; self.speaking = true
+        }
+    }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            guard self.directUtterance === utterance else { return }
+            let completion = self.playbackCompletion
+            self.stop(); completion?()
+        }
+    }
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            guard self.directUtterance === utterance else { return }
+            self.stop(); self.onError?(SpeechPlaybackError.unavailable.localizedDescription)
         }
     }
     private func play(_ speech: RenderedSpeech) throws {
@@ -200,6 +267,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
     func stop() {
+        directUtterance = nil; playbackCompletion = nil
         synth.stopSpeaking(at: .immediate)
         playbackClock?.cancel(); playbackClock = nil
         renderTimeout?.cancel(); renderTimeout = nil
@@ -213,8 +281,10 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor in
             guard self.player === player else { return }
+            let completion = flag ? self.playbackCompletion : nil
             self.stop()
             if !flag { self.onError?(SpeechPlaybackError.unavailable.localizedDescription) }
+            completion?()
         }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {

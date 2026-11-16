@@ -14,6 +14,7 @@ struct CompanionApp: App {
                     if phase != .active { store.voice.setSceneActive(false) }
                     if phase == .active { store.liveActivities.setForeground(true) }
                     if phase == .background {
+                        store.disarmAutomaticConversation()
                         store.localModel.pause()
                         let continueSpeech = store.voice.speaking
                         if !continueSpeech { store.cancel(reason: .background) }
@@ -39,7 +40,8 @@ struct CompanionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var showCommands = false
-    @State private var voiceMode = false
+    @State private var showChat = false
+    @State private var searchMode = false
     @State private var pendingRoute: MiraRoute?
     @State private var routeWaitingForDismiss = false
     @State private var questionToRestore: UUID?
@@ -63,35 +65,49 @@ struct CompanionView: View {
         }
     }
     var body: some View {
-        GeometryReader { _ in
-            VStack(spacing: 0) {
-                header.padding(.horizontal, 24).padding(.vertical, 14)
-                GeometryReader { content in
-                    let wide = content.size.width >= 600
-                    let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
-                    // Measure below the header and reserve space for the composer,
-                    // including when the keyboard reduces the available height.
-                    let sceneFraction: CGFloat = voiceMode ? 0.48 : (store.messages.isEmpty ? 0.62 : 0.42)
-                    let panelMinimum: CGFloat = voiceMode ? 300 : 250
-                    let sceneHeight = max(0, min(content.size.height * sceneFraction,
-                                                 content.size.height - panelMinimum))
-                    layout {
-                        stage.frame(width: wide ? content.size.width * 0.46 : nil,
-                                    height: wide ? nil : sceneHeight)
-                            .clipped()
-                        Group {
-                            if voiceMode {
-                                VoiceConversationView(store: store, voice: voice) { switchToText() }
-                            } else { conversation }
-                        }.padding(.trailing, wide ? 20 : 0)
-                    }
+        VStack(spacing: 0) {
+            header.padding(.horizontal, 20).padding(.vertical, 12)
+            GeometryReader { geometry in
+                let wide = geometry.size.width >= 600 && geometry.size.width > geometry.size.height
+                let layout = wide ? AnyLayout(HStackLayout(spacing: 20)) : AnyLayout(VStackLayout(spacing: 0))
+                layout {
+                    stage.frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                    VoiceHomeControls(store: store, voice: voice, model: store.localModel,
+                                      openSettings: openSettings, openChat: switchToText)
+                        .frame(width: wide ? min(360, geometry.size.width * 0.4) : nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 20).padding(.bottom, 20)
+                        .layoutPriority(1)
                 }
             }
-            .background(Palette.background)
         }
+        .background(Palette.background)
         .tint(Palette.lavender)
+        .sheet(isPresented: $showChat, onDismiss: { store.cancel(); didDismissSheet() }) {
+            NavigationStack {
+                conversation
+                    .background(Palette.background)
+                    .navigationTitle(searchMode ? "Поиск" : "Разговор").navigationBarTitleDisplayMode(.inline)
+                    .sheet(item: Binding(get: { showChat ? store.proposedCommand : nil }, set: { store.proposedCommand = $0 })) { proposal in
+                        CommandsView(store: store, proposal: proposal).tint(Palette.lavender).miraSheet()
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Команды") {
+                                store.cancel(); pendingRoute = .commands; routeWaitingForDismiss = true; showChat = false
+                            }
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button(searchMode ? "Обычный чат" : "Поиск", systemImage: searchMode ? "text.bubble" : "globe") {
+                                searchMode.toggle()
+                            }.accessibilityIdentifier("conversation.searchMode")
+                        }
+                        ToolbarItem(placement: .confirmationAction) { Button("Готово") { showChat = false } }
+                    }
+            }.tint(Palette.lavender).miraSheet()
+        }
         .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice, screenMaximumFPS: screenMaximumFPS).tint(Palette.lavender).miraSheet() }
-        .sheet(item: $store.proposedCommand, onDismiss: didDismissSheet) { proposal in
+        .sheet(item: Binding(get: { showChat ? nil : store.proposedCommand }, set: { store.proposedCommand = $0 }), onDismiss: didDismissSheet) { proposal in
             CommandsView(store: store, proposal: proposal).tint(Palette.lavender).miraSheet()
         }
         .sheet(isPresented: $showCommands, onDismiss: didDismissSheet) { CommandsView(store: store).tint(Palette.lavender).miraSheet() }
@@ -115,9 +131,9 @@ struct CompanionView: View {
         .onOpenURL { url in
             guard let route = MiraRoute(url: url) else { return }
             pendingRoute = route
-            if showSettings || showCommands || store.proposedCommand != nil {
+            if showSettings || showCommands || showChat || store.proposedCommand != nil {
                 routeWaitingForDismiss = true
-                showSettings = false; showCommands = false; store.proposedCommand = nil
+                showSettings = false; showCommands = false; showChat = false; store.proposedCommand = nil
             } else { consumeRoute() }
         }
         .onChange(of: scenePhase) { _, phase in if phase == .active { updateFrameRate(); consumeRoute() } }
@@ -138,22 +154,25 @@ struct CompanionView: View {
     }
     private func switchToText() {
         // Preserve the current draft; leaving voice mode never sends it or reopens a mic.
-        if voice.recordingBusy { voice.stopRecording() }
-        voiceMode = false
+        store.cancel()
+        showChat = true
         composerFocused = true
+    }
+    private func openSettings() {
+        store.cancel(); composerFocused = false; showSettings = true
     }
     private func didDismissSheet() {
         routeWaitingForDismiss = false
         consumeRoute()
     }
     private func consumeRoute() {
-        guard scenePhase == .active, !routeWaitingForDismiss, !showSettings, !showCommands, store.proposedCommand == nil,
+        guard scenePhase == .active, !routeWaitingForDismiss, !showSettings, !showCommands, !showChat, store.proposedCommand == nil,
               let route = pendingRoute else { return }
         pendingRoute = nil
         switch route {
         case .chat: switchToText(); composerFocused = true
-        case .commands: if voice.recordingBusy { voice.stopRecording() }; composerFocused = false; showCommands = true
-        case .settings: if voice.recordingBusy { voice.stopRecording() }; composerFocused = false; showSettings = true
+        case .commands: store.cancel(); composerFocused = false; showCommands = true
+        case .settings: openSettings()
         }
     }
     private func updateFrameRate() {
@@ -163,51 +182,29 @@ struct CompanionView: View {
         frameRate = min(max(1, screenMaximumFPS), constrained ? 30 : requested)
     }
     private var header: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: "sparkle").font(.title2).foregroundStyle(Palette.lavender)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("мира").font(.system(size: 26, weight: .semibold, design: .rounded))
-                Text("ТВОЙ ЛИЧНЫЙ КОМПАНЬОН").font(.system(size: 9, weight: .medium)).tracking(2).foregroundStyle(.secondary)
-            }
+            Text("мира").font(.system(size: 24, weight: .semibold, design: .rounded))
             Spacer()
-            MiraGlassGroup {
-                HStack(spacing: 10) {
-                    Button { if voice.recordingBusy { voice.stopRecording() }; showCommands = true } label: { Image(systemName: "square.grid.2x2").frame(width: 24, height: 28) }
-                        .miraGlassButton().accessibilityLabel("Команды")
-                    Button { if voice.recordingBusy { voice.stopRecording() }; showSettings = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 28) }
-                        .miraGlassButton().accessibilityLabel("Настройки")
-                }.controlSize(.large)
-            }
+            Button(action: openSettings) {
+                Image(systemName: "slider.horizontal.3").frame(width: 24, height: 28)
+            }.miraGlassButton().controlSize(.large).accessibilityLabel("Настройки")
         }
     }
     private var stage: some View {
-        ZStack(alignment: .bottom) {
-            RadialGradient(colors: [Palette.lavender.opacity(0.17), .clear], center: .center, startRadius: 15, endRadius: 300)
-            VStack(spacing: 0) {
-                AvatarView(phase: phase, voice: voice, reduceMotion: reduceMotion,
-                           frameRate: frameRate,
-                           active: scenePhase == .active && !showSettings && !showCommands && store.proposedCommand == nil,
-                           screenMaximumFPS: $screenMaximumFPS,
-                           ready: $store.characterReady, error: $store.characterError)
-                Color.clear.frame(height: 54)
-            }
+        ZStack {
+            RadialGradient(colors: [Palette.lavender.opacity(0.19), .clear], center: .center, startRadius: 20, endRadius: 440)
+            AvatarView(phase: phase, voice: voice, reduceMotion: reduceMotion,
+                       frameRate: frameRate,
+                       active: scenePhase == .active && !showSettings && !showCommands && !showChat && store.proposedCommand == nil,
+                       screenMaximumFPS: $screenMaximumFPS,
+                       ready: $store.characterReady, error: $store.characterError)
             if !store.characterReady && store.characterError == nil {
-                ProgressView("Загружаю персонажа…")
-                    .font(.callout).tint(Palette.lavender)
-                    .frame(maxHeight: .infinity).allowsHitTesting(false)
+                ProgressView("Загружаю персонажа…").tint(Palette.lavender).allowsHitTesting(false)
             }
             if let error = store.characterError {
-                VStack(spacing: 12) {
-                    Image(systemName: "person.crop.rectangle.badge.exclamationmark").font(.largeTitle)
-                    Text(error).font(.callout).multilineTextAlignment(.center)
-                }.padding(32).frame(maxHeight: .infinity).foregroundStyle(.secondary)
+                Text(error).multilineTextAlignment(.center).padding(24).foregroundStyle(.secondary)
             }
-            HStack(spacing: 8) {
-                Circle().fill(Palette.lavender).frame(width: 5, height: 5)
-                Text(status).font(.caption)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .miraGlass(in: Capsule()).padding(.bottom, 16)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(store.characterError ?? (store.characterReady ? "Мира. \(status)" : "Мира. Загружаю персонажа"))
@@ -232,6 +229,13 @@ struct CompanionView: View {
                                     .font(.system(size: 9, weight: .semibold)).tracking(2).foregroundStyle(Palette.lavender)
                                 if message.content.isEmpty && store.activeID == message.id { ProgressView() }
                                 else { Text(message.content).textSelection(.enabled).font(.system(size: 16)).lineSpacing(5) }
+                                if let sources = message.sources {
+                                    ForEach(sources) { source in
+                                        if let url = source.safeURL {
+                                            Link(source.title, destination: url).font(.callout)
+                                        }
+                                    }
+                                }
                                 if message.interrupted && store.activeID != message.id {
                                     Text(message.interruption?.title ?? "Ответ прерван")
                                         .font(.caption).foregroundStyle(.secondary)
@@ -262,12 +266,6 @@ struct CompanionView: View {
                     if !store.messages.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
-            Button {
-                composerFocused = false
-                voiceMode = true
-            } label: { Label("Разговор голосом", systemImage: "waveform") }
-                .font(.callout.weight(.medium)).frame(minHeight: 44)
-                .accessibilityIdentifier("conversation.voiceMode")
             composer.padding(16)
         }
     }
@@ -288,14 +286,19 @@ struct CompanionView: View {
             }.miraGlassButton(prominent: voice.recordingBusy)
                 .disabled(store.thinking)
                 .accessibilityLabel(voice.finishingRecording ? "Оставить текущий текст" : (voice.requestingRecording ? "Отменить запись" : (voice.recording ? "Закончить запись" : "Начать запись")))
-            TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
+            TextField(searchMode ? "Что найти в интернете?" : "Напиши Мире…", text: $store.draft, axis: .vertical)
                 .lineLimit(1...5).padding(.horizontal, 16).padding(.vertical, 14)
                 .miraGlass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .accessibilityIdentifier("conversation.input")
                 .disabled(voice.recordingBusy)
                 .focused($composerFocused)
             Button {
-                if store.thinking || voice.busy { store.cancel() } else { composerFocused = false; store.send() }
+                if store.thinking || voice.busy { store.cancel() }
+                else {
+                    composerFocused = false
+                    if searchMode { store.searchWeb(store.draft, speakReply: store.settings.speakReplies, clearDraft: true) }
+                    else { store.send() }
+                }
             } label: {
                 Image(systemName: store.thinking || voice.busy ? "stop.fill" : "arrow.up")
                     .font(.system(size: 17, weight: .semibold)).frame(width: 24, height: 28)

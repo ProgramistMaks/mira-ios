@@ -13,6 +13,12 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 120),
                       "Bundled VRM must actually load inside WKWebView")
         assertAvatarVisible(app)
+        capture("Portrait — voice-first home and loaded character")
+        for id in ["home.chat", "home.conversation", "home.previewVoice"] {
+            XCTAssertTrue(app.buttons[id].isHittable)
+            XCTAssertGreaterThanOrEqual(app.buttons[id].frame.height, 44)
+        }
+        app.buttons["home.chat"].tap()
         let welcome = app.staticTexts["conversation.welcome"]
         let transcript = app.descendants(matching: .any)["conversation.messages"]
         XCTAssertTrue(welcome.exists, "A fresh conversation must show its opening prompt")
@@ -20,7 +26,7 @@ final class LaunchTests: XCTestCase {
                                     "Initial bottom anchoring must not crop the welcome heading")
         XCTAssertLessThanOrEqual(welcome.frame.maxY, transcript.frame.maxY)
         capture("Portrait — native app and loaded character")
-        for label in ["Настройки", "Команды", "Начать запись", "Отправить"] {
+        for label in ["Начать запись", "Отправить"] {
             let control = app.buttons[label]
             XCTAssertGreaterThanOrEqual(control.frame.width, 44, "Glass controls retain a usable hit target")
             XCTAssertGreaterThanOrEqual(control.frame.height, 44)
@@ -35,11 +41,12 @@ final class LaunchTests: XCTestCase {
         draft.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 11))
         XCTAssertFalse(app.buttons["Отправить"].isEnabled)
 
+        app.buttons["Готово"].tap()
         app.buttons["Настройки"].tap()
         XCTAssertTrue(app.navigationBars["Настройки"].waitForExistence(timeout: 5))
         capture("Native settings")
         app.buttons["Готово"].tap()
-
+        app.buttons["home.chat"].tap()
         app.buttons["Команды"].tap()
         let input = app.descendants(matching: .any)["command.input"]
         XCTAssertTrue(input.waitForExistence(timeout: 5))
@@ -54,11 +61,13 @@ final class LaunchTests: XCTestCase {
 
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 120))
+        app.buttons["home.chat"].tap()
         app.buttons["Команды"].tap()
         XCTAssertTrue(app.staticTexts[note].waitForExistence(timeout: 5), "Saved note must survive a cold launch")
         app.buttons["Готово"].tap()
 
         // Explicit commands work even with no cloud key or local model installed.
+        app.buttons["home.chat"].tap()
         let commandNote = "Offline command " + UUID().uuidString.prefix(8)
         let composer = app.descendants(matching: .any)["conversation.input"]
         composer.tap()
@@ -70,6 +79,7 @@ final class LaunchTests: XCTestCase {
         app.buttons["Команды"].tap()
         XCTAssertFalse(app.staticTexts[commandNote].exists)
         app.buttons["Готово"].tap()
+        app.buttons["home.chat"].tap()
         app.buttons["Отправить"].tap()
         XCTAssertTrue(app.navigationBars["Новая заметка"].waitForExistence(timeout: 5))
         app.buttons["command.saveNote"].tap()
