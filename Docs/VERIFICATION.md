@@ -1,5 +1,36 @@
 # Verification — 2026-11-16
 
+## Resumable model downloads — portable transfer verification
+
+Source now supports pausing/resuming model downloads, keeps partial data after a
+network failure or app backgrounding, shows bytes/rate, and offers confirmed removal
+of an unfinished download. Disk preflight counts remaining bytes plus a 1 GB reserve.
+Full-file size/SHA256 verification still gates installation; a completed partial can
+resume directly at verification without another network request.
+
+- Swift 6.2.3 compiled the actual download engine; all 34 XCTest cases passed. The suite includes twelve real
+  localhost HTTP transfer tests in addition to the twenty-two interaction tests.
+  It covers loss/resume with Range/If-Range, redirects, cancellation/new instances,
+  changed identities/validators, ignored/invalid ranges, server errors, an oversized
+  body, an empty replacement response, offline re-verification and explicit discard.
+- Real HTTPS probing of the pinned Qwen3.5 9B Q4 URL exposed a per-attempt URLSession
+  destruction crash in Linux FoundationNetworking. Reusing a single serial transport
+  fixed it. A fresh-process probe then exposed premature file truncation on an
+  intermediate response; truncation/checkpoint replacement now wait for actual body
+  data, with a regression test for an empty replacement response.
+- After those corrections, two independent HTTPS probe processes grew the same saved
+  partial from 1,620,959 to 2,767,785 bytes without restarting. These small samples
+  prove resumed transfer behavior, not full model integrity or inference. Temporary
+  probe files are removed after review; no signed CDN URL or model file is committed.
+- Changed app files passed Swift syntax parsing. Apple SDK type checking, native
+  download UI, Wi-Fi enforcement, app background/relaunch and complete hash-verified
+  installation remain pending. Earlier inference results do not validate this new
+  transfer integration.
+
+The previously confirmed native build blocker is GitHub billing/spending limits.
+A fresh native attempt for this source is recorded separately once it completes.
+No finished IPA or screenshots are delivered before the release gate passes.
+
 ## Dictation draft preservation and permission cancellation
 
 The new source snapshots the draft before dictation and applies recognition revisions

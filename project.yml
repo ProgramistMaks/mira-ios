@@ -24,6 +24,7 @@ targets:
       - path: App
         excludes: [Info.plist]
       - Core
+      - DownloadCore
       - Shared
       - ActivityCore
       - path: Resources/Web

@@ -9,8 +9,9 @@ struct LocalModelSection: View {
             Text(model.installed ? "Модель загружена · \(model.selected.sizeLabel)" : "Нужна загрузка · \(model.selected.sizeLabel)")
                 .font(.footnote).foregroundStyle(.secondary)
             if model.downloading {
-                ProgressView(value: model.progress)
-                Text(model.verifying ? "Проверяю файл…" : "Загрузка: \(Int(model.progress * 100))%")
+                ModelTransferStatus(model: model)
+            } else if model.pausedBytes > 0 {
+                Text("Загрузка приостановлена. Можно продолжить.").font(.footnote).foregroundStyle(.secondary)
             }
             NavigationLink("Модели и загрузки") { LocalModelsView(model: model, busy: busy) }
                 .accessibilityIdentifier("models.open")
@@ -24,6 +25,7 @@ struct LocalModelsView: View {
     @State private var confirmDownload = false
     @State private var confirmDelete = false
     @State private var confirmLegacyDelete = false
+    @State private var confirmDiscard = false
     private var memory: UInt64 { ProcessInfo.processInfo.physicalMemory }
     var body: some View {
         List {
@@ -41,6 +43,9 @@ struct LocalModelsView: View {
                         if model.installedIDs.contains(item.id) {
                             Label("Загружена", systemImage: "internaldrive")
                                 .font(.footnote).foregroundStyle(.secondary)
+                        } else if (model.savedBytes[item.id] ?? 0) > 0 && !(model.downloading && model.selected.id == item.id) {
+                            Label("Загрузка на паузе", systemImage: "pause.circle")
+                                .font(.footnote).foregroundStyle(.secondary)
                         }
                         if model.selected.id == item.id {
                             Label("Выбрана", systemImage: "checkmark.circle.fill").foregroundStyle(.purple)
@@ -53,14 +58,22 @@ struct LocalModelsView: View {
                     }.padding(.vertical, 4)
                     if model.selected.id == item.id {
                         if model.downloading {
-                            ProgressView(value: model.progress)
-                            Text(model.verifying ? "Проверяю файл…" : "Загрузка: \(Int(model.progress * 100))%")
-                            Button("Отменить загрузку") { model.cancel() }
+                            ModelTransferStatus(model: model)
+                            Button("Приостановить") { model.pause() }
                         } else if model.installed {
                             Button("Удалить с устройства", role: .destructive) { confirmDelete = true }.disabled(busy)
                         } else {
-                            Button("Скачать по Wi-Fi · \(item.sizeLabel)") { confirmDownload = true }
+                            if model.pausedBytes > 0 {
+                                Text("Сохранено \(ByteCountFormatter.string(fromByteCount: model.pausedBytes, countStyle: .decimal)) из \(item.sizeLabel)")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
+                            Button(model.pausedBytes == item.bytes ? "Проверить и установить" :
+                                   (model.pausedBytes > 0 ? "Продолжить по Wi-Fi" : "Скачать по Wi-Fi · \(item.sizeLabel)")) { confirmDownload = true }
                                 .disabled(busy).accessibilityIdentifier("models.download")
+                            if model.pausedBytes > 0 {
+                                Button("Удалить незавершённую загрузку", role: .destructive) { confirmDiscard = true }
+                                    .disabled(busy)
+                            }
                         }
                         if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
                     }
@@ -75,11 +88,15 @@ struct LocalModelsView: View {
             }
         }
         .navigationTitle("Модели")
-        .alert("Загрузить модель?", isPresented: $confirmDownload) {
-            Button("Скачать") { model.download() }
+        .alert(model.pausedBytes > 0 ? "Продолжить установку?" : "Загрузить модель?", isPresented: $confirmDownload) {
+            Button(model.pausedBytes == model.selected.bytes ? "Проверить" : (model.pausedBytes > 0 ? "Продолжить" : "Скачать")) { model.download() }
             Button("Отмена", role: .cancel) { }
         } message: {
-            Text("\(model.selected.title) · \(model.selected.sizeLabel). Оставь приложение открытым до конца загрузки. Свободного места нужно на 1 ГБ больше размера файла.")
+            if model.pausedBytes == model.selected.bytes {
+                Text("Файл уже на устройстве. Перед установкой проверю его целостность; повторная загрузка не нужна.")
+            } else {
+                Text("\(model.selected.title) · \(model.selected.sizeLabel). При сворачивании загрузка приостановится; её можно продолжить позже. Для оставшейся части файла нужен ещё 1 ГБ свободного места в запасе.")
+            }
         }
         .confirmationDialog("Удалить \(model.selected.title)? Для запуска понадобится скачать её заново.",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
@@ -87,6 +104,26 @@ struct LocalModelsView: View {
         }
         .confirmationDialog("Удалить прежнюю Qwen2.5 1.5B?", isPresented: $confirmLegacyDelete, titleVisibility: .visible) {
             Button("Удалить прежнюю модель", role: .destructive) { model.removeLegacy() }
+        }
+        .confirmationDialog("Удалить незавершённую загрузку? Следующая начнётся заново.", isPresented: $confirmDiscard, titleVisibility: .visible) {
+            Button("Удалить загрузку", role: .destructive) { model.discardPartial() }
+        }
+    }
+}
+
+private struct ModelTransferStatus: View {
+    @ObservedObject var model: LocalModelStore
+    var body: some View {
+        if model.verifying {
+            ProgressView("Проверяю файл…")
+        } else {
+            ProgressView(value: model.progress)
+            Text("\(ByteCountFormatter.string(fromByteCount: model.receivedBytes, countStyle: .decimal)) из \(model.selected.sizeLabel) · \(Int(model.progress * 100))%")
+                .font(.footnote).monospacedDigit()
+            if model.bytesPerSecond > 0 {
+                Text("\(ByteCountFormatter.string(fromByteCount: Int64(model.bytesPerSecond), countStyle: .decimal))/с")
+                    .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            }
         }
     }
 }

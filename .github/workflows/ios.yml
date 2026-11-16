@@ -43,7 +43,7 @@ jobs:
           cache: npm
       - name: Install project generator
         run: brew install xcodegen
-      - name: Test activity lifecycle independently of system UI
+      - name: Test interaction logic and resumable downloads
         run: swift test --scratch-path build/activity-tests
       - uses: actions/cache/restore@v4
         id: runtime-cache

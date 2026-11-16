@@ -9,6 +9,9 @@ let package = Package(
     products: [.library(name: "MiraActivityCore", targets: ["MiraActivityCore"])],
     targets: [
         .target(name: "MiraActivityCore", path: "ActivityCore"),
-        .testTarget(name: "MiraActivityCoreTests", dependencies: ["MiraActivityCore"], path: "LifecycleTests")
+        .testTarget(name: "MiraActivityCoreTests", dependencies: ["MiraActivityCore"], path: "LifecycleTests"),
+        .target(name: "MiraDownloadCore", path: "DownloadCore"),
+        .testTarget(name: "MiraDownloadCoreTests", dependencies: ["MiraDownloadCore"], path: "DownloadTests",
+                    resources: [.copy("Fixtures")])
     ]
 )

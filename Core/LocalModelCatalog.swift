@@ -16,6 +16,9 @@ struct LocalModelSpec: Identifiable, Equatable {
     var title: String { "\(name) · \(quantization)" }
     var sizeLabel: String { String(format: "%.2f", Double(bytes) / 1_000_000_000).replacingOccurrences(of: ".", with: ",") + " ГБ" }
     var requiredDiskBytes: Int64 { bytes + 1_000_000_000 }
+    var transferResource: ModelTransferResource {
+        ModelTransferResource(id: id, url: downloadURL, bytes: bytes, fingerprint: sha256)
+    }
     var downloadURL: URL { URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(filename)")! }
     var sourceURL: URL { URL(string: "https://huggingface.co/\(repository)")! }
     func guidanceText(physicalMemory: UInt64) -> String {

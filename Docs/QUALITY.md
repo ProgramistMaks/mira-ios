@@ -41,3 +41,9 @@ The shared suite now also covers dictation draft preservation and cancellation b
 permission prompts (twenty-two passing Swift tests in total). The updated microphone
 permission flow, composer and interruption handling still need native/device review;
 see SPEECH.md. Portable tests do not certify Speech.framework or iOS permission UI.
+
+Resumable model transfers now have real HTTP integration coverage and a small
+successful HTTPS resume probe against the pinned Qwen URL, including separate process
+launches. Native pause/relaunch UI, Wi-Fi restrictions, complete-file verification
+and installation still require iOS acceptance. No inference runtime or model pin was
+changed by this transfer update; see LOCAL-AI.md and VERIFICATION.md.

@@ -13,6 +13,7 @@ struct CompanionApp: App {
                     store.voice.setSceneActive(phase == .active)
                     if phase == .active { store.liveActivities.setForeground(true) }
                     if phase == .background {
+                        store.localModel.pause()
                         let continueSpeech = store.voice.speaking
                         if !continueSpeech { store.cancel() }
                         store.liveActivities.setForeground(false, continuingSpeech: continueSpeech)
