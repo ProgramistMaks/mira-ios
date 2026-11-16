@@ -35,3 +35,22 @@ this does not claim the voice quality demonstrated in the reference videos.
 
 - https://developer.apple.com/documentation/avfaudio/avspeechsynthesizer/write(_:tobuffercallback:)
 - https://developer.apple.com/documentation/avfaudio/avaudioplayer/currenttime
+
+## Phoneme metadata probe — no phoneme data from tested voices
+
+Apple documents `write(_:toBufferCallback:toMarkerCallback:)` from iOS 16 / macOS 13. `AVSpeechSynthesisMarker` can describe phonemes and byte offsets in audio. That API is available at this project's deployment target, but documentation alone does not establish that installed Russian system voices emit useful phoneme events.
+
+The isolated macOS probe in run `43834797647` (source `02cfe82`) completed successfully using synthetic text:
+
+| Installed voice | PCM frames / rate | Markers | Phonemes |
+| --- | --- | --- | --- |
+| Milena, ru-RU, compact | 93,649 / 22,050 Hz | 0 | 0 |
+| Samantha, en-US, compact | 52,408 / 22,050 Hz | 0 | 0 |
+
+Both voices returned nonempty PCM and a final zero-length buffer; neither supplied markers. Thus this probe does **not** justify implementing or claiming phoneme synchronization. It describes these two installed macOS voices, not every iOS voice or speech provider. The reproducible diagnostic is `Scripts/probe-speech-markers.swift` with a separate manually triggered workflow.
+
+Before replacing amplitude-only mouth control, verify a source that actually supplies phonemes, its offset origin/format, ordering relative to PCM callbacks and behavior on cancellation. Do not fabricate phoneme timing from animation loops or claim phoneme lip sync before this is verified.
+
+- https://developer.apple.com/documentation/avfaudio/avspeechsynthesizer/write(_:tobuffercallback:tomarkercallback:)
+- https://developer.apple.com/documentation/avfaudio/avspeechsynthesismarker
+- https://developer.apple.com/documentation/avfaudio/avspeechsynthesismarker/bytesampleoffset

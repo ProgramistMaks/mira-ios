@@ -1,5 +1,18 @@
 # Verification — 2026-11-16
 
+
+## Authored character acting update
+
+Application changes are in `c9c714221bcfe8013e8fe446fe83dba9b752bddd`. Follow-up `85ca5c2` only adds an Intel macOS runner option to work around ARM runner capacity delays.
+
+- Nine renderer unit tests passed: loop seams, gesture return, interruptions, gesture priority/cooldown, Reduced Motion, 30/60 fps elapsed-time equivalence, and audio-only mouth feedback.
+- Chromium loaded the actual Vita VRM and rendered idle/listening/thinking/speaking in three viewport sizes. Poses were visually inspected, including the corrected thinking hand placement and greeting. The checks also exercise actual character hit tests, rejection of background taps and vertical drags, pause/resume of the canvas, and model-load failure. No external renderer requests occurred.
+- Native run `43834206714`, commit `85ca5c2527604cb01364f98e54e519f24ce3a994`, completed successfully on the Intel macOS fallback with Xcode 16.4 / iOS 18.5 SDK. The unsigned iPhone archive compiled, and fourteen native unit tests plus two UI tests passed with zero failures. The duplicate ARM run `43833765666` was cancelled after the fallback started.
+- The actual speech synthesis/playback, cancellation and completion checks passed again. UI checks covered character visibility, command review and note persistence, rotation, and persisted model selection without downloading.
+- Portrait and landscape screenshots from this run were inspected internally. The whole character remains framed above the status badge; the landscape scene is visible after settings and command-review dismissal. Static screenshots establish framing, not motion quality or a measured frame rate. Browser checks separately verify animation pause/resume.
+- Model inference is unchanged from the successful Qwen/Gemma run `43829220890`; its code/catalogue/runtime diff was checked before disabling repeat weight downloads for this renderer-only run.
+- The separate speech-marker probe `43834797647` generated actual PCM with Russian Milena and English Samantha, but neither voice emitted markers. This is a negative capability finding on macOS, not a phoneme-lip-sync implementation; see SPEECH.md.
+
 ## Local model catalogue upgrade
 
 User-selected Qwen3.5 9B Q4_K_M and four local alternatives are now in the catalogue. All five pinned files were downloaded on Linux and matched their exact SHA256 and sizes.
@@ -69,7 +82,7 @@ Metal performance, memory use or thermal behavior on the target device.
 
 ## Local checks
 
-- TypeScript type check, five motion tests and renderer bundle build passed.
+- TypeScript type check, nine current renderer tests and renderer bundle build passed.
 - Chromium/WebGL loaded the actual Vita VRM model, exercised four states and three viewport sizes, checked native viewport resizing, and made no external renderer requests.
 - A missing model produced the expected explicit failure.
 - Browser screenshots were reviewed internally for pose, materials, framing and greeting.
