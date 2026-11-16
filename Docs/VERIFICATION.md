@@ -13,7 +13,22 @@ Archive and native simulator tests were consequently skipped.
 
 The fixture now allows twenty seconds for cold startup and includes subprocess
 diagnostics in setup errors. All forty tests still pass locally on Linux after
-this change. A fresh hosted run is required to confirm the macOS correction.
+this change. A focused transfer/resume check also passed with an injected three-second
+Python startup delay. A fresh hosted run is required to confirm the macOS correction.
+
+Retry `43934113790`, source `ddc7e2d79f20e1172a6db746f7113be20365e39f`,
+waited roughly fifteen minutes for macos-15-intel and then failed before any step:
+"The job was not acquired by Runner of type hosted even after multiple attempts".
+This is a runner-allocation failure, distinct from the earlier billing rejection
+and the first resumed run's HTTP fixture failure.
+
+Fallback `43936091765` targeted the same source with the macos-15 Apple Silicon
+runner selection and Xcode 26.2 / iOS 26.2 inputs. It also failed after roughly
+fifteen minutes without executing any step, with the same runner-allocation error.
+GitHub additionally annotated this run: "Due to capacity constraints, jobs targeting
+macOS arm64 runners may experience longer queue times."
+Both retries are completed; neither produced an archive, native test result or IPA.
+No payment/account settings were changed and no additional retry was dispatched.
 
 ## File verification progress and pause feedback
 

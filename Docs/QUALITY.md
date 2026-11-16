@@ -35,6 +35,14 @@ The user's private repository is ProgramistMaks/mira-ios; cloud builds are inter
 
 Previous hosted validation was blocked by GitHub Billing & plans: run `43927090461` did not start because GitHub reported a failed-payment or spending-limit issue. Liquid Glass has partial native visual evidence and a passing iOS 18 compatibility run, but the final loading/cancellation/contrast corrections still need native compilation and UI verification. See VERIFICATION.md for the exact tested commits and failures. No payment or spending-limit settings were changed. On 2026-11-16 the user confirmed iOS build availability, lifting the request to pause native builds.
 
+Native execution resumed in run `43932686138`: Xcode 26.2 started and twenty-eight
+portable tests passed on macOS, but the twelve HTTP tests failed at fixture startup.
+The updated startup deadline/diagnostics pass all forty tests locally, including a
+separate delayed-start probe. Follow-up runs `43934113790` (Intel) and `43936091765`
+(Apple Silicon) both failed before execution because GitHub could not allocate a
+hosted runner; the ARM run explicitly cited capacity constraints. The fix and all
+new app/widget changes still require successful native archive/UI validation.
+
 The subsequent WidgetKit/Dynamic Island extension and its platform integration still require native compilation and UI tests. Its shared lifecycle has compiled and passed thirteen Swift tests on Linux, including deliberately delayed effects and stale Stop rejection. All widget families, real-system Stop interaction, background/stale behavior, audio continuity, accessibility, signing and actual-device presentation remain acceptance requirements; see WIDGETS.md.
 
 The shared suite now also covers dictation draft preservation and cancellation between
