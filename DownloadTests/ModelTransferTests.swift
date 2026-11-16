@@ -20,8 +20,14 @@ final class ModelTransferTests: XCTestCase {
         FileManager.default.createFile(atPath: diagnosticURL.path, contents: nil)
         let diagnostics = try FileHandle(forWritingTo: diagnosticURL)
         defer { try? diagnostics.close() }
-        server = Process(); server.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        server.arguments = ["python3", "-u", script.path, port.path]
+        let python = ProcessInfo.processInfo.environment["MIRA_TEST_PYTHON"]
+        server = Process(); server.executableURL = URL(fileURLWithPath: python ?? "/usr/bin/env")
+        // XCTest's DYLD/XCTest injection environment belongs to the test host,
+        // not to a Python helper. Keep only what the interpreter needs to launch.
+        server.environment = ["PATH": ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin:/usr/local/bin",
+                              "PYTHONUNBUFFERED": "1"]
+        server.standardInput = FileHandle.nullDevice
+        server.arguments = (python == nil ? ["python3"] : []) + ["-u", script.path, port.path]
         server.standardOutput = diagnostics; server.standardError = diagnostics
         try server.run()
         // Cold Python imports on a busy hosted Mac can exceed two seconds.

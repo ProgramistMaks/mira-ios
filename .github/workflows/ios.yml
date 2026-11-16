@@ -45,7 +45,8 @@ jobs:
         run: brew install xcodegen
       - name: Test interaction logic and resumable downloads
         run: |
-          swift test --scratch-path build/activity-tests
+          python3 Scripts/check-http-fixture.py
+          MIRA_TEST_PYTHON="$(python3 -c 'import sys; print(sys.executable)')" swift test --scratch-path build/activity-tests
           python3 Scripts/test-ipa-package.py
       - uses: actions/cache/restore@v4
         id: runtime-cache

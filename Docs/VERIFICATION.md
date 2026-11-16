@@ -1,5 +1,28 @@
 # Verification — 2026-11-16
 
+## Current native attempt and HTTP fixture repair
+
+The pending macos-15-intel run `43950455692` was cancelled before any step executed.
+After confirming the current official runner image/toolchain inventory, one
+replacement was dispatched on macos-26-intel / Xcode 26.6 / iOS 26.5:
+https://github.com/ProgramistMaks/mira-ios/actions/runs/43952016853
+It executed source `cc7397833d562a6c4ebac5928e36d8987091d31a`; there were no parallel
+runs. This host started successfully. Toolchain setup passed and 59 shared tests
+passed, including the new mouth/voice logic. Twelve HTTP tests failed before any
+transfer because their Python helper never published readiness within twenty
+seconds; stderr was empty. The device archive and native simulator tests were
+skipped, so no new IPA was produced by that run.
+
+The fixture now launches with a minimal child environment, excluding XCTest/DYLD
+injection variables, and CI passes the exact interpreter used by a standalone
+loopback preflight. The HTTP server binds numeric loopback without `getfqdn`,
+restores normal termination, and records startup stage markers for diagnosis.
+These remove host-dependent startup behavior without bypassing download tests or
+altering the application's network code. The original log does not identify
+which startup operation stalled; native confirmation of the repair is required.
+All 71 tests passed locally after the repair, and the twelve HTTP cases also passed
+with an explicit interpreter path. The standalone fixture probe passed as well.
+
 ## Single IPA packaging request — build still pending
 
 The user requested one installable package and explicitly chose to keep model

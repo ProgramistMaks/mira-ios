@@ -1,9 +1,11 @@
+import sys
+print('fixture: Python started', file=sys.stderr, flush=True)
 import http.server
 import json
 import pathlib
 import signal
 import socket
-import sys
+import socketserver
 import threading
 import time
 import urllib.parse
@@ -11,6 +13,8 @@ import urllib.parse
 # Foundation.Process can inherit blocked signals from Swift's worker thread.
 # Restore normal termination for this test-only subprocess.
 signal.pthread_sigmask(signal.SIG_SETMASK, [])
+signal.signal(signal.SIGTERM, signal.SIG_DFL)
+print('fixture: imports and signal setup complete', file=sys.stderr, flush=True)
 
 SIZE = 1024 * 1024
 CHUNK = 64 * 1024
@@ -94,6 +98,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.close_connection = True
 
 
-server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+class LoopbackServer(http.server.ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer calls getfqdn() here. A fixture bound to numeric loopback
+        # needs no DNS, and macOS resolver startup can otherwise block readiness.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = 'localhost'
+        self.server_port = self.server_address[1]
+
+
+server = LoopbackServer(('127.0.0.1', 0), Handler)
+print('fixture: loopback bound', file=sys.stderr, flush=True)
 pathlib.Path(sys.argv[1]).write_text(str(server.server_port))
+print('fixture: ready', file=sys.stderr, flush=True)
 server.serve_forever()
