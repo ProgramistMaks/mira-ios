@@ -1,5 +1,29 @@
 # Verification — 2026-11-16
 
+## Dictation draft preservation and permission cancellation
+
+The new source snapshots the draft before dictation and applies recognition revisions
+to that snapshot. It moves transcript delivery from SwiftUI observation into a direct
+main-actor callback, so a final result is applied before recording cleanup. Permission
+setup is now a cancellable pending state; the composer cannot edit/send during setup
+or recording. The authorization gate checks cancellation after each reply and does
+not request microphone permission after speech denial or cancellation. Interruption
+handling now stops work only for the beginning of an audio interruption.
+
+- Swift 6.2.3 compiled the shared source and passed **22 XCTest cases**: the existing
+  thirteen lifecycle/route cases and nine new dictation/permission cases. Controlled
+  continuations cover cancellation between prompts, a late reply after cancellation,
+  overlapping requests and task cancellation. Draft cases cover partial recognition
+  revisions, retained whitespace, no speech and a subsequent dictation session.
+- The Swift compiler parsed the changed app files without syntax errors; whitespace
+  checks passed. This is not Apple SDK type checking or a native build.
+- Actual permission dialogs, capture, transcript ordering in Speech.framework, the
+  updated composer and the interruption notification integration still need native
+  tests/device review. The system's already-visible permission sheet is not dismissed
+  by cancellation; the pending recording operation is invalidated.
+- Native CI remains blocked by the last confirmed GitHub billing/spending-limit
+  failure. No new hosted run was dispatched and no finished IPA/screenshots delivered.
+
 ## Activity lifecycle race fixes — portable Swift tests passed
 
 The lifecycle implementation is now separated from the ActivityKit/UIKit adapter and compiled directly into both native targets. Each explicit user interaction invalidates the previous logical session synchronously. This closes a window where an old activity retained during asynchronous cleanup could still authorize cancellation of a newly started conversation. Reconciliation also rechecks state after a delayed end, preventing obsolete activity creation.

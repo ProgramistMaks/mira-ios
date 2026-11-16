@@ -15,8 +15,13 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var sceneActive = true
     private var renderTimeout: Task<Void, Never>?
     @Published private(set) var recording = false
+    @Published private(set) var requestingRecording = false
+    var recordingBusy: Bool { recording || requestingRecording }
     @Published private(set) var transcript = ""
     var onError: ((String) -> Void)?
+    var onTranscript: ((String) -> Void)?
+    var onRecordingFinished: (() -> Void)?
+    private let recordingAuthorization = MiraRecordingAuthorization()
     private let synth = AVSpeechSynthesizer()
     private let engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -33,12 +38,23 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     func startRecording(offlineOnly: Bool = false) async throws {
         stop()
         let id = UUID(); generation = id
-        let speech = await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+        requestingRecording = true
+        defer {
+            if generation == id {
+                requestingRecording = false
+                if !recording { onRecordingFinished?() }
+            }
         }
-        let microphone = await AVAudioApplication.requestRecordPermission()
-        guard id == generation else { return }
-        guard speech == .authorized && microphone else { throw CompanionError.permission }
+        let authorization = await recordingAuthorization.request(speech: {
+            await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0 == .authorized) }
+            }
+        }, microphone: {
+            await AVAudioApplication.requestRecordPermission()
+        })
+        guard id == generation, !Task.isCancelled else { return }
+        if authorization == .cancelled { return }
+        guard authorization == .authorized else { throw CompanionError.permission }
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "ru-RU")), recognizer.isAvailable else {
             throw CompanionError.noSpeech
         }
@@ -61,7 +77,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
             let finished = result?.isFinal == true
             Task { @MainActor in
                 guard let self, self.generation == id else { return }
-                if let text { self.transcript = text }
+                if let text { self.transcript = text; self.onTranscript?(text) }
                 if finished || error != nil {
                     self.stopRecording()
                     if error != nil && self.transcript.isEmpty { self.onError?(CompanionError.noSpeech.localizedDescription) }
@@ -77,13 +93,16 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
     }
     func stopRecording() {
+        let wasRecording = recordingBusy
         generation = UUID()
+        recordingAuthorization.cancel()
         timeout?.cancel(); timeout = nil
         engine.stop()
         if hasTap { engine.inputNode.removeTap(onBus: 0); hasTap = false }
         request?.endAudio(); task?.cancel(); task = nil; request = nil
-        recording = false
+        recording = false; requestingRecording = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if wasRecording { onRecordingFinished?() }
     }
     func say(_ text: String, voiceID: String) throws {
         stop()

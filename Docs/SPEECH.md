@@ -1,5 +1,33 @@
 # Speech playback and character synchronization
 
+## Dictation and permissions
+
+Starting dictation snapshots the existing draft. Each recognition revision is combined
+with that snapshot, so a revised partial result replaces the previous recognized
+portion without duplicating words or erasing typed text. An empty/no-speech result
+retains the original draft. Final recognized text is applied synchronously before
+the recording session is released. During permission setup and recording the composer
+cannot be edited or sent; the microphone control becomes Cancel/Stop. Nothing is
+automatically sent when dictation ends.
+
+Permission setup has a visible pending state. The shared authorization gate validates
+the current request after every asynchronous reply: cancellation, backgrounding or a
+newer request prevents a late response from continuing to the next permission prompt
+or authorizing recording. Denying speech permission does not ask for microphone
+access. Cancellation does not programmatically dismiss a system permission sheet
+already on screen; it invalidates the pending operation. The voice service additionally
+checks its own generation and task cancellation before touching the audio engine.
+
+Nine portable Swift tests pass for permission cancellation/denial/retry, overlapping
+requests, recognition revisions, whitespace and subsequent dictation. Actual iOS
+permission sheets, microphone capture and the updated composer still await native
+verification. During device review, cover cancelling or backgrounding at each prompt,
+denial followed by retry, dictation into a nonempty draft, revised recognition and
+stop followed by editing/sending. System audio interruptions cancel only on `.began`;
+a late `.ended` notification must not cancel newly started work.
+
+## Playback
+
 Apple's `AVSpeechSynthesizer.write(_:toBufferCallback:)` produces actual PCM audio.
 `SpeechRenderSession` writes it to a temporary CAF file and computes an RMS mouth
 opening every 20 ms. It serializes callback/file access, caps speech at three minutes,

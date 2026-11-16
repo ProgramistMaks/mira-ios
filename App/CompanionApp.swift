@@ -46,6 +46,7 @@ struct CompanionView: View {
         return .idle
     }
     private var status: String {
+        if voice.requestingRecording { return "Готовлю запись" }
         if voice.preparing { return "Готовлю голос" }
         switch phase {
         case .idle: return "Рядом с тобой"
@@ -89,8 +90,9 @@ struct CompanionView: View {
         .onChange(of: scenePhase) { _, phase in if phase == .active { consumeRoute() } }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in updateFrameRate() }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in updateFrameRate() }
-        .onChange(of: voice.transcript) { _, text in store.draft = text }
-        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notification in
+            guard let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: value) == .began else { return }
             store.cancel()
         }
     }
@@ -200,24 +202,23 @@ struct CompanionView: View {
         MiraGlassGroup {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
-                if voice.recording { voice.stopRecording() }
+                if voice.recordingBusy { voice.stopRecording() }
                 else {
-                    store.liveActivities.beginInteraction()
-                    Task {
-                        do { try await voice.startRecording(offlineOnly: store.settings.inferenceMode == .local) }
-                        catch { store.error = error.localizedDescription }
-                    }
+                    composerFocused = false
+                    Task { await store.startRecording() }
                 }
             } label: {
-                Image(systemName: voice.recording ? "stop.circle.fill" : "mic")
+                Image(systemName: voice.recordingBusy ? "stop.circle.fill" : "mic")
                     .font(.title3).frame(width: 24, height: 28)
-                    .foregroundStyle(voice.recording ? Palette.background : Palette.lavender)
-            }.miraGlassButton(prominent: voice.recording)
-                .disabled(store.thinking).accessibilityLabel(voice.recording ? "Закончить запись" : "Начать запись")
+                    .foregroundStyle(voice.recordingBusy ? Palette.background : Palette.lavender)
+            }.miraGlassButton(prominent: voice.recordingBusy)
+                .disabled(store.thinking)
+                .accessibilityLabel(voice.requestingRecording ? "Отменить запись" : (voice.recording ? "Закончить запись" : "Начать запись"))
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
                 .lineLimit(1...5).padding(.horizontal, 16).padding(.vertical, 14)
                 .miraGlass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .accessibilityIdentifier("conversation.input")
+                .disabled(voice.recordingBusy)
                 .focused($composerFocused)
             Button {
                 if store.thinking || voice.busy { store.cancel() } else { composerFocused = false; store.send() }
@@ -227,7 +228,7 @@ struct CompanionView: View {
                     .foregroundStyle(Palette.background)
             }
             .miraGlassButton(prominent: true)
-            .disabled(voice.recording || (!store.thinking && !voice.busy && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+            .disabled(voice.recordingBusy || (!store.thinking && !voice.busy && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             .accessibilityLabel(store.thinking || voice.busy ? "Остановить" : "Отправить")
         }.controlSize(.large)
         }

@@ -24,6 +24,7 @@ final class CompanionStore: ObservableObject {
     let localModel = LocalModelStore()
     let liveActivities = MiraLiveActivityController()
     private var activitySubscription: AnyCancellable?
+    private var dictationDraft: MiraDictationDraft?
     private let localGenerator = LocalGenerator()
     private var storage: LocalStore?
     private var work: Task<Void, Never>?
@@ -38,6 +39,11 @@ final class CompanionStore: ObservableObject {
             notes = try store.read("notes.json", as: [Note].self) ?? []
         } catch { self.error = "Не удалось прочитать сохранённые данные. \(error.localizedDescription)" }
         voice.onError = { [weak self] in self?.error = $0 }
+        voice.onTranscript = { [weak self] text in
+            guard let self, let dictation = self.dictationDraft else { return }
+            self.draft = dictation.applying(text)
+        }
+        voice.onRecordingFinished = { [weak self] in self?.dictationDraft = nil }
         MiraActivityActions.stop = { [weak self] sessionID in
             guard let self, self.liveActivities.matches(sessionID: sessionID) else { return }
             self.cancel()
@@ -58,7 +64,7 @@ final class CompanionStore: ObservableObject {
     }
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty && !thinking && !voice.recording else { return }
+        guard !text.isEmpty && !thinking && !voice.recordingBusy else { return }
         guard text.count <= 12000 else { error = "Сообщение слишком длинное: максимум 12 000 символов."; return }
         if let proposal = CommandProposal.parse(text) {
             voice.stop(); proposedCommand = proposal; return
@@ -115,6 +121,14 @@ final class CompanionStore: ObservableObject {
                 if !(error is CancellationError) { self.error = error.localizedDescription }
             }
         }
+    }
+    func startRecording() async {
+        guard !thinking, !voice.recordingBusy else { return }
+        voice.stop()
+        dictationDraft = MiraDictationDraft(original: draft)
+        liveActivities.beginInteraction()
+        do { try await voice.startRecording(offlineOnly: settings.inferenceMode == .local) }
+        catch { error = error.localizedDescription }
     }
     func recordCommandResult(_ proposal: CommandProposal, detail: String) {
         messages.append(Message(role: .user, content: proposal.original))
