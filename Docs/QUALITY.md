@@ -51,7 +51,7 @@ iOS 26.5. The widget-route test incorrectly relaunched the app for each URL and
 failed draft retention; the overall job deadline then prevented finalizing the
 result bundle and publishing the IPA. Raw diagnostic screenshots were recovered
 and reviewed. Voice controls below the viewport prompted the pinned-control fix.
-A focused voice/routes follow-up is required before packaging completion. Exact
+The focused voice/routes follow-up failed before creating an XCResult. Package-only run `43965968225` produced the compact IPA for the user’s signing/test request; it does not close native UI or device acceptance. Exact
 run IDs, source revisions, fixture repairs and final outcomes are in VERIFICATION.md.
 
 Earlier real Qwen3.5 9B and Gemma 4 E2B inference through the Swift runtime on macOS

@@ -1,5 +1,27 @@
 # Verification — 2026-11-16
 
+## Compact IPA delivered for user signing
+
+Package-only run `43965968225` completed successfully for source
+`bc59a0e31195bd3a3857cdd171cca2ac3ce16b6f` on macos-26-intel / Xcode 26.6.
+Artifact `14278025083` contains `Mira-unsigned.ipa` and its package report. The
+15,832,236-byte IPA was downloaded and validated again locally; every report
+field and SHA256 matched CI:
+`7fec75061b760cb4e5cff19a4455439504e856782d88e795e336a21d8be50f19`.
+
+The package includes the arm64 iPhone app, VRM character/renderer, linked llama
+runtime and WidgetKit extension. It targets iOS 18+ and contains no model weights;
+those are downloaded from the app catalogue. It is unsigned and requires the
+user's certificate/profiles, including the nested framework and widget extension.
+Local delivery path: `/workspace/outputs/Mira-unsigned.ipa`.
+
+This run performed device compilation, renderer build checks and actual IPA
+validation. Shared/native suites and model inference were intentionally skipped
+in package-only mode. Earlier 70 native unit and three UI passes remain scoped to
+the revisions below; the latest pinned voice layout and warm-route test are not
+newly simulator-validated. Physical-device installation and reference-quality
+acceptance remain open. No public release was created.
+
 ## User-requested faster package delivery
 
 Run `43963647091` (source `3fbfd42`) passed the repaired shared/HTTP checks,
