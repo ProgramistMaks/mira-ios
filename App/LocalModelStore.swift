@@ -3,10 +3,10 @@ import Combine
 import CryptoKit
 
 enum LocalModelFile {
-    static let name = "Qwen2.5 1.5B Instruct · Q4_K_M"
-    static let bytes: Int64 = 1_117_320_736
-    static let sha256 = "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e"
-    static let downloadURL = URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf")!
+    static let name = "Qwen3.5 9B · Q4_K_M"
+    static let bytes: Int64 = 5_680_522_464
+    static let sha256 = "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"
+    static let downloadURL = URL(string: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf")!
     static func directory() throws -> URL {
         var url = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                               appropriateFor: nil, create: true).appendingPathComponent("LocalModels", isDirectory: true)
@@ -15,12 +15,14 @@ enum LocalModelFile {
         try url.setResourceValues(values)
         return url
     }
-    static func installed() throws -> URL { try directory().appendingPathComponent("qwen2.5-1.5b-q4.gguf") }
+    static func installed() throws -> URL { try directory().appendingPathComponent("qwen3.5-9b-q4_k_m.gguf") }
+    static func legacy() throws -> URL { try directory().appendingPathComponent("qwen2.5-1.5b-q4.gguf") }
 }
 
 @MainActor
 final class LocalModelStore: ObservableObject {
     @Published private(set) var installed = false
+    @Published private(set) var legacyInstalled = false
     @Published private(set) var downloading = false
     @Published private(set) var verifying = false
     @Published private(set) var progress = 0.0
@@ -28,7 +30,8 @@ final class LocalModelStore: ObservableObject {
     private var work: Task<Void, Never>?
     init() { refresh() }
     func refresh() {
-        installed = (try? LocalModelFile.installed()).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+        installed = (try? LocalModelFile.installed().resourceValues(forKeys: [.fileSizeKey]).fileSize) == Int(LocalModelFile.bytes)
+        legacyInstalled = (try? LocalModelFile.legacy()).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
     func download() {
         guard !downloading && !installed else { return }
@@ -43,6 +46,14 @@ final class LocalModelStore: ObservableObject {
             var staged: URL?
             defer { if let staged { try? FileManager.default.removeItem(at: staged) } }
             do {
+                let directory = try LocalModelFile.directory()
+                let capacity = try directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                    .volumeAvailableCapacityForImportantUsage
+                // Download and final model share a volume; reserve 1 GB beyond the file.
+                if let capacity, capacity < LocalModelFile.bytes + 1_000_000_000 {
+                    throw NSError(domain: "LocalModel", code: 1, userInfo: [NSLocalizedDescriptionKey:
+                        "Для загрузки нужно не менее 6,7 ГБ свободного места."])
+                }
                 let delegate = DownloadProgress { [weak self] value in Task { @MainActor in self?.progress = value } }
                 let (temporary, response) = try await session.download(from: LocalModelFile.downloadURL, delegate: delegate)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw CompanionError.invalidResponse }
@@ -70,6 +81,10 @@ final class LocalModelStore: ObservableObject {
         }
     }
     func cancel() { work?.cancel() }
+    func removeLegacy() {
+        do { try FileManager.default.removeItem(at: LocalModelFile.legacy()); refresh() }
+        catch { self.error = error.localizedDescription }
+    }
     func remove() {
         guard !downloading else { return }
         do { try FileManager.default.removeItem(at: LocalModelFile.installed()); refresh() }

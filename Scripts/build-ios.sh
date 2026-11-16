@@ -7,6 +7,7 @@ if [[ "$(uname -s)" != Darwin ]]; then
 fi
 command -v xcodebuild >/dev/null
 command -v xcodegen >/dev/null
+bash Scripts/prepare-local-runtime.sh
 npm ci --no-audit --no-fund
 npm run check
 npm test

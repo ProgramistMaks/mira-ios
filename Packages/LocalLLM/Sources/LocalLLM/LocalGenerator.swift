@@ -45,13 +45,21 @@ public actor LocalGenerator {
         try Task.checkCancellation()
         guard let vocab = llama_model_get_vocab(model) else { throw LocalError.load }
         var params = llama_context_default_params()
-        params.n_ctx = 4096; params.n_batch = 512
+        params.n_ctx = 4096; params.n_batch = 256; params.n_ubatch = 128
+        params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED
         params.n_threads = Int32(min(4, ProcessInfo.processInfo.activeProcessorCount))
         params.n_threads_batch = params.n_threads
         guard let context = llama_init_from_model(model, params) else { throw LocalError.context }
         defer { llama_free(context) }
-        guard let sampler = llama_sampler_init_greedy() else { throw LocalError.context }
+        guard let sampler = llama_sampler_chain_init(llama_sampler_chain_default_params()) else { throw LocalError.context }
         defer { llama_sampler_free(sampler) }
+
+        // Qwen3.5 non-thinking sampling, with generated-token presence penalty.
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 4096, 1, 0, 1.5))
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(20))
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.8, 1))
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.7))
+        llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED))
 
         var history = Array(turns.suffix(12))
         var tokens: [llama_token] = []
@@ -65,9 +73,9 @@ public actor LocalGenerator {
             guard history.count > 1 else { throw LocalError.promptTooLong }
             history.removeFirst()
         }
-        for start in stride(from: 0, to: tokens.count, by: 512) {
+        for start in stride(from: 0, to: tokens.count, by: 256) {
             try Task.checkCancellation()
-            var chunk = Array(tokens[start..<min(start + 512, tokens.count)])
+            var chunk = Array(tokens[start..<min(start + 256, tokens.count)])
             let status = chunk.withUnsafeMutableBufferPointer {
                 llama_decode(context, llama_batch_get_one($0.baseAddress, Int32($0.count)))
             }
@@ -118,6 +126,7 @@ public actor LocalGenerator {
             let content = turn.text.replacingOccurrences(of: "<|", with: "‹|").replacingOccurrences(of: "|>", with: "|›")
             text += "<|im_start|>\(role)\n\(content)<|im_end|>\n"
         }
-        return text + "<|im_start|>assistant\n"
+        // Official Qwen3.5 template with enable_thinking=false.
+        return text + "<|im_start|>assistant\n<think>\n\n</think>\n\n"
     }
 }

@@ -15,6 +15,10 @@ jobs:
           cache: npm
       - name: Install project generator
         run: brew install xcodegen
+      - uses: actions/cache@v4
+        with:
+          path: Packages/LocalLLM/Artifacts
+          key: llama-b12430-v1-macos15-xcode16.4-${{ runner.arch }}
       - name: Compile unsigned device archive
         run: bash Scripts/build-ios.sh
       - name: Verify actual local model inference

@@ -9,3 +9,4 @@ node_modules/
 .env*
 Resources/Web/
 .build/
+Packages/LocalLLM/Artifacts/

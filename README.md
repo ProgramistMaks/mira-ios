@@ -30,7 +30,7 @@ The workflow assumes this directory is the repository root. The user authorized 
 
 ## Configuration and limitations
 
-- New installations default to local mode. Download the pinned Qwen model once over Wi-Fi (1.12 GB); subsequent text inference runs on device without a cloud key or automatic cloud fallback. See [local AI](Docs/LOCAL-AI.md).
+- New installations default to local mode. Download the pinned Qwen model once over Wi-Fi (Qwen3.5 9B Q4_K_M, 5.68 GB); subsequent text inference runs on device without a cloud key or automatic cloud fallback. See [local AI](Docs/LOCAL-AI.md).
 - Optional cloud chat requires a compatible provider, endpoint, model and key. Keys are entered on device and stored in Keychain. Tavily provides search, not the conversational model.
 - Local-mode dictation requires on-device recognition; if unavailable, text input remains available. Cloud-mode dictation may send audio to Apple. Microphone is activated only by the recording control and stopped on background/interruption.
 - Cloud requests use at most 40 non-interrupted messages; local requests use at most 12, trimmed to the token budget. Long-term semantic memory is not implemented.

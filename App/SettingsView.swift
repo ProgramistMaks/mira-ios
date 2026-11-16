@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var saved = false
     @State private var error: String?
     @State private var confirmDelete = false
+    @State private var confirmLegacyDelete = false
     var body: some View {
         NavigationStack {
             Form {
@@ -88,6 +89,7 @@ struct LocalModelSection: View {
     let busy: Bool
     @State private var confirmDownload = false
     @State private var confirmDelete = false
+    @State private var confirmLegacyDelete = false
     var body: some View {
         Section("Локальная модель") {
             Text(LocalModelFile.name)
@@ -99,16 +101,23 @@ struct LocalModelSection: View {
                 Text(model.verifying ? "Проверяю загруженный файл…" : "Загружаю: \(Int(model.progress * 100))%")
                 Button("Отменить загрузку") { model.cancel() }
             } else {
-                Button("Загрузить по Wi-Fi · 1,12 ГБ") { confirmDownload = true }
-                Text("Загружается один раз. Ответы небольшой локальной модели могут уступать облачным; скорость и нагрев зависят от устройства.")
+                Button("Загрузить по Wi-Fi · 5,68 ГБ") { confirmDownload = true }
+                Text("Работает без интернета после загрузки. Для скачивания нужно 6,7 ГБ свободного места. Для работы требуется много оперативной памяти; совместимость и скорость на этом iPhone ещё нужно проверить.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
-            Link("Модель и лицензия Apache 2.0", destination: URL(string: "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF")!)
+            if model.legacyInstalled {
+                Button("Удалить прежнюю Qwen2.5 1.5B · 1,12 ГБ", role: .destructive) { confirmLegacyDelete = true }
+                    .disabled(busy || model.downloading)
+            }
+            Link("Модель и лицензия Apache 2.0", destination: URL(string: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF")!)
         }
-        .confirmationDialog("Загрузить 1,12 ГБ по Wi-Fi? Оставь приложение открытым до окончания загрузки.",
+        .confirmationDialog("Загрузить 5,68 ГБ по Wi-Fi? Оставь приложение открытым до окончания загрузки.",
                             isPresented: $confirmDownload, titleVisibility: .visible) {
             Button("Загрузить") { model.download() }
+        }
+        .confirmationDialog("Удалить прежнюю модель Qwen2.5?", isPresented: $confirmLegacyDelete, titleVisibility: .visible) {
+            Button("Удалить прежнюю модель", role: .destructive) { model.removeLegacy() }
         }
         .confirmationDialog("Удалить локальную модель? Для следующего запуска понадобится загрузить её заново.",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
