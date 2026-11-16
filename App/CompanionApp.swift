@@ -10,7 +10,8 @@ struct CompanionApp: App {
             CompanionView(store: store, voice: store.voice)
                 .preferredColorScheme(.dark)
                 .onChange(of: scenePhase, initial: true) { _, phase in
-                    store.voice.setSceneActive(phase == .active)
+                    // The avatar resumes the mouth clock only when visible and ready.
+                    if phase != .active { store.voice.setSceneActive(false) }
                     if phase == .active { store.liveActivities.setForeground(true) }
                     if phase == .background {
                         store.localModel.pause()

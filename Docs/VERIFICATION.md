@@ -1,5 +1,33 @@
 # Verification — 2026-11-16
 
+## Bounded mouth updates — portable and browser checks
+
+The audio bridge now retains one in-flight JavaScript evaluation and only the newest
+pending sample per document. Frames carry capture time and sequence; receipt no
+longer gives delayed audio samples a fresh lifetime. Visibility/readiness gates the
+native mouth clock, and phase/visibility changes invalidate renderer samples.
+
+- All **63 portable XCTest cases passed**, including seven new bridge cases for
+  backpressure/coalescing, stale samples, clock reversal, stop, visibility,
+  document reset and late acknowledgements. The same source/tests are included
+  in the XcodeGen app/test targets.
+- TypeScript checking, renderer unit tests and the Safari-targeted bundle build
+  passed. Five new renderer cases cover timestamp validity/expiry, ordering,
+  phase changes and visibility. Swift syntax parsing passed for the changed app
+  files; this is not an Apple SDK type check.
+- A browser probe runs the production renderer with a read-only accessor added
+  only to its temporary test bundle. Actual VRM mouth weights open on fresh input,
+  close after expiry/stop, reject delayed/reordered data, stay closed outside speech
+  and recover after hide/resume. Reduced Motion retains this audio feedback.
+- The full renderer browser regression also passed: four phases/three viewport
+  sizes, touch/drag handling, pause/resume, WebGL recovery and missing-model errors.
+  Facial morph equivalence stayed exact across eighteen cases; all 1,188 planted-foot
+  poses passed the existing contact/orientation/leg-length tolerance checks.
+- The implementation remains amplitude-based, not phoneme lip sync. WKWebView
+  callback behavior, Apple integration, Bluetooth/device timing and reference-video
+  quality remain unverified. No hosted iOS workflow was dispatched; no IPA or
+  screenshots were delivered.
+
 ## Chat recovery — portable logic verified, native integration pending
 
 The production cloud transport now delegates SSE decoding to `ConversationCore`.

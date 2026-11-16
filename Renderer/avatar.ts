@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-import { motion, speechLevel } from './motion.mjs';
+import { motion, SpeechSamples } from './motion.mjs';
 import { ActingController } from './acting.mjs';
 import { PlantedStance } from './stance.mjs';
 
@@ -9,7 +9,7 @@ declare global {
   interface Window {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
-      setViewport(width: number, height: number): void; setSpeech(level: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string };
+      setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string };
   }
 }
 
@@ -22,7 +22,7 @@ let frameRate = 60;
 let active = true;
 let phase = 'idle';
 let reduced = false;
-let speechAmplitude = 0, speechReceivedAt = -Infinity;
+const speechSamples = new SpeechSamples();
 let nativeSize: { width: number; height: number } | undefined;
 let applyResize: (() => void) | undefined;
 window.companion = {
@@ -30,19 +30,17 @@ window.companion = {
   phase,
   setActive(value) {
     active = value === true;
-    if (!active) { speechAmplitude = 0; speechReceivedAt = -Infinity; }
+    speechSamples.setActive(active);
   },
   setFrameRate(fps) { if (fps === 30 || fps === 60) frameRate = fps; },
-  setSpeech(level) {
-    speechAmplitude = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
-    speechReceivedAt = performance.now();
-  },
+  setSpeech(level, capturedAt, sequence) { speechSamples.receive(level, capturedAt, sequence); },
   setViewport(width, height) {
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
     nativeSize = { width, height }; applyResize?.();
   },
   setState(next, reduceMotion) {
     if (!['idle', 'listening', 'thinking', 'speaking'].includes(next)) return;
+    if (phase !== next) speechSamples.reset();
     phase = next; reduced = reduceMotion; window.companion.phase = phase;
     acting.setPhase(phase); acting.update(0, reduced);
   },
@@ -59,7 +57,7 @@ async function main() {
   renderer.domElement.addEventListener('webglcontextlost', event => {
     event.preventDefault(); contextLost = true;
     window.companion.ready = false;
-    speechAmplitude = 0; speechReceivedAt = -Infinity;
+    speechSamples.setActive(false);
     report('error', 'context lost');
   });
   // Rebuild GPU resources and let the native host resend its current state.
@@ -162,7 +160,7 @@ async function main() {
     elapsed += delta;
     const pose = acting.update(delta, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
-    const face = motion(elapsed, phase, reduced, speechLevel(speechAmplitude, (performance.now() - speechReceivedAt) / 1000));
+    const face = motion(elapsed, phase, reduced, speechSamples.level());
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
     stance.apply(pose);
     if (left) left.rotation.set(pose.leftRoll, armSign * pose.leftForward, armSign * (1.2 - pose.leftLift));

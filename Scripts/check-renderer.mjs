@@ -3,8 +3,10 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { speechProbeBundle, checkSpeech } from './check-speech.mjs';
 
 const root = new URL('../Resources/Web/', import.meta.url);
+const speechProbe = await speechProbeBundle();
 const morphProbe = await build({ entryPoints: ['Scripts/check-morphs.mjs'], bundle: true,
   write: false, format: 'esm', target: ['chrome120'] });
 const stanceProbe = await build({ entryPoints: ['Scripts/check-stance.mjs'], bundle: true,
@@ -37,6 +39,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1') && !request.url().startsWith('blob:')) external.push(request.url()); });
   const address = `http://127.0.0.1:${server.address().port}`;
+  await checkSpeech(browser, address, speechProbe);
   await page.goto(address);
   await page.waitForFunction(() => window.companion?.ready === true, undefined, { timeout: 30000 });
   await page.evaluate(() => { document.body.style.background = '#0e0e13'; });

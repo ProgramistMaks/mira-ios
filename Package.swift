@@ -14,6 +14,8 @@ let package = Package(
         .testTarget(name: "MiraDownloadCoreTests", dependencies: ["MiraDownloadCore"], path: "DownloadTests",
                     resources: [.copy("Fixtures")]),
         .target(name: "MiraConversationCore", path: "ConversationCore"),
-        .testTarget(name: "MiraConversationCoreTests", dependencies: ["MiraConversationCore"], path: "ConversationTests")
+        .testTarget(name: "MiraConversationCoreTests", dependencies: ["MiraConversationCore"], path: "ConversationTests"),
+        .target(name: "MiraSpeechCore", path: "SpeechCore"),
+        .testTarget(name: "MiraSpeechCoreTests", dependencies: ["MiraSpeechCore"], path: "SpeechCoreTests")
     ]
 )

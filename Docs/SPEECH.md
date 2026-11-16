@@ -39,11 +39,21 @@ returns; they are not retained or queued on the main actor.
 sends the corresponding amplitude through a dedicated Combine subject to WKWebView.
 These samples do not trigger whole-screen SwiftUI updates and contain no transcript
 or credentials. The renderer smooths mouth opening, closes it outside the speaking
-state, and expires missing bridge updates after 180 ms. There is no random speech
+state, and expires bridge samples 180 ms after capture, including delivery delay. There is no random speech
 oscillator. Reduced Motion still permits speech feedback.
 
+`MouthBridge` permits one JavaScript evaluation in flight per document, retaining
+only the newest pending amplitude. Completion releases that slot; old-document
+callbacks cannot release a newer document's slot. Stop replaces pending speech
+with zero. A timestamp and increasing sequence accompany each sample: stale,
+future, reordered or duplicate packets cannot revive an old mouth pose. JavaScript
+converts capture age to a monotonic expiry after receipt. Phase/visibility changes
+discard cached samples. No speech text or audio files cross this bridge.
+
 The scene-active signal now cancels the mouth clock and sends a closed-mouth value
-while the view is inactive, without stopping already-playing audio. Returning to
+while the view is inactive, hidden behind a sheet, loading or recovering its WebView,
+without stopping already-playing audio. The avatar coordinator resumes the clock
+only when the scene is ready and visible. Returning to
 the scene restarts sampling at `AVAudioPlayer.currentTime`, not at the start of the
 utterance. Stop releases the player before deactivating the shared audio session.
 The native playback test now exercises visibility suspension/resumption, but this
@@ -68,6 +78,13 @@ this does not claim the voice quality demonstrated in the reference videos.
 - Native tests cover silence/voice boundaries, PCM file output, cancellation cleanup,
   and actual synthesis/playback followed by stop, natural completion and early cancel.
 - Renderer tests cover silence, absent audio, stale/invalid amplitude and Reduced Motion.
+- Seven portable bridge tests cover a blocked consumer, latest-sample replacement,
+  stop, visibility, clock reversal, expired samples and obsolete acknowledgements.
+  Five additional renderer cases exercise timestamps, ordering and phase/visibility
+  invalidation. A Chromium probe uses the production renderer with a test-only
+  read-only expression accessor to verify actual VRM mouth weights under fresh,
+  expired, delayed and reordered delivery, stop, phase changes and hide/resume.
+  This does not validate WKWebView delivery or device audio latency.
 - The native CI result and screenshot review are recorded in VERIFICATION.md.
 
 ## API sources

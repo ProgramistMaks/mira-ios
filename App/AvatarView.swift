@@ -21,10 +21,14 @@ struct AvatarView: UIViewRepresentable {
         view.scrollView.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
         view.scrollView.contentInsetAdjustmentBehavior = .never
         view.navigationDelegate = context.coordinator
-        context.coordinator.mouthSubscription = voice.mouthEvents.sink { [weak view] level in
-            guard level.isFinite else { return }
-            view?.evaluateJavaScript("window.companion?.setSpeech(\(min(1, max(0, level))))", completionHandler: nil)
+        let bridge = MouthBridge { [weak view] frame, finish in
+            guard let view else { finish(); return }
+            view.evaluateJavaScript("window.companion?.setSpeech(\(frame.level), \(frame.sampledAt), \(frame.sequence))") { _, _ in
+                Task { @MainActor in finish() }
+            }
         }
+        context.coordinator.mouthBridge = bridge
+        context.coordinator.mouthSubscription = voice.mouthEvents.sink { [weak bridge] level in bridge?.submit(level) }
         view.load(URLRequest(url: URL(string: "companion://local/index.html")!))
         return view
     }
@@ -35,14 +39,21 @@ struct AvatarView: UIViewRepresentable {
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
         view.configuration.userContentController.removeScriptMessageHandler(forName: "avatar")
         coordinator.mouthSubscription?.cancel()
+        coordinator.mouthBridge?.reset()
+        coordinator.parent.voice.setSceneActive(false)
         view.stopLoading()
     }
+    @MainActor
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var parent: AvatarView
         var loaded = false
         var mouthSubscription: AnyCancellable?
+        var mouthBridge: MouthBridge?
         init(parent: AvatarView) { self.parent = parent }
         func update(_ view: WKWebView) {
+            let visible = loaded && parent.ready && parent.active
+            mouthBridge?.setState(ready: loaded && parent.ready, active: parent.active)
+            parent.voice.setSceneActive(visible)
             guard loaded else { return }
             view.evaluateJavaScript("""
                 window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion));
@@ -55,18 +66,27 @@ struct AvatarView: UIViewRepresentable {
             if body["type"] == "ready" {
                 parent.ready = true; parent.error = nil
                 (message.webView as? AvatarWebView)?.syncViewport(force: true)
+                if let view = message.webView { update(view) }
             }
-            if body["type"] == "error" { parent.ready = false; parent.error = "Не удалось загрузить персонажа. Попробуй перезапустить приложение." }
+            if body["type"] == "error" {
+                parent.ready = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
+                parent.error = "Не удалось загрузить персонажа. Попробуй перезапустить приложение."
+            }
+        }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            loaded = false; parent.ready = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             loaded = true; update(webView)
             (webView as? AvatarWebView)?.syncViewport(force: true)
         }
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            loaded = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
             parent.error = "Не удалось открыть сцену персонажа."
         }
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            loaded = false; parent.ready = false; webView.reload()
+            loaded = false; parent.ready = false; mouthBridge?.reset()
+            parent.voice.setSceneActive(false); webView.reload()
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {

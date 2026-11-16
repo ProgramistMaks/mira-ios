@@ -17,3 +17,32 @@ export function speechLevel(level, ageSeconds) {
   if (!Number.isFinite(level) || !Number.isFinite(ageSeconds) || ageSeconds < 0 || ageSeconds > 0.18) return 0;
   return Math.max(0, Math.min(1, level));
 }
+
+// Timestamp at audio sampling, not at JavaScript delivery: a blocked WebView must
+// not give a queued mouth pose a new 180 ms lifetime. Only numbers cross the bridge.
+export class SpeechSamples {
+  amplitude = 0; sampledAt = -Infinity; sequence = -1; active = true; notBefore = -Infinity;
+  reset(wallNow = Date.now()) {
+    this.amplitude = 0; this.sampledAt = -Infinity; this.notBefore = wallNow;
+  }
+  setActive(value, wallNow = Date.now()) {
+    const active = value === true;
+    if (active !== this.active) this.reset(wallNow);
+    this.active = active;
+  }
+  receive(level, capturedAt, sequence, wallNow = Date.now(), monotonicNow = performance.now()) {
+    if (!Number.isSafeInteger(sequence) || sequence <= this.sequence) return false;
+    this.sequence = sequence;
+    const age = wallNow - capturedAt;
+    if (!this.active || !Number.isFinite(capturedAt) || !Number.isFinite(wallNow) || !Number.isFinite(monotonicNow)
+        || capturedAt < this.notBefore || age < 0 || age > 180) {
+      this.amplitude = 0; this.sampledAt = -Infinity; return false;
+    }
+    this.amplitude = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
+    this.sampledAt = monotonicNow - age;
+    return true;
+  }
+  level(monotonicNow = performance.now()) {
+    return this.active ? speechLevel(this.amplitude, (monotonicNow - this.sampledAt) / 1000) : 0;
+  }
+}
