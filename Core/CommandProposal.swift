@@ -29,7 +29,7 @@ struct CommandProposal: Identifiable {
                   let match = regex.firstMatch(in: original, range: NSRange(original.startIndex..., in: original)),
                   let range = Range(match.range(at: 1), in: original) else { continue }
             let text = String(original[range]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return nil }
+            guard !text.isEmpty, text != ":" else { return nil }
             return CommandProposal(kind: kind, text: text, original: original)
         }
         return nil

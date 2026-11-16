@@ -27,6 +27,7 @@ struct CompanionView: View {
     @ObservedObject var voice: VoiceService
     @State private var showSettings = false
     @State private var showCommands = false
+    @FocusState private var composerFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var phase: CompanionPhase {
         if voice.recording { return .listening }
@@ -158,8 +159,9 @@ struct CompanionView: View {
             }.disabled(store.thinking).accessibilityLabel(voice.recording ? "Закончить запись" : "Начать запись")
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
                 .lineLimit(1...5).padding(.vertical, 12).accessibilityIdentifier("conversation.input")
+                .focused($composerFocused)
             Button {
-                if store.thinking || voice.busy { store.cancel() } else { store.send() }
+                if store.thinking || voice.busy { store.cancel() } else { composerFocused = false; store.send() }
             } label: {
                 Image(systemName: store.thinking || voice.busy ? "stop.fill" : "arrow.up")
                     .font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44)
