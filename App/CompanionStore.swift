@@ -15,6 +15,7 @@ final class CompanionStore: ObservableObject {
     @Published var notes: [Note] = []
     @Published var draft = ""
     @Published var error: String?
+    @Published var proposedCommand: CommandProposal?
     @Published var thinking = false
     @Published var characterReady = false
     @Published var characterError: String?
@@ -39,6 +40,9 @@ final class CompanionStore: ObservableObject {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty && !thinking && !voice.recording else { return }
         guard text.count <= 12000 else { error = "Сообщение слишком длинное: максимум 12 000 символов."; return }
+        if let proposal = CommandProposal.parse(text) {
+            voice.stop(); proposedCommand = proposal; return
+        }
         let mode = settings.inferenceMode ?? .cloud
         do {
             if mode == .local {
@@ -89,6 +93,12 @@ final class CompanionStore: ObservableObject {
                 if !(error is CancellationError) { self.error = error.localizedDescription }
             }
         }
+    }
+    func recordCommandResult(_ proposal: CommandProposal, detail: String) {
+        messages.append(Message(role: .user, content: proposal.original))
+        messages.append(Message(role: .assistant, content: detail))
+        if draft.trimmingCharacters(in: .whitespacesAndNewlines) == proposal.original { draft = "" }
+        saveConversation()
     }
     private func append(_ text: String, to id: UUID) {
         guard activeID == id, let index = messages.firstIndex(where: { $0.id == id }) else { return }

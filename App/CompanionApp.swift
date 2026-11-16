@@ -59,6 +59,9 @@ struct CompanionView: View {
         }
         .tint(Palette.lavender)
         .sheet(isPresented: $showSettings) { SettingsView(store: store, voice: voice).tint(Palette.lavender) }
+        .sheet(item: $store.proposedCommand) { proposal in
+            CommandsView(store: store, proposal: proposal).tint(Palette.lavender)
+        }
         .sheet(isPresented: $showCommands) { CommandsView(store: store).tint(Palette.lavender) }
         .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
@@ -154,7 +157,7 @@ struct CompanionView: View {
                     .font(.title3).frame(width: 44, height: 44)
             }.disabled(store.thinking).accessibilityLabel(voice.recording ? "Закончить запись" : "Начать запись")
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
-                .lineLimit(1...5).padding(.vertical, 12)
+                .lineLimit(1...5).padding(.vertical, 12).accessibilityIdentifier("conversation.input")
             Button {
                 if store.thinking || voice.busy { store.cancel() } else { store.send() }
             } label: {

@@ -36,6 +36,26 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[note].waitForExistence(timeout: 5), "Saved note must survive a cold launch")
         app.buttons["Готово"].tap()
 
+        // Explicit commands work even with no cloud key or local model installed.
+        let commandNote = "Offline command " + UUID().uuidString.prefix(8)
+        let composer = app.descendants(matching: .any)["conversation.input"]
+        composer.tap()
+        composer.typeText("Мира, сохрани заметку: " + commandNote)
+        app.buttons["Отправить"].tap()
+        XCTAssertTrue(app.navigationBars["Новая заметка"].waitForExistence(timeout: 5))
+        capture("Offline command — explicit review before saving")
+        app.buttons["Отмена"].tap() // Dismissing the preview must not execute the action.
+        app.buttons["Команды"].tap()
+        XCTAssertFalse(app.staticTexts[commandNote].exists)
+        app.buttons["Готово"].tap()
+        app.buttons["Отправить"].tap()
+        XCTAssertTrue(app.navigationBars["Новая заметка"].waitForExistence(timeout: 5))
+        app.buttons["command.saveNote"].tap()
+        XCTAssertTrue(app.buttons["Команды"].waitForExistence(timeout: 5))
+        app.buttons["Команды"].tap()
+        XCTAssertTrue(app.staticTexts[commandNote].waitForExistence(timeout: 5))
+        app.buttons["Готово"].tap()
+
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue(app.buttons["Настройки"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 60))

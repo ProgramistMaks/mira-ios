@@ -2,9 +2,23 @@ import SwiftUI
 
 struct CommandsView: View {
     @ObservedObject var store: CompanionStore
+    let proposal: CommandProposal?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @State private var text = ""
+    @State private var text: String
+    @State private var completed = false
+    init(store: CompanionStore, proposal: CommandProposal? = nil) {
+        self.store = store; self.proposal = proposal
+        _text = State(initialValue: proposal?.text ?? "")
+    }
+    private func allows(_ kind: CommandProposal.Kind) -> Bool { proposal == nil || proposal?.kind == kind }
+    private func acknowledge(_ detail: String, close: Bool = true) {
+        if let proposal {
+            guard !completed else { return }
+            store.recordCommandResult(proposal, detail: detail); completed = true
+            if close { dismiss() }
+        } else { result = detail }
+    }
     @State private var date = Date().addingTimeInterval(3600)
     @State private var confirmation = false
     @State private var saving = false
@@ -16,34 +30,54 @@ struct CommandsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Что сделать?") {
+                if proposal != nil {
+                    Section {
+                        Text("Проверь текст и подтверди действие. До нажатия кнопки ничего не выполняется.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+                Section(proposal?.title ?? "Что сделать?") {
                     TextField("Запрос, заметка или напоминание", text: $text, axis: .vertical)
                         .lineLimit(3...6).accessibilityIdentifier("command.input")
-                    Button(searching ? "Ищу…" : "Искать через Tavily", systemImage: "sparkle.magnifyingglass") {
-                        let query = value; searching = true; hits = []
-                        searchTask = Task {
-                            defer { searching = false }
-                            do {
-                                let found = try await WebSearch().search(query, key: SecretStore.read(account: "tavily"))
-                                try Task.checkCancellation()
-                                hits = found
-                                if found.isEmpty { result = "По этому запросу ничего не найдено." }
-                            } catch { if !Task.isCancelled { result = error.localizedDescription } }
-                        }
-                    }.disabled(value.isEmpty || searching)
-                    Button("Найти в интернете", systemImage: "magnifyingglass") {
-                        var components = URLComponents(string: "https://www.google.com/search")!
-                        components.queryItems = [URLQueryItem(name: "q", value: value)]
-                        if let url = components.url {
-                            openURL(url) { accepted in
-                                if !accepted { result = "Не удалось открыть браузер." }
+                        .disabled(completed || searching || saving)
+                    if allows(.search) {
+                        Button(searching ? "Ищу…" : "Искать через Tavily", systemImage: "sparkle.magnifyingglass") {
+                            let query = value; searching = true; hits = []
+                            searchTask = Task {
+                                defer { searching = false }
+                                do {
+                                    let found = try await WebSearch().search(query, key: SecretStore.read(account: "tavily"))
+                                    try Task.checkCancellation()
+                                    hits = found
+                                    if proposal != nil {
+                                        acknowledge(found.isEmpty ? "По запросу «\(query)» ничего не найдено." :
+                                            "По запросу «\(query)» найдены источники:\n" + found.map { "• \($0.title)\n\($0.url)" }.joined(separator: "\n"), close: false)
+                                    }
+                                    if found.isEmpty { result = "По этому запросу ничего не найдено." }
+                                } catch { if !Task.isCancelled { result = error.localizedDescription } }
                             }
-                        }
-                    }.disabled(value.isEmpty)
-                    Button("Сохранить заметку", systemImage: "note.text") {
-                        do { try store.addNote(value); text = ""; result = "Заметка сохранена в Мире." }
-                        catch { result = error.localizedDescription }
-                    }.disabled(value.isEmpty).accessibilityIdentifier("command.saveNote")
+                        }.disabled(value.isEmpty || searching || completed)
+                        Button("Найти в интернете", systemImage: "magnifyingglass") {
+                            let query = value
+                            var components = URLComponents(string: "https://www.google.com/search")!
+                            components.queryItems = [URLQueryItem(name: "q", value: query)]
+                            if let url = components.url {
+                                openURL(url) { accepted in
+                                    if !accepted { result = "Не удалось открыть браузер." }
+                                    else if proposal != nil { acknowledge("Открыт поиск в браузере: «\(query)».") }
+                                }
+                            }
+                        }.disabled(value.isEmpty || completed)
+                    }
+                    if allows(.note) {
+                        Button("Сохранить заметку", systemImage: "note.text") {
+                            do {
+                                let note = value; try store.addNote(note)
+                                acknowledge("Заметка сохранена в Мире: «\(note)»."); text = ""
+                            }
+                            catch { result = error.localizedDescription }
+                        }.disabled(value.isEmpty || completed).accessibilityIdentifier("command.saveNote")
+                    }
                 }
                 if !hits.isEmpty {
                     Section("Источники · Tavily") {
@@ -58,12 +92,15 @@ struct CommandsView: View {
                         }
                     }
                 }
-                Section("Напоминание") {
-                    DatePicker("Когда", selection: $date, in: Date()...)
-                    Button(saving ? "Создаю…" : "Создать напоминание", systemImage: "bell") { confirmation = true }
-                        .disabled(value.isEmpty || saving)
+                if allows(.reminder) {
+                    Section("Напоминание") {
+                        if proposal != nil { Text("Выбери дату и время: они не определяются из текста автоматически.").font(.footnote).foregroundStyle(.secondary) }
+                        DatePicker("Когда", selection: $date, in: Date()...)
+                        Button(saving ? "Создаю…" : "Создать напоминание", systemImage: "bell") { confirmation = true }
+                            .disabled(value.isEmpty || saving || completed)
+                    }
                 }
-                if !store.notes.isEmpty {
+                if !store.notes.isEmpty && allows(.note) {
                     Section("Твои заметки") {
                         ForEach(store.notes) { note in
                             VStack(alignment: .leading, spacing: 5) {
@@ -73,16 +110,24 @@ struct CommandsView: View {
                         }
                     }
                 }
-            }.navigationTitle("Команды")
+            }.navigationTitle(proposal?.title ?? "Команды")
             .onDisappear { searchTask?.cancel() }
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } } }
+            .interactiveDismissDisabled(saving)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(proposal != nil && !completed ? "Отмена" : "Готово") { dismiss() }.disabled(saving)
+                }
+            }
             .confirmationDialog("Добавить «\(value)» на \(date.formatted(date: .abbreviated, time: .shortened))?",
                                 isPresented: $confirmation, titleVisibility: .visible) {
                 Button("Добавить в Напоминания") {
                     let title = value; let due = date; saving = true
                     Task {
                         defer { saving = false }
-                        do { try await store.addReminder(title, date: due); result = "Напоминание создано."; text = "" }
+                        do {
+                            try await store.addReminder(title, date: due)
+                            acknowledge("Напоминание «\(title)» создано на \(due.formatted(date: .abbreviated, time: .shortened))."); text = ""
+                        }
                         catch { result = error.localizedDescription }
                     }
                 }
