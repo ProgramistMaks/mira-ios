@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-import { motion, greetingEnvelope } from './motion.mjs';
+import { motion, greetingEnvelope, speechLevel } from './motion.mjs';
 
 declare global {
   interface Window {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
-      setViewport(width: number, height: number): void; ready: boolean; phase: string };
+      setViewport(width: number, height: number): void; setSpeech(level: number): void; ready: boolean; phase: string };
   }
 }
 
@@ -17,11 +17,16 @@ const report = (type: string, detail = '') => {
 };
 let phase = 'idle';
 let reduced = false;
+let speechAmplitude = 0, speechReceivedAt = -Infinity;
 let nativeSize: { width: number; height: number } | undefined;
 let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   phase,
+  setSpeech(level) {
+    speechAmplitude = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
+    speechReceivedAt = performance.now();
+  },
   setViewport(width, height) {
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
     nativeSize = { width, height }; applyResize?.();
@@ -103,21 +108,23 @@ async function main() {
   const elbow = avatar.humanoid.getNormalizedBoneNode('leftLowerArm');
   const wrist = avatar.humanoid.getNormalizedBoneNode('leftHand');
   const clock = new THREE.Clock();
+  let mouth = 0;
   renderer.setAnimationLoop(() => {
     const delta = Math.min(clock.getDelta(), 0.05);
     if (document.hidden) return;
     elapsed += delta;
-    const pose = motion(elapsed, phase, reduced);
+    const pose = motion(elapsed, phase, reduced, speechLevel(speechAmplitude, (performance.now() - speechReceivedAt) / 1000));
     const wave = greetingEnvelope(elapsed - gestureStart, reduced);
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
     if (left) left.rotation.z = armSign * (1.2 - wave * 1.4 + pose.handSway);
     if (right) right.rotation.z = -armSign * (1.2 + pose.handSway);
     if (elbow) elbow.rotation.z = -armSign * wave * 1.25;
     if (wrist) wrist.rotation.z = armSign * wave * 0.18 * Math.sin(elapsed * 16);
-    if (spine) spine.rotation.x = pose.breathe;
-    if (head) head.rotation.z = pose.head;
+    if (spine) spine.rotation.x = THREE.MathUtils.damp(spine.rotation.x, pose.breathe, 8, delta);
+    if (head) head.rotation.z = THREE.MathUtils.damp(head.rotation.z, pose.head, 8, delta);
     avatar.expressionManager?.setValue('blink', pose.blink);
-    avatar.expressionManager?.setValue('aa', pose.mouth);
+    mouth = phase === 'speaking' ? THREE.MathUtils.damp(mouth, pose.mouth, 28, delta) : 0;
+    avatar.expressionManager?.setValue('aa', mouth);
     avatar.expressionManager?.setValue('happy', pose.smile + wave * 0.12);
     avatar.update(delta);
     renderer.render(scene, camera);

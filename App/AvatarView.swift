@@ -1,8 +1,10 @@
 import SwiftUI
 import WebKit
+import Combine
 
 struct AvatarView: UIViewRepresentable {
     let phase: CompanionPhase
+    let voice: VoiceService
     let reduceMotion: Bool
     @Binding var ready: Bool
     @Binding var error: String?
@@ -17,6 +19,10 @@ struct AvatarView: UIViewRepresentable {
         view.scrollView.backgroundColor = .clear; view.scrollView.isScrollEnabled = false
         view.scrollView.contentInsetAdjustmentBehavior = .never
         view.navigationDelegate = context.coordinator
+        context.coordinator.mouthSubscription = voice.mouthEvents.sink { [weak view] level in
+            guard level.isFinite else { return }
+            view?.evaluateJavaScript("window.companion?.setSpeech(\(min(1, max(0, level))))", completionHandler: nil)
+        }
         view.load(URLRequest(url: URL(string: "companion://local/index.html")!))
         return view
     }
@@ -26,11 +32,13 @@ struct AvatarView: UIViewRepresentable {
     }
     static func dismantleUIView(_ view: WKWebView, coordinator: Coordinator) {
         view.configuration.userContentController.removeScriptMessageHandler(forName: "avatar")
+        coordinator.mouthSubscription?.cancel()
         view.stopLoading()
     }
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var parent: AvatarView
         var loaded = false
+        var mouthSubscription: AnyCancellable?
         init(parent: AvatarView) { self.parent = parent }
         func update(_ view: WKWebView) {
             guard loaded else { return }
@@ -72,7 +80,7 @@ private final class AvatarWebView: WKWebView {
     }
 }
 
-/// Only bundled files; this view never receives API keys or chat text.
+/// Only bundled files; the bridge receives animation state and mouth amplitude, never keys or text.
 private final class BundleScheme: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url,

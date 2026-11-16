@@ -30,11 +30,12 @@ struct CompanionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var phase: CompanionPhase {
         if voice.recording { return .listening }
-        if store.thinking { return .thinking }
+        if store.thinking || voice.preparing { return .thinking }
         if voice.speaking { return .speaking }
         return .idle
     }
     private var status: String {
+        if voice.preparing { return "Готовлю голос" }
         switch phase {
         case .idle: return "Рядом с тобой"
         case .listening: return "Слушаю тебя"
@@ -84,7 +85,10 @@ struct CompanionView: View {
     private var stage: some View {
         ZStack(alignment: .bottom) {
             RadialGradient(colors: [Palette.lavender.opacity(0.17), .clear], center: .center, startRadius: 15, endRadius: 300)
-            AvatarView(phase: phase, reduceMotion: reduceMotion, ready: $store.characterReady, error: $store.characterError)
+            VStack(spacing: 0) {
+                AvatarView(phase: phase, voice: voice, reduceMotion: reduceMotion, ready: $store.characterReady, error: $store.characterError)
+                Color.clear.frame(height: 54)
+            }
             if let error = store.characterError {
                 VStack(spacing: 12) {
                     Image(systemName: "person.crop.rectangle.badge.exclamationmark").font(.largeTitle)
@@ -152,14 +156,14 @@ struct CompanionView: View {
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
                 .lineLimit(1...5).padding(.vertical, 12)
             Button {
-                if store.thinking || voice.speaking { store.cancel() } else { store.send() }
+                if store.thinking || voice.busy { store.cancel() } else { store.send() }
             } label: {
-                Image(systemName: store.thinking || voice.speaking ? "stop.fill" : "arrow.up")
+                Image(systemName: store.thinking || voice.busy ? "stop.fill" : "arrow.up")
                     .font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44)
                     .foregroundStyle(Palette.background).background(Palette.lavender, in: Circle())
             }
-            .disabled(voice.recording || (!store.thinking && !voice.speaking && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
-            .accessibilityLabel(store.thinking || voice.speaking ? "Остановить" : "Отправить")
+            .disabled(voice.recording || (!store.thinking && !voice.busy && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+            .accessibilityLabel(store.thinking || voice.busy ? "Остановить" : "Отправить")
         }.padding(8).background(Palette.panel, in: RoundedRectangle(cornerRadius: 30))
     }
 }

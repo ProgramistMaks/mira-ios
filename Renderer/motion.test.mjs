@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { motion, greetingEnvelope } from './motion.mjs';
+import { motion, greetingEnvelope, speechLevel } from './motion.mjs';
 
 test('silent phases never move the mouth', () => {
   for (const phase of ['idle', 'thinking', 'listening']) {
@@ -8,7 +8,7 @@ test('silent phases never move the mouth', () => {
   }
 });
 test('reduced motion removes body motion while keeping speech feedback', () => {
-  const pose = motion(1, 'speaking', true);
+  const pose = motion(1, 'speaking', true, 0.5);
   assert.equal(pose.head, 0); assert.equal(pose.breathe, 0); assert.ok(pose.mouth > 0);
 });
 test('expression weights stay finite and within valid bounds', () => {
@@ -24,4 +24,14 @@ test('greeting eases into and out of the resting pose and obeys reduced motion',
   assert.equal(greetingEnvelope(1, true), 0);
   assert.ok(greetingEnvelope(0.001, false) < 0.00001);
   assert.ok(greetingEnvelope(2.799, false) < 0.00001);
+});
+
+test('mouth follows audio, stays closed during silence and ignores stale samples', () => {
+  assert.equal(motion(1, 'speaking', false).mouth, 0);
+  assert.equal(motion(1, 'speaking', false, 0.7).mouth, 0.7);
+  assert.equal(motion(2, 'idle', false, 0.7).mouth, 0);
+  assert.equal(motion(2, 'speaking', false, NaN).mouth, 0);
+  assert.equal(speechLevel(0.7, 0.05), 0.7);
+  for (const age of [0.2, -1, Infinity, NaN]) assert.equal(speechLevel(0.7, age), 0);
+  assert.equal(speechLevel(Infinity, 0), 0);
 });

@@ -41,7 +41,8 @@ struct SettingsView: View {
                         Text("Автоматически").tag("")
                         ForEach(voice.voices, id: \.identifier) { item in Text(item.name).tag(item.identifier) }
                     }
-                    Button("Послушать голос") {
+                    Button(voice.busy ? "Остановить голос" : "Послушать голос") {
+                        if voice.busy { voice.stop(); return }
                         do { try voice.say("Привет. Я Мира. Рада тебя слышать.", voiceID: store.settings.voiceID) }
                         catch { self.error = error.localizedDescription }
                     }
