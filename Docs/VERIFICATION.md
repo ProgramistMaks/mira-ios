@@ -1,5 +1,22 @@
 # Verification — 2026-11-16
 
+## Controlled disconnect fixture repair
+
+Focused follow-up `43962565432` (source `9296c13`) stopped before archive/native
+execution: 70 of 71 portable tests passed, but the ignore-Range case had zero saved
+bytes after its first truncated response. Startup/preflight succeeded; this was
+not a recurrence of the Python-launch issue. The fixture had flushed 128 KiB and
+immediately shut down its socket, assuming URLSession had already delivered it.
+
+The fixture now waits for an explicit disconnect request after the test observes
+128 KiB actually saved by the real downloader. A ten-second client deadline and
+twenty-second server deadline bound failure. The test then requests a real socket
+drop and verifies that resuming an ignored Range restarts without duplicating the
+prefix. The same helper covers redirect/replacement/invalid-range cases. No
+application or transport implementation changed. All 71 local tests passed, and
+ten repeated real-HTTP runs of the previously failing case passed. This repair
+still needs the macOS follow-up; no failure was skipped or turned into success.
+
 ## Complete-package native results and focused follow-up
 
 Run `43953994238` tested source `6a5eadab89c7ea0ab8b215bc8df9ab1e40bda665` on

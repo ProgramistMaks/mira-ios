@@ -42,9 +42,9 @@ No new provider, paid speech API, auto-send or background microphone is introduc
 Portable tests cover phase/action gating, meter silence/voice/stride/invalid PCM,
 recognition timeout cancellation and replacement. A native UI case covers entering
 voice mode without recording, draft preservation, explicit command review and
-returning from settings. Actual microphone permissions, final recognition delivery,
-Bluetooth, native layout/accessibility and interruption behavior require iOS/device
-verification; test source alone is not evidence that those paths have passed.
+returning from settings; it passed on iOS 26.5 in run `43953994238`, alongside actual synthesis/playback and mouth-level tests. The subsequent pinned control layout requires the focused follow-up. Actual microphone permissions, final recognition delivery,
+Bluetooth, large-text/accessibility and interruption behavior still require device
+verification. See VERIFICATION.md for tested scope.
 
 ## Dictation and permissions
 

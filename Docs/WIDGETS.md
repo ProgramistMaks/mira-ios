@@ -1,6 +1,6 @@
 # Widgets and Dynamic Island
 
-Implementation is present in source; the shared lifecycle compiles and passes thirteen Swift tests on Linux. Native compilation and device/UI acceptance are pending. See VERIFICATION.md. No widget screenshot or IPA is approved for delivery.
+The widget extension compiles and is embedded in the checked iPhone package. Shared lifecycle and native widget integration tests passed on iOS 26.5 in run `43953994238`. Its route UI test incorrectly relaunched the app for each link; the corrected warm-route test is being rerun. System widget presentation, signing and physical-device acceptance remain pending. See VERIFICATION.md.
 
 ## Surfaces and interactions
 

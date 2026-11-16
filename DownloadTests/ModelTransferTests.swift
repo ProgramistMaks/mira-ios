@@ -57,8 +57,23 @@ final class ModelTransferTests: XCTestCase {
     private var expected: Data { Data((0..<Int(size)).map { UInt8($0 % 256) }) }
     private func saved(_ item: ModelTransferResource) -> Int64 { ModelTransfer.savedBytes(for: item, in: directory) }
     private func interrupt(_ item: ModelTransferResource) async throws {
-        do { _ = try await ModelTransfer(resource: item, directory: directory).run(); XCTFail("Truncated response must fail") }
-        catch { }
+        let download = Task { try await ModelTransfer(resource: item, directory: directory).run() }
+        defer { download.cancel() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while saved(item) < 131_072 && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard saved(item) >= 131_072 else {
+            download.cancel()
+            let result = await download.result
+            throw NSError(domain: "ModelTransferTests", code: 2, userInfo: [NSLocalizedDescriptionKey:
+                "HTTP fixture prefix was not saved before disconnect: \(result)"])
+        }
+        let query = URLComponents(url: item.url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        let disconnect = baseURL.appendingPathComponent("disconnect").appending(queryItems: query)
+        _ = try await URLSession.shared.data(from: disconnect)
+        do { _ = try await download.value; XCTFail("Truncated response must fail") }
+        catch { XCTAssertFalse(error is CancellationError, "The server must drop the connection, not the test") }
         XCTAssertGreaterThan(saved(item), 0)
         XCTAssertLessThan(saved(item), size)
     }

@@ -20,6 +20,7 @@ SIZE = 1024 * 1024
 CHUNK = 64 * 1024
 DATA = bytes(range(256)) * (SIZE // 256)
 requests = {}
+disconnects = {}
 lock = threading.Lock()
 
 
@@ -32,6 +33,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         case = urllib.parse.parse_qs(parsed.query).get('case', [''])[0]
+        if parsed.path == '/disconnect':
+            with lock:
+                for key in (case, case + '-target'):
+                    disconnects.setdefault(key, threading.Event()).set()
+            self.send_response(200)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return
         if parsed.path == '/requests':
             with lock:
                 body = json.dumps(requests.get(case, [])).encode()
@@ -84,8 +93,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif mode == 'oversize':
                 self.wfile.write(payload + b'overflow')
             elif attempt == 1 and mode not in ['slow', 'complete']:
+                with lock:
+                    disconnect = disconnects.setdefault(case, threading.Event())
                 self.wfile.write(payload[:2 * CHUNK])
                 self.wfile.flush()
+                # Let URLSession deliver the prefix before simulating the drop.
+                # Immediate shutdown may discard all buffered bytes on macOS.
+                disconnect.wait(timeout=20)
                 self.connection.shutdown(socket.SHUT_RDWR)
             else:
                 for start in range(offset, SIZE, CHUNK):
