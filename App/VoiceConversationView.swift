@@ -45,7 +45,6 @@ struct VoiceConversationView: View {
                 }
                 .padding(16).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Palette.panel, in: RoundedRectangle(cornerRadius: 20))
-                controls
                 if let reply {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
@@ -74,6 +73,11 @@ struct VoiceConversationView: View {
             }.padding(20)
         }
         .scrollDismissesKeyboard(.interactively)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            controls
+                .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 8)
+                .background(Palette.background)
+        }
         .accessibilityIdentifier("voice.panel")
     }
     private var controls: some View {

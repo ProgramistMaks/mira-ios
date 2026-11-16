@@ -70,7 +70,7 @@ struct CompanionView: View {
                 let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
                 layout {
                     stage.frame(width: wide ? geometry.size.width * 0.46 : nil,
-                                height: wide ? nil : max(160, geometry.size.height * (voiceMode ? 0.52 : 0.40)))
+                                height: wide ? nil : max(160, geometry.size.height * (voiceMode ? 0.46 : 0.40)))
                     Group {
                         if voiceMode {
                             VoiceConversationView(store: store, voice: voice) { switchToText() }

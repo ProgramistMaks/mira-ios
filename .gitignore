@@ -10,3 +10,4 @@ node_modules/
 Resources/Web/
 .build/
 Packages/LocalLLM/Artifacts/
+__pycache__/

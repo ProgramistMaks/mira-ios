@@ -4,7 +4,7 @@ Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud
 
 **Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the Qwen/Gemma catalogue has been compiled on macOS CI. Real Swift inference for both model families, fourteen native unit tests and two UI tests passed; model selection, speech playback and offline command review are covered. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
 
-Liquid Glass is implemented and has internal iOS 26 visual evidence. The full UI suite passed on the iOS 18 fallback; iOS 26 checks exposed cold-start timing and download-cancellation issues. Latest loading, cancellation and icon-contrast corrections await a fresh native build: GitHub blocked the next run for a billing/spending-limit issue. Earlier passing tests do not validate those latest corrections.
+Liquid Glass is implemented and has internal iOS 26 visual evidence. The current source compiles into a complete iPhone package with Xcode 26.6; workflow `43953994238` passed 70 native unit tests and three UI scenarios, then exposed a route-test relaunch error and hit the job deadline. A focused voice/routes follow-up is pending. Earlier billing/capacity blocks are historical, not the current build status. See [verification](Docs/VERIFICATION.md) for the final test outcome and scope.
 
 Subsequent renderer changes reduce facial morph data and fix readiness/reload behavior after graphics context loss. Real-model Chromium checks passed; these changes also await native verification. See [verification evidence](Docs/VERIFICATION.md) for measured scope and remaining limits.
 
@@ -12,7 +12,7 @@ The six authored character motions now include pelvis weight shifts and small di
 
 Animation settings request up to 120 fps by default, with 30/60/120/240 targets gated by the actual screen. The renderer follows host animation callbacks; 240 requires a supporting display/host, and actual high-refresh WKWebView performance has not been verified. Low power, heat and Reduce Motion retain a 30 fps cap.
 
-[Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The new extension, lifecycle and route tests await native compilation/QA because hosted macOS builds remain blocked. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
+[Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The extension now compiles and is embedded in the validated device package. The route test is being corrected to open warm links without relaunching; system presentation and physical-device QA remain pending. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
 
 The portable Swift suite has seventy-one passing tests: twenty-two interaction cases, twelve HTTP download cases, six file-verification cases, sixteen chat-recovery cases, seven mouth-bridge cases and eight voice-conversation cases. Verification reports progress, and pausing preserves the model file. Chat replies retain interruption reasons, checkpoint streamed text and offer explicit question restoration without resending. See [chat recovery](Docs/CHAT-RECOVERY.md). Mouth updates keep only the latest pending sample and expire from capture time; local browser checks verify the actual VRM mouth response. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. Apple framework integration and the new native UI still need verification; hosted iOS checks are batched according to the [build budget](Docs/QUALITY.md).
 
@@ -31,11 +31,11 @@ npm run build
 
 ## macOS build and user signing
 
-Install Xcode 26.2 with the iOS 26.2 SDK and simulator runtime, Node 22 and XcodeGen. Run:
+Install Xcode 26.6 with the iOS 26.5 SDK and simulator runtime, Node 22 and XcodeGen. Run:
 
 ```sh
 bash Scripts/build-ios.sh
-bash Scripts/test-ios.sh
+MIRA_TEST_IOS_VERSION=26.5 bash Scripts/test-ios.sh
 ```
 
 The minimum deployment target remains iOS 18. Native [Liquid Glass](Docs/LIQUID-GLASS.md) is used on iOS 26+, with standard material on older systems. To test the fallback, install the iOS 18.5 simulator runtime and run `MIRA_TEST_IOS_VERSION=18.5 bash Scripts/test-ios.sh` with a fresh result-bundle directory.
@@ -43,6 +43,8 @@ The minimum deployment target remains iOS 18. Native [Liquid Glass](Docs/LIQUID-
 The first script creates one `build/Mira-unsigned.ipa` from an actual device archive, with the character/renderer, llama runtime and WidgetKit extension inside. Model weights stay downloadable in the app, as the user requested. A fresh staging directory avoids retaining files from an older build. `Scripts/check-ipa.py` checks package completeness/device binaries and writes `build/Mira-package-report.json` with the archive's SHA256. It does not validate signatures. The IPA is not installable as-is: the user must re-sign the app, framework and widget extension using a valid identity/profile compatible with the device and bundle IDs. No certificate is needed on CI for this unsigned workflow. The workflow under `.github/workflows/ios.yml` is manual and produces an **internal** artifact only after native tests pass. It is not a release pipeline.
 
 The workflow assumes this directory is the repository root. The user authorized the private repository ProgramistMaks/mira-ios. macOS runner availability/charges depend on the user's GitHub plan.
+
+Russian first-launch and signing instructions: [INSTALL-RU.md](Docs/INSTALL-RU.md).
 
 ## Configuration and limitations
 

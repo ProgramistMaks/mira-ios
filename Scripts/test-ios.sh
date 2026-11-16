@@ -15,9 +15,18 @@ python3 - "$device_id" <<'PY'
 import subprocess,sys
 subprocess.run(["xcrun", "simctl", "bootstatus", sys.argv[1], "-b"], check=True, timeout=240)
 PY
+test_selection=()
+case "${MIRA_NATIVE_TEST_SCOPE:-full}" in
+  full) ;;
+  voice_and_routes)
+    test_selection=(-only-testing:CompanionUITests/VoiceConversationTests -only-testing:CompanionUITests/WidgetRouteTests)
+    ;;
+  *) echo 'Unknown native test scope' >&2; exit 2 ;;
+esac
+echo "Native test scope: ${MIRA_NATIVE_TEST_SCOPE:-full}"
 xcodebuild -project Companion.xcodeproj -scheme Companion \
   -destination "platform=iOS Simulator,id=$device_id" \
   -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
   -test-timeouts-enabled YES -default-test-execution-time-allowance 1200 \
   -maximum-test-execution-time-allowance 1200 \
-  -resultBundlePath build/Tests.xcresult CODE_SIGNING_ALLOWED=NO test
+  -resultBundlePath build/Tests.xcresult "${test_selection[@]}" CODE_SIGNING_ALLOWED=NO test

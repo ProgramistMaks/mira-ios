@@ -19,6 +19,9 @@ final class VoiceConversationTests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["voice.level"].exists,
                        "Entering voice mode must not open the microphone")
         XCTAssertTrue(app.buttons["voice.send"].isEnabled)
+        XCTAssertTrue(app.buttons["voice.send"].isHittable,
+                      "Voice controls must stay visible without scrolling the transcript")
+        XCTAssertTrue(app.buttons["voice.microphone"].isHittable)
         app.buttons["voice.send"].tap()
         XCTAssertTrue(app.navigationBars["Новая заметка"].waitForExistence(timeout: 5))
         app.buttons["Отмена"].tap()

@@ -1,6 +1,50 @@
 # Verification — 2026-11-16
 
-## Current native attempt and HTTP fixture repair
+## Complete-package native results and focused follow-up
+
+Run `43953994238` tested source `6a5eadab89c7ea0ab8b215bc8df9ab1e40bda665` on
+macos-26-intel / Xcode 26.6 / iOS 26.5 (iPhone 17 simulator). The standalone HTTP
+preflight, all 71 portable Swift tests and five package guards passed. The llama
+runtime was prepared and cached. The actual device archive and generated compact
+IPA passed the checks for the embedded renderer, VRM, runtime and widget binary.
+
+The saved simulator logs establish **70 native unit tests passed**, including real
+TTS playback, mouth amplitude, stop/resume/completion, shared lifecycle, voice,
+chat recovery and widget integration. **Three UI tests passed**: startup and
+persistent/offline notes with portrait/landscape checks, model selection and
+cancelled download, and the voice-mode draft/review/settings flow. The fourth UI
+test failed on draft retention after widget navigation. The run reached its
+45-minute job limit during result finalization; the XCResult is incomplete, so
+standard screenshot export failed and IPA publication was skipped. This is not a
+successful complete workflow or a deliverable artifact.
+
+The diagnostic archive (`14274347059`) contains the test logs and seven raw PNG
+attachments. Those screenshots were recovered and inspected internally: the
+character is present in portrait/landscape, native glass and the catalogue are
+legible, but the voice Send button fell below the viewport. The controls now use a
+bottom safe-area inset, and the portrait voice scene uses 46% rather than 52% to
+leave more room for the editable transcript. A new assertion requires both Send
+and Record to be hittable without scrolling.
+
+The route failure was a test-harness error: `XCUIApplication.open` launched a new
+process for every URL (PIDs 43038, 44114, 44680, 45045, 45577). The in-memory draft
+was therefore discarded by relaunch, not by the warm route under test. The first
+cold URL launch remains; subsequent links use `XCUIDevice.shared.system.open` to
+exercise OS routing to the running app. An assertion now checks the typed draft
+before navigation as well as after it. Apple API references:
+- https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/open(_:)
+- https://developer.apple.com/documentation/xcuiautomation/xcuisystem/open(_:)
+
+The next run uses the explicit `voice_and_routes` test scope: both changed UI
+scenarios plus a fresh complete device archive/package check. Full remains the
+workflow default. Other production logic is unchanged from the passing native
+unit and three UI results above; repeating all those scenarios and multi-GB
+inference downloads would not resolve these two findings. The new scope and view
+changes passed shell/Swift syntax checks locally; native confirmation is pending.
+The compact package remains for user signing/device testing, not a claim of
+reference-quality parity or measured physical-device refresh rate.
+
+## Previous native attempt and HTTP fixture repair
 
 The pending macos-15-intel run `43950455692` was cancelled before any step executed.
 After confirming the current official runner image/toolchain inventory, one
@@ -19,11 +63,11 @@ loopback preflight. The HTTP server binds numeric loopback without `getfqdn`,
 restores normal termination, and records startup stage markers for diagnosis.
 These remove host-dependent startup behavior without bypassing download tests or
 altering the application's network code. The original log does not identify
-which startup operation stalled; native confirmation of the repair is required.
+which startup operation stalled; the next run confirmed the combined repair on macOS.
 All 71 tests passed locally after the repair, and the twelve HTTP cases also passed
 with an explicit interpreter path. The standalone fixture probe passed as well.
 
-## Single IPA packaging request — build still pending
+## Single IPA packaging request
 
 The user requested one installable package and explicitly chose to keep model
 weights downloadable inside the app. The current environment is Linux, with no
@@ -43,8 +87,8 @@ Five synthetic packaging guard tests passed, plus shell syntax/whitespace checks
 The downloaded previous actual native artifact from run `43841702974` was inspected
 internally: its app/runtime are iOS arm64, but the current package validator rejects
 it because it predates `MiraWidgets.appex`. It is not a substitute for the current
-app and was not delivered. Run `43950455692` remains the single pending native
-validation for the current application code; no duplicate run was dispatched.
+app and was not delivered. The cancelled run was replaced sequentially; see the
+active validation above. No parallel duplicate builds were dispatched.
 
 ## Voice conversation milestone — local checks completed
 
