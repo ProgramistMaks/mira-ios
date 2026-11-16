@@ -9,6 +9,8 @@
 - Body clips do not invent mouth motion: the existing audible-PCM amplitude and 180 ms stale-sample cutoff still control the jaw. Phoneme articulation remains unfinished.
 - Native code requests a 30 fps cap under Low Power Mode or serious/critical thermal state; normal cap is 60. Thinking and Reduce Motion also cap at 30. These are scheduling limits, not measured iPhone frame rates or energy claims.
 - The canvas pauses while the scene is inactive or settings/commands cover it, then resumes the same loaded model. No new network access or conversation/credential bridge data is introduced.
+- Facial morph targets are combined by VRM expression before the first render, using the installed three-vrm utility. The regression probe compares every preset plus mixed blink/mouth/smile poses against the original model's vertex positions and normals; the probe is not bundled into the app.
+- WebGL context loss clears readiness and the last speech sample, then suspends animation/rendering until the restored context triggers a local scene reload. Readiness is reported again only after an actual rendered frame; the native host reapplies its current state after navigation completes. Loss listeners are installed before model loading.
 
 Validation: unit tests exercise loop seams, one-shot return, rapid interruption, gesture priority/cooldown, Reduce Motion, and matching elapsed-time poses at 30/60 fps. Browser tests exercise the real VRM, all four sustained states at three viewport sizes, hit-tested touch and drag/background rejection, pause/resume, and explicit model-load errors. Native iOS evidence is recorded in VERIFICATION.md.
 

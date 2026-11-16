@@ -53,6 +53,16 @@ async function main() {
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   document.body.appendChild(renderer.domElement);
+  let contextLost = false;
+  // Install before loading: a context can disappear during model decoding too.
+  renderer.domElement.addEventListener('webglcontextlost', event => {
+    event.preventDefault(); contextLost = true;
+    window.companion.ready = false;
+    speechAmplitude = 0; speechReceivedAt = -Infinity;
+    report('error', 'context lost');
+  });
+  // Rebuild GPU resources and let the native host resend its current state.
+  renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
   const key = new THREE.DirectionalLight(0xfff0e4, 1.25);
@@ -68,6 +78,7 @@ async function main() {
   VRMUtils.rotateVRM0(avatar);
   VRMUtils.removeUnnecessaryVertices(avatar.scene);
   VRMUtils.combineSkeletons(avatar.scene);
+  VRMUtils.combineMorphs(avatar);
   avatar.scene.traverse(object => { object.frustumCulled = false; });
   // Bring the sample's T-pose into a relaxed resting pose.
   const left = avatar.humanoid.getNormalizedBoneNode('leftUpperArm');
@@ -127,8 +138,6 @@ async function main() {
   });
   renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; });
   renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; });
-  renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); report('error', 'context lost'); });
-  renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
   const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
   const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
   const leftElbow = bone('leftLowerArm'), rightElbow = bone('rightLowerArm');
@@ -147,7 +156,7 @@ async function main() {
     if (timestamp - previousFrame < 1000 / cap - 1) return;
     previousFrame = timestamp;
     const delta = Math.min(clock.getDelta(), 0.05);
-    if (document.hidden || !active) return;
+    if (document.hidden || !active || contextLost || renderer.getContext().isContextLost()) return;
     elapsed += delta;
     const pose = acting.update(delta, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;

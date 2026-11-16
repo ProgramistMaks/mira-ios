@@ -1,5 +1,17 @@
 # Verification — 2026-11-16
 
+## Renderer memory and context recovery
+
+The current source combines facial morph targets by VRM expression and fixes stale readiness after WebGL context loss. The animation loop cannot reassert readiness while the context is lost; recovery reloads the local scene and requires a rendered frame.
+
+- `npm run check`, `npm test`, `npm run build` and the real-model Chromium check passed. Direct execution of the two unit-test files also reported all nine individual tests passing.
+- The bundled VRM's summed position-target count across mesh primitives fell from 369 to 126. Unique morph attribute arrays fell from 2,118,552 to 723,408 bytes (about 66%). These are morph-array measurements, not total app RAM, GPU allocation or device-performance measurements.
+- The browser probe compared all fifteen expression presets, neutral and two mixed blink/mouth/smile cases before and after optimization. Every sampled vertex position and normal matched exactly in all eighteen cases (maximum absolute difference 0). The probe is excluded from the app bundle.
+- A real `WEBGL_lose_context` interruption cleared readiness and retained the error state across subsequent frames. Restoring the context reloaded the local scene, rendered the character and restored readiness with exactly one canvas. The restored-scene screenshot and thinking pose were reviewed internally. Existing touch, drag rejection, pause/resume, reduced-motion, three-size and missing-model checks also passed, with no external requests or page errors.
+- This is Linux Chromium evidence. WKWebView recovery, physical-device resource use and reference quality remain unverified; no IPA or screenshots were delivered.
+
+One retry of native CI, run `43851757448` at pre-renderer commit `5970d78808d61bc6b031964f4ed9a545c2ec2c24`, was rejected before execution by the same GitHub billing/spending-limit error. No further builds were requested after that retry. Current renderer changes therefore also await native verification. The previously pending obsolete run `43849413671` is now completed with failure and has no active job.
+
 ## Liquid Glass update — final corrections awaiting native verification
 
 Native glass on iOS 26+ and the iOS 18 material fallback were implemented in `d7b31ecfe2d1e237e246f8e280ff9d66069b366f`. See LIQUID-GLASS.md for presentation scope and Apple references. The latest source includes subsequent corrections described below; earlier passing results do not certify those corrections.
@@ -15,9 +27,9 @@ Native glass on iOS 26+ and the iOS 18 material fallback were implemented in `d7
 
 **Corrections after review:** `7c7c26b` adds an explicit character-loading indicator and a native download alert with separate “Скачать” / “Отмена” buttons. Cold-launch UI waits allow 120 seconds while still requiring both readiness and actual character pixels. The following review also sets prominent action icons to a dark foreground for contrast and raises the per-test CI ceiling to twenty minutes: the successful iOS 18 UI scenario took 691 seconds, exceeding the earlier ten-minute ceiling. These latest corrections have not completed a fresh native build. Shell syntax, YAML parsing and whitespace checks passed locally; no Apple SDK or Swift compiler is available in this Linux workspace.
 
-**External blocker:** run `43850639531` for `7c7c26b` never started. GitHub reported: “The job was not started because recent account payments have failed or your spending limit needs to be increased.” The owner must resolve Billing & plans before new hosted checks can run. No spending limit, payment method or account setting was changed, and no further builds were dispatched after that rejection.
+**External blocker:** run `43850639531` for `7c7c26b` never started. GitHub reported: “The job was not started because recent account payments have failed or your spending limit needs to be increased.” The owner must resolve Billing & plans before new hosted checks can run. No spending limit, payment method or account setting was changed. A later retry is recorded above.
 
-Apple Silicon attempt `43845119642` also failed before execution because GitHub could not acquire a hosted runner after fifteen minutes. Optional newer-Xcode attempt `43849413671` targets Xcode 26.6 / iOS 26.5 on macOS 26 Intel, on the obsolete pre-correction commit `0cab0bf`. It has no acquired job at the last check; normal and force-cancel requests returned HTTP 409 (“has not been queued yet”). It must not be treated as verification of current source. Recheck/cancel that attempt before resuming CI after billing is restored.
+Apple Silicon attempt `43845119642` also failed before execution because GitHub could not acquire a hosted runner after fifteen minutes. Optional newer-Xcode attempt `43849413671` targeted Xcode 26.6 / iOS 26.5 on macOS 26 Intel, on the obsolete pre-correction commit `0cab0bf`. While pending, normal and force-cancel requests returned HTTP 409 (“has not been queued yet”); it has subsequently completed with failure. It must not be treated as verification of current source.
 
 No IPA or screenshots were delivered as a finished product. Accessibility settings, physical-device startup/graphics performance, corrected native UI behavior and reference parity remain unverified.
 

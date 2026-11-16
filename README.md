@@ -6,6 +6,8 @@ Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud
 
 Liquid Glass is implemented and has internal iOS 26 visual evidence. The full UI suite passed on the iOS 18 fallback; iOS 26 checks exposed cold-start timing and download-cancellation issues. Latest loading, cancellation and icon-contrast corrections await a fresh native build: GitHub blocked the next run for a billing/spending-limit issue. Earlier passing tests do not validate those latest corrections.
 
+Subsequent renderer changes reduce facial morph data and fix readiness/reload behavior after graphics context loss. Real-model Chromium checks passed; these changes also await native verification. See [verification evidence](Docs/VERIFICATION.md) for measured scope and remaining limits.
+
 ## Renderer checks
 
 ```sh

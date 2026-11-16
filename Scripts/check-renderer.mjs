@@ -2,10 +2,17 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { build } from 'esbuild';
 
 const root = new URL('../Resources/Web/', import.meta.url);
+const morphProbe = await build({ entryPoints: ['Scripts/check-morphs.mjs'], bundle: true,
+  write: false, format: 'esm', target: ['chrome120'] });
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
+  if (path === '/check-morphs.js') {
+    response.setHeader('Content-Type', 'application/javascript');
+    response.end(morphProbe.outputFiles[0].contents); return;
+  }
   const files = { '/': ['index.html', 'text/html'], '/avatar.js': ['avatar.js', 'application/javascript'],
     '/character.vrm': ['character.vrm', 'model/gltf-binary'] };
   const entry = files[path];
@@ -79,6 +86,30 @@ try {
     await page.screenshot({ path: `/tmp/companion-review/avatar-${width}.png` });
     assert.equal(await page.locator('canvas').count(), 1);
   }
+  // Exercise actual WebGL loss, including time for the animation loop to run.
+  await page.evaluate(() => {
+    const gl = document.querySelector('canvas').getContext('webgl2');
+    window.recoveryProbe = gl.getExtension('WEBGL_lose_context');
+    if (!window.recoveryProbe) throw new Error('Context-loss extension unavailable');
+    window.recoveryProbe.loseContext();
+  });
+  await page.waitForFunction(() => document.documentElement.dataset.status === 'error');
+  await page.waitForTimeout(400);
+  assert.equal(await page.evaluate(() => window.companion.ready), false);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.status), 'error');
+  const navigation = page.waitForEvent('load');
+  await page.evaluate(() => window.recoveryProbe.restoreContext());
+  await navigation;
+  await page.waitForFunction(() => window.companion?.ready === true, undefined, { timeout: 30000 });
+  assert.equal(await page.locator('canvas').count(), 1);
+  assert.equal(await page.evaluate(() => window.companion.phase), 'idle');
+  await page.screenshot({ path: '/tmp/companion-review/context-restored.png' });
+  // Verify all expression presets and mixed face poses on the real bundled VRM.
+  const morphs = await page.evaluate(async () => (await import('/check-morphs.js')).checkMorphs());
+  assert.ok(morphs.after.targets < morphs.before.targets, JSON.stringify(morphs));
+  assert.ok(morphs.after.attributeBytes < morphs.before.attributeBytes, JSON.stringify(morphs));
+  assert.ok(morphs.maxDelta < 0.00001, JSON.stringify(morphs));
+  console.log('Morph regression:', JSON.stringify(morphs));
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);
   // A broken model must produce an explicit error, never a fake ready state.
@@ -87,7 +118,7 @@ try {
   await broken.goto(address);
   await broken.waitForFunction(() => document.documentElement.dataset.status === 'error');
   assert.equal(await broken.evaluate(() => window.companion.ready), false);
-  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
+  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
