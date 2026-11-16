@@ -1,5 +1,31 @@
 # Verification — 2026-11-16
 
+## Chat recovery — portable logic verified, native integration pending
+
+The production cloud transport now delegates SSE decoding to `ConversationCore`.
+Explicit length/filter/unsupported stops remain interrupted; EOF never certifies
+completion. New optional metadata preserves the originating question and reason.
+Streamed text is checkpointed approximately once per second, with immediate saves
+at completion/error/cancellation and invalidation of obsolete delayed callbacks.
+Only the active reply shows loading. “Вернуть вопрос” restores the question without
+sending it, confirms replacement of a nonempty draft, and is disabled during
+generation/recording. Incomplete replies do not automatically start voice playback.
+
+- Swift 6.2.3 compiled the actual shared source; **all 56 XCTest cases passed**.
+  Sixteen new cases cover byte-delivered Russian/emoji text, SSE framing/BOM,
+  role/usage events, terminal reasons, empty/malformed/error streams, event/output
+  limits, interrupted-message migration, question linking/legacy recovery, draft
+  replacement protection, checkpoint coalescing and obsolete callback rejection.
+- Swift syntax parsing passed for the changed native app files. The shared sources
+  and tests are wired into the XcodeGen app/native unit-test targets. Syntax parsing
+  does not type-check Apple SDK calls or validate SwiftUI presentation.
+- No real provider calls or credentials were used. Native URLSession integration,
+  UI/focus behavior, protected disk writes, abrupt termination/background recovery
+  and voice integration remain unverified. A sudden termination can lose the text
+  since the last successful checkpoint; the change does not promise zero data loss.
+- No macOS/iOS workflow was dispatched, following the user's build-budget policy.
+  Local model pins/runtime and renderer sources are unchanged in this update.
+
 ## Planted-foot character acting — local renderer validation
 
 The six authored clips now include bounded pelvis weight shifts, turns and dips.

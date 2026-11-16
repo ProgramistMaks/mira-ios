@@ -1,58 +1,62 @@
-# Chat recovery — review findings, implementation pending
+# Chat recovery — implemented in source, native validation pending
 
-Reviewed on 2026-11-16 against the source following `3d62520`.
-The execution workspace became unavailable before the source-edit command started.
-No chat implementation changes or new test results are claimed here. The existing
-character animation work is already saved in GitHub. Do not dispatch a hosted build
-to work around this workspace outage; follow the build budget in QUALITY.md.
+## Completion and partial text
 
-## Confirmed source findings
+`App/ChatClient.swift` uses the same `ConversationCore/ChatStreamDecoder.swift`
+byte parser exercised by the portable tests. The stream must contain an explicit
+`[DONE]` event. EOF alone, even following `finish_reason: "stop"`, is not success.
+The decoder handles split UTF-8, an initial BOM, LF/CRLF/CR framing, multiline data,
+role/usage events and keepalives. Limits cover individual lines, whole SSE data
+events, output characters (64,000) and output UTF-8 bytes (1 MiB).
 
-- `Core/Conversation.swift`: `ChatClient.Chunk.Choice` does not decode
-  `finish_reason`. Any text followed by `[DONE]` returns success, including a
-  provider response ending with `finish_reason: "length"`. The UI can therefore
-  label a truncated cloud response complete. EOF without `[DONE]` already fails.
-- `App/CompanionStore.swift`: the empty interrupted assistant message is persisted
-  before generation, but `append(_:to:)` only changes memory. Normal completion,
-  errors, cancellation and background cancellation save the current text. An abrupt
-  process termination during generation can lose all streamed text since the initial
-  save. This is not a claim that normal connection-error handling drops the text.
-- `App/CompanionApp.swift`: loading and interrupted labels depend on the global
-  `thinking` flag. Starting a new answer can show a spinner on an older empty
-  interrupted answer and hide interruption labels on previous answers.
-- The conversation has no action to restore the original question from a stopped
-  answer. Automatic retries must not be introduced: they can consume provider quota.
+Completion reasons remain distinct:
 
-## Next implementation batch
+- `stop`, or a legacy provider's `[DONE]` without a reason: complete only when
+  non-whitespace text was received.
+- `length`: partial answer, shown with the length-limit label.
+- `content_filter`: provider-stopped answer, including an empty answer.
+- Unsupported/unknown reasons: incomplete, never executed as a tool/action.
+- Malformed data, provider error envelopes, invalid UTF-8, output overflow and
+  missing end markers fail the stream without discarding already displayed text.
 
-1. Extract a shared, portable stream decoder used by the actual transport. Track
-   completion reasons; distinguish a normal stop, length limit, provider filtering
-   and unsupported completion. Retain the explicit end-marker requirement and bound
-   both line and whole-event sizes. Preserve UTF-8 across byte boundaries and handle
-   SSE LF, CRLF and CR framing without duplicate events.
-2. Add optional message metadata for interruption reason and originating question,
-   keeping existing stored JSON readable. Mark only the currently active reply as
-   loading. Do not automatically voice an incomplete answer as a finished response.
-3. Coalesce streamed-text persistence into approximately one-second checkpoints.
-   Finalization, stopping, backgrounding and error handling still save immediately.
-   Cancel old checkpoint tasks so they cannot run against a later answer or cleared
-   conversation. A checkpoint cannot promise zero loss on sudden termination.
-4. Offer an explicit action to return the original question to the composer without
-   sending it. Preserve an existing draft unless the user confirms replacing it.
-   The user then chooses whether to submit another request.
+`CompanionStore` persists the returned interruption reason. The local runtime's
+existing length-stop result maps to the same length label. Incomplete answers do
+not automatically start speech playback. Loading indicators belong only to the
+active reply; older interrupted replies keep their labels during a new response.
 
-## Local verification required before committing implementation
+## Saving during generation
 
-- Feed the production decoder actual SSE bytes, including split Russian UTF-8,
-  keepalives, multiline events, CR/LF variants, final content with a finish reason,
-  usage events, length/filter stops, malformed or oversized input, missing end
-  markers, empty answers and late/conflicting chunks.
-- Verify existing message JSON migration, interruption metadata round trips and
-  originating-question recovery for both new and legacy messages.
-- Use controlled async callbacks to verify checkpoint coalescing and stale-task
-  cancellation after stop, completion, clearing history and starting another reply.
-- Parse changed app Swift sources locally and run the portable suite. Native UI and
-  Apple URLSession integration remain pending the next justified batched iOS build.
+`ResponseCheckpoint` coalesces token updates into one pending save, approximately
+one second after the first unsaved update. The save reads the latest conversation
+snapshot. Normal completion, errors, explicit stopping and background cancellation
+still save immediately. Cancellation invalidates the pending callback so it cannot
+save after clearing history or act on a later response.
 
-No model pins, inference runtime, API credentials or hosted workflows changed during
-this review. No paid iOS build or provider request was started.
+Writes continue to use the existing atomic, file-protected `LocalStore`. An abrupt
+process termination can still lose text since the last successful checkpoint;
+storage failures are surfaced through the existing error UI. This is not a promise
+of lossless persistence across a crash or failed disk write.
+
+## Restoring a question
+
+New assistant replies retain an optional originating-question ID. Previously saved
+messages decode without the new optional fields; a legacy interrupted reply can
+recover its immediately preceding user question. Missing or dangling links do not
+guess another question.
+
+“Вернуть вопрос” copies the question to the composer. It never sends a request.
+A nonempty draft requires confirmation before replacement. Restore is unavailable
+during generation or recording setup/capture. The user explicitly presses Send to
+make another request; no automatic retries or provider quota consumption are added.
+
+## Verification and build budget
+
+The portable suite passes **56 tests**, including nine stream-decoder cases, four
+message/recovery cases and three controlled-async checkpoint cases. New tests are
+also wired into the native unit-test target. Changed app files passed Swift syntax
+parsing, which is not Apple SDK type checking.
+
+Native URLSession streaming, SwiftUI labels/confirmation/focus, file-protection
+behavior, background/relaunch recovery and speech integration still need the next
+justified batched iOS check. No hosted workflow, real provider request, model download
+or inference smoke run was started for this update. Model pins and runtime are unchanged.

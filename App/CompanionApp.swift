@@ -15,7 +15,7 @@ struct CompanionApp: App {
                     if phase == .background {
                         store.localModel.pause()
                         let continueSpeech = store.voice.speaking
-                        if !continueSpeech { store.cancel() }
+                        if !continueSpeech { store.cancel(reason: .background) }
                         store.liveActivities.setForeground(false, continuingSpeech: continueSpeech)
                     }
                 }
@@ -38,6 +38,7 @@ struct CompanionView: View {
     @State private var showCommands = false
     @State private var pendingRoute: MiraRoute?
     @State private var routeWaitingForDismiss = false
+    @State private var questionToRestore: UUID?
     @FocusState private var composerFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var phase: CompanionPhase {
@@ -79,6 +80,19 @@ struct CompanionView: View {
         .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
         } message: { Text(store.error ?? "") }
+        .confirmationDialog("Заменить черновик исходным вопросом?", isPresented: Binding(
+            get: { questionToRestore != nil }, set: { if !$0 { questionToRestore = nil } }
+        ), titleVisibility: .visible, presenting: questionToRestore) { id in
+            Button("Заменить черновик") {
+                if store.restoreQuestion(for: id, replacingDraft: true) {
+                    composerFocused = true
+                }
+                questionToRestore = nil
+            }
+            Button("Отмена", role: .cancel) { questionToRestore = nil }
+        } message: { _ in
+            Text("Вопрос появится в поле ввода. Отправка начнётся только после нажатия «Отправить».")
+        }
         .onAppear { updateFrameRate() }
         .onOpenURL { url in
             guard let route = MiraRoute(url: url) else { return }
@@ -94,7 +108,7 @@ struct CompanionView: View {
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notification in
             guard let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   AVAudioSession.InterruptionType(rawValue: value) == .began else { return }
-            store.cancel()
+            store.cancel(reason: .incomplete)
         }
     }
     private func didDismissSheet() {
@@ -181,10 +195,24 @@ struct CompanionView: View {
                             VStack(alignment: .leading, spacing: 7) {
                                 Text(message.role == .user ? "ТЫ" : "МИРА")
                                     .font(.system(size: 9, weight: .semibold)).tracking(2).foregroundStyle(Palette.lavender)
-                                if message.content.isEmpty && store.thinking { ProgressView() }
+                                if message.content.isEmpty && store.activeID == message.id { ProgressView() }
                                 else { Text(message.content).textSelection(.enabled).font(.system(size: 16)).lineSpacing(5) }
-                                if message.interrupted && !store.thinking {
-                                    Text("Ответ прерван").font(.caption).foregroundStyle(.secondary)
+                                if message.interrupted && store.activeID != message.id {
+                                    Text(message.interruption?.title ?? "Ответ прерван")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                        .accessibilityIdentifier("conversation.interrupted.\(message.id)")
+                                    if store.question(for: message.id) != nil {
+                                        Button {
+                                            if store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                                if store.restoreQuestion(for: message.id) { composerFocused = true }
+                                            } else { questionToRestore = message.id }
+                                        } label: {
+                                            Label("Вернуть вопрос", systemImage: "arrow.uturn.backward")
+                                                .font(.caption).frame(minHeight: 44)
+                                        }
+                                        .disabled(store.thinking || voice.recordingBusy)
+                                        .accessibilityIdentifier("conversation.restore.\(message.id)")
+                                    }
                                 }
                             }
                             .padding(18).frame(maxWidth: .infinity, alignment: .leading)

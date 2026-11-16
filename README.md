@@ -12,7 +12,7 @@ The six authored character motions now include pelvis weight shifts and small di
 
 [Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The new extension, lifecycle and route tests await native compilation/QA because hosted macOS builds remain blocked. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
 
-The portable Swift suite has forty passing tests: twenty-two interaction cases, twelve HTTP download cases and six file-verification cases. Verification now reports progress, and pausing preserves the file for another attempt. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. The app uses those same sources; Apple framework integration, audio/composer behavior and the new download UI still need native verification. The user confirmed that iOS builds are available again on 2026-11-16; see the latest run evidence in VERIFICATION.md.
+The portable Swift suite has fifty-six passing tests: twenty-two interaction cases, twelve HTTP download cases, six file-verification cases and sixteen chat-recovery cases. Verification reports progress, and pausing preserves the model file. Chat replies retain interruption reasons, checkpoint streamed text and offer explicit question restoration without resending. See [chat recovery](Docs/CHAT-RECOVERY.md). Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. Apple framework integration and the new native UI still need verification; hosted iOS checks are batched according to the [build budget](Docs/QUALITY.md).
 
 ## Renderer checks
 

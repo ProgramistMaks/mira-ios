@@ -72,6 +72,12 @@ Fresh native attempt `43927090461` for transfer source `b287ced` was rejected be
 execution by the same GitHub failed-payment/spending-limit block on 2026-11-16.
 It supplies no new native validation.
 
-The portable suite now passes forty tests, including six real file-verification
+The portable suite now passes fifty-six tests, including six real file-verification
 cases. Verification percent and explicit pause feedback are implemented in source;
 their iOS presentation and the CryptoKit/store integration remain unverified.
+
+The new chat-recovery block adds sixteen portable tests for the actual stream
+decoder, backward-compatible message metadata, draft-preserving question restoration
+and delayed save cancellation. Native stream transport, row/confirmation/focus UI,
+disk-protection/background behavior and speech integration remain pending. See
+CHAT-RECOVERY.md. No hosted build was dispatched for this locally verified batch.

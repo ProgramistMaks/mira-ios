@@ -24,6 +24,7 @@ targets:
       - path: App
         excludes: [Info.plist]
       - Core
+      - ConversationCore
       - DownloadCore
       - Shared
       - ActivityCore
@@ -67,7 +68,7 @@ targets:
   CompanionTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [Tests, LifecycleTests]
+    sources: [Tests, LifecycleTests, ConversationTests]
     dependencies:
       - target: Companion
     settings:
