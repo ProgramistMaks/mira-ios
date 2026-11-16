@@ -1,5 +1,27 @@
 # Verification — 2026-11-16
 
+## Voice conversation milestone — local checks completed
+
+This batch adds a voice conversation panel with a larger existing character scene,
+editable transcript, explicit send, completed-answer replay, interrupt-and-record,
+Stop without recording, mode switching with draft retention, actual microphone
+level feedback and bounded final-recognition draining. It retains command review,
+local-only recognition restrictions and cancellation on interruptions/backgrounding.
+Playback never automatically reopens the microphone.
+
+- All **71 portable XCTest cases passed** with Swift 6.2.3 on Linux. Eight new
+  cases cover phase gating, real sample-based RMS, channel stride, invalid input,
+  delayed recognition completion, final-result cancellation and obsolete timeouts.
+- Changed native files and the new UI test passed Swift syntax parsing. This does
+  not type-check Apple APIs or validate native layout and audio behavior.
+- The new native UI test exercises mode entry without microphone use, shared draft
+  retention, explicit command review/cancellation and returning from settings.
+  No live provider requests or microphone recordings were used in local checks.
+- Native archive/UI/audio evidence for this milestone is pending. Model pins,
+  inference runtime and renderer are unchanged; repeat model downloads/inference
+  are unnecessary for this batch. A single combined native workflow is appropriate
+  under the user's request to validate substantial additions rather than each edit.
+
 ## Animation pause/resume — shared display timeline
 
 The renderer now uses the display callback timestamp for a shared pose/physics

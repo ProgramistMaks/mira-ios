@@ -8,6 +8,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published private(set) var preparing = false
     var busy: Bool { speaking || preparing }
     let mouthEvents = CurrentValueSubject<Double, Never>(0)
+    let inputLevels = CurrentValueSubject<Double, Never>(0)
     private var player: AVAudioPlayer?
     private var render: SpeechRenderSession?
     private var playbackClock: Task<Void, Never>?
@@ -16,12 +17,14 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var renderTimeout: Task<Void, Never>?
     @Published private(set) var recording = false
     @Published private(set) var requestingRecording = false
-    var recordingBusy: Bool { recording || requestingRecording }
+    @Published private(set) var finishingRecording = false
+    var recordingBusy: Bool { recording || requestingRecording || finishingRecording }
     @Published private(set) var transcript = ""
     var onError: ((String) -> Void)?
     var onTranscript: ((String) -> Void)?
     var onRecordingFinished: (() -> Void)?
     private let recordingAuthorization = MiraRecordingAuthorization()
+    private let recognitionDrain = RecognitionDrain()
     private let synth = AVSpeechSynthesizer()
     private let engine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -60,7 +63,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
         if offlineOnly && !recognizer.supportsOnDeviceRecognition { throw CompanionError.offlineSpeechUnavailable }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement, options: [])
+        try session.setCategory(.record, mode: .measurement, options: [.allowBluetooth])
         try session.setActive(true)
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
@@ -70,7 +73,16 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         let node = engine.inputNode
         let format = node.outputFormat(forBus: 0)
         guard format.sampleRate > 0 && format.channelCount > 0 else { stopRecording(); throw CompanionError.noSpeech }
-        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in request.append(buffer) }
+        let meter = MicrophoneLevelSampler()
+        node.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            request.append(buffer)
+            if let level = meter.consume(buffer) {
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == id, self.recording else { return }
+                    self.inputLevels.send(level)
+                }
+            }
+        }
         hasTap = true
         task = recognizer.recognitionTask(with: request) { [weak self] result, error in
             let text = result?.bestTranscription.formattedString
@@ -80,7 +92,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 if let text { self.transcript = text; self.onTranscript?(text) }
                 if finished || error != nil {
                     self.stopRecording()
-                    if error != nil && self.transcript.isEmpty { self.onError?(CompanionError.noSpeech.localizedDescription) }
+                    if self.transcript.isEmpty { self.onError?(CompanionError.noSpeech.localizedDescription) }
                 }
             }
         }
@@ -89,18 +101,36 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate {
         timeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(55))
             guard !Task.isCancelled else { return }
-            self?.stopRecording()
+            self?.finishRecording()
         }
+    }
+    func finishRecording() {
+        guard recording, !finishingRecording else { return }
+        let id = generation
+        timeout?.cancel(); timeout = nil
+        // Stop microphone I/O immediately, but retain recognition for its final text.
+        engine.stop()
+        if hasTap { engine.inputNode.removeTap(onBus: 0); hasTap = false }
+        finishingRecording = true; recording = false; inputLevels.send(0)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        recognitionDrain.begin { [weak self] in
+            guard let self, self.generation == id, self.finishingRecording else { return }
+            self.stopRecording()
+            if self.transcript.isEmpty { self.onError?(CompanionError.noSpeech.localizedDescription) }
+        }
+        request?.endAudio()
     }
     func stopRecording() {
         let wasRecording = recordingBusy
         generation = UUID()
         recordingAuthorization.cancel()
+        recognitionDrain.cancel()
         timeout?.cancel(); timeout = nil
         engine.stop()
         if hasTap { engine.inputNode.removeTap(onBus: 0); hasTap = false }
         request?.endAudio(); task?.cancel(); task = nil; request = nil
-        recording = false; requestingRecording = false
+        recording = false; requestingRecording = false; finishingRecording = false
+        inputLevels.send(0)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         if wasRecording { onRecordingFinished?() }
     }

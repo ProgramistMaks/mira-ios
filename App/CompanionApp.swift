@@ -39,6 +39,7 @@ struct CompanionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var showCommands = false
+    @State private var voiceMode = false
     @State private var pendingRoute: MiraRoute?
     @State private var routeWaitingForDismiss = false
     @State private var questionToRestore: UUID?
@@ -46,12 +47,13 @@ struct CompanionView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var phase: CompanionPhase {
         if voice.recording { return .listening }
-        if store.thinking || voice.preparing { return .thinking }
+        if store.thinking || voice.preparing || voice.finishingRecording { return .thinking }
         if voice.speaking { return .speaking }
         return .idle
     }
     private var status: String {
         if voice.requestingRecording { return "Готовлю запись" }
+        if voice.finishingRecording { return "Дописываю твою фразу" }
         if voice.preparing { return "Готовлю голос" }
         switch phase {
         case .idle: return "Рядом с тобой"
@@ -68,8 +70,12 @@ struct CompanionView: View {
                 let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
                 layout {
                     stage.frame(width: wide ? geometry.size.width * 0.46 : nil,
-                                height: wide ? nil : max(160, geometry.size.height * 0.40))
-                    conversation.padding(.trailing, wide ? 20 : 0)
+                                height: wide ? nil : max(160, geometry.size.height * (voiceMode ? 0.52 : 0.40)))
+                    Group {
+                        if voiceMode {
+                            VoiceConversationView(store: store, voice: voice) { switchToText() }
+                        } else { conversation }
+                    }.padding(.trailing, wide ? 20 : 0)
                 }
             }
             .background(Palette.background)
@@ -115,6 +121,17 @@ struct CompanionView: View {
                   AVAudioSession.InterruptionType(rawValue: value) == .began else { return }
             store.cancel(reason: .incomplete)
         }
+        .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { notification in
+            guard let value = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                  AVAudioSession.RouteChangeReason(rawValue: value) == .oldDeviceUnavailable else { return }
+            store.cancel(reason: .incomplete)
+        }
+    }
+    private func switchToText() {
+        // Preserve the current draft; leaving voice mode never sends it or reopens a mic.
+        if voice.recordingBusy { voice.stopRecording() }
+        voiceMode = false
+        composerFocused = true
     }
     private func didDismissSheet() {
         routeWaitingForDismiss = false
@@ -125,9 +142,9 @@ struct CompanionView: View {
               let route = pendingRoute else { return }
         pendingRoute = nil
         switch route {
-        case .chat: composerFocused = true
-        case .commands: composerFocused = false; showCommands = true
-        case .settings: composerFocused = false; showSettings = true
+        case .chat: switchToText(); composerFocused = true
+        case .commands: if voice.recordingBusy { voice.stopRecording() }; composerFocused = false; showCommands = true
+        case .settings: if voice.recordingBusy { voice.stopRecording() }; composerFocused = false; showSettings = true
         }
     }
     private func updateFrameRate() {
@@ -146,9 +163,9 @@ struct CompanionView: View {
             Spacer()
             MiraGlassGroup {
                 HStack(spacing: 10) {
-                    Button { showCommands = true } label: { Image(systemName: "square.grid.2x2").frame(width: 24, height: 28) }
+                    Button { if voice.recordingBusy { voice.stopRecording() }; showCommands = true } label: { Image(systemName: "square.grid.2x2").frame(width: 24, height: 28) }
                         .miraGlassButton().accessibilityLabel("Команды")
-                    Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 28) }
+                    Button { if voice.recordingBusy { voice.stopRecording() }; showSettings = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 28) }
                         .miraGlassButton().accessibilityLabel("Настройки")
                 }.controlSize(.large)
             }
@@ -232,6 +249,12 @@ struct CompanionView: View {
                 .defaultScrollAnchor(.bottom)
                 .onChange(of: store.messages.last?.content) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             }
+            Button {
+                composerFocused = false
+                voiceMode = true
+            } label: { Label("Разговор голосом", systemImage: "waveform") }
+                .font(.callout.weight(.medium)).frame(minHeight: 44)
+                .accessibilityIdentifier("conversation.voiceMode")
             composer.padding(16)
         }
     }
@@ -239,7 +262,8 @@ struct CompanionView: View {
         MiraGlassGroup {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
-                if voice.recordingBusy { voice.stopRecording() }
+                if voice.recording { voice.finishRecording() }
+                else if voice.recordingBusy { voice.stopRecording() }
                 else {
                     composerFocused = false
                     Task { await store.startRecording() }
@@ -250,7 +274,7 @@ struct CompanionView: View {
                     .foregroundStyle(voice.recordingBusy ? Palette.background : Palette.lavender)
             }.miraGlassButton(prominent: voice.recordingBusy)
                 .disabled(store.thinking)
-                .accessibilityLabel(voice.requestingRecording ? "Отменить запись" : (voice.recording ? "Закончить запись" : "Начать запись"))
+                .accessibilityLabel(voice.finishingRecording ? "Оставить текущий текст" : (voice.requestingRecording ? "Отменить запись" : (voice.recording ? "Закончить запись" : "Начать запись")))
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
                 .lineLimit(1...5).padding(.horizontal, 16).padding(.vertical, 14)
                 .miraGlass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))

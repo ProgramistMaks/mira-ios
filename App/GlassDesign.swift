@@ -58,6 +58,14 @@ private struct MiraGlassButton: ViewModifier {
 }
 
 extension View {
+    @ViewBuilder
+    func miraVoiceButton() -> some View {
+        if #available(iOS 26.0, *) {
+            buttonStyle(.glassProminent).buttonBorderShape(.capsule)
+        } else {
+            buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
+        }
+    }
     func miraGlass<S: Shape>(in shape: S) -> some View {
         modifier(MiraGlassSurface(shape: shape))
     }

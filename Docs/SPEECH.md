@@ -1,5 +1,51 @@
 # Speech playback and character synchronization
 
+## Voice conversation mode
+
+“Разговор голосом” opens a larger character scene and a scrollable voice panel in
+the same conversation. Entering the mode does not start recording, request a model
+answer or send an existing draft. The panel shows the current phase, an editable
+utterance, explicit Send, the latest answer and Replay for completed replies only.
+Send requests spoken output for that turn without modifying the general speech
+preference. Partial/interrupted replies are not replayable or automatically spoken.
+
+“Перебить и говорить” cancels inference/speech, preserves the partial answer and
+starts a new microphone request after playback stops. There is also Stop without
+starting recording. “В текст” stops capture/finalization, retains the draft and
+focuses the text composer. Settings/command navigation also closes recording;
+headphone/device disconnection cancels active work. Backgrounding and audio
+interruptions retain the existing cancellation policy. The microphone does not
+automatically reopen after an answer. This is deliberate turn-taking, not wake-word
+detection, full-duplex speech or automatic silence-triggered sending.
+
+The microphone meter computes RMS from the actual first input channel in 100 ms
+windows, handles interleaved PCM stride and publishes only normalized numeric
+levels. The meter view subscribes independently instead of publishing a level on
+the whole screen's observable voice state. No microphone recording file is created.
+
+“Закончить фразу” closes the audio engine/tap immediately and calls `endAudio`,
+allowing recognition to return its final revision for at most two seconds. Send
+and editing remain disabled while finishing. “Оставить текущий текст” cancels that
+wait and retains the latest transcript. A final result, cancellation or a new
+recording invalidates the old timeout; late recognition callbacks are generation
+checked. This reduces truncated endings but cannot guarantee every word is
+recognized. The existing 55-second capture limit uses the same finishing path.
+
+Local inference mode still requires on-device speech recognition. Cloud mode
+discloses possible Apple recognition and selected-provider text processing.
+Recognized commands still open their existing confirmation forms before execution.
+Successful commands submitted from voice mode speak their actual result; cancelled
+or failed actions do not get a success announcement. Capture permits a Bluetooth
+hands-free input route; actual headset route selection and latency remain untested.
+No new provider, paid speech API, auto-send or background microphone is introduced.
+
+Portable tests cover phase/action gating, meter silence/voice/stride/invalid PCM,
+recognition timeout cancellation and replacement. A native UI case covers entering
+voice mode without recording, draft preservation, explicit command review and
+returning from settings. Actual microphone permissions, final recognition delivery,
+Bluetooth, native layout/accessibility and interruption behavior require iOS/device
+verification; test source alone is not evidence that those paths have passed.
+
 ## Dictation and permissions
 
 Starting dictation snapshots the existing draft. Each recognition revision is combined

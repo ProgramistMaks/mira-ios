@@ -31,6 +31,7 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var activeID: UUID?
     private let responseCheckpoint = ResponseCheckpoint()
     private let events = EKEventStore()
+    private var spokenCommandID: UUID?
 
     init() {
         do {
@@ -50,7 +51,10 @@ final class CompanionStore: ObservableObject {
             self.cancel()
         }
         activitySubscription = Publishers.CombineLatest(
-            Publishers.CombineLatest4($thinking, voice.$recording, voice.$preparing, voice.$speaking),
+            Publishers.CombineLatest4($thinking,
+                Publishers.CombineLatest3(voice.$recording, voice.$requestingRecording, voice.$finishingRecording)
+                    .map { state in state.0 || state.1 || state.2 },
+                voice.$preparing, voice.$speaking),
             $settings.map { $0.liveActivitiesEnabled ?? true }
         )
         // Coalesce synchronous voice handovers; don't end/recreate an activity
@@ -63,12 +67,14 @@ final class CompanionStore: ObservableObject {
                                         enabled: enabled)
         }
     }
-    func send() {
+    func send(speakReply: Bool? = nil) {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty && !thinking && !voice.recordingBusy else { return }
         guard text.count <= 12000 else { error = "Сообщение слишком длинное: максимум 12 000 символов."; return }
         if let proposal = CommandProposal.parse(text) {
-            voice.stop(); proposedCommand = proposal; return
+            voice.stop()
+            spokenCommandID = speakReply == true ? proposal.id : nil
+            proposedCommand = proposal; return
         }
         let mode = settings.inferenceMode ?? .cloud
         do {
@@ -89,6 +95,7 @@ final class CompanionStore: ObservableObject {
         messages.append(reply); saveConversation()
         thinking = true; activeID = reply.id
         let connection = settings; let key = SecretStore.read()
+        let shouldSpeak = speakReply ?? settings.speakReplies
         let localSelection = localModel.selected
         work = Task { [weak self] in
             guard let self else { return }
@@ -115,7 +122,7 @@ final class CompanionStore: ObservableObject {
                 self.messages[index].interruption = completion.interruption
                 self.thinking = false; self.activeID = nil; self.work = nil
                 self.saveConversation()
-                if completion == .complete && self.settings.speakReplies {
+                if completion == .complete && shouldSpeak {
                     do { try self.voice.say(self.messages[index].content, voiceID: self.settings.voiceID) }
                     catch { self.error = error.localizedDescription }
                 }
@@ -133,18 +140,37 @@ final class CompanionStore: ObservableObject {
         }
     }
     func startRecording() async {
-        guard !thinking, !voice.recordingBusy else { return }
+        guard !thinking, !voice.recordingBusy, proposedCommand == nil else { return }
         voice.stop()
         dictationDraft = MiraDictationDraft(original: draft)
         liveActivities.beginInteraction()
         do { try await voice.startRecording(offlineOnly: settings.inferenceMode == .local) }
-        catch { error = error.localizedDescription }
+        catch { self.error = error.localizedDescription }
+    }
+    func interruptAndRecord() async {
+        guard !voice.recordingBusy, proposedCommand == nil else { return }
+        cancel()
+        await startRecording()
+    }
+    func replay(_ message: Message) {
+        guard message.role == .assistant, !message.interrupted,
+              !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !thinking, !voice.recordingBusy, !voice.busy else { return }
+        liveActivities.beginInteraction()
+        do { try voice.say(message.content, voiceID: settings.voiceID) }
+        catch { self.error = error.localizedDescription }
     }
     func recordCommandResult(_ proposal: CommandProposal, detail: String) {
         messages.append(Message(role: .user, content: proposal.original))
         messages.append(Message(role: .assistant, content: detail))
         if draft.trimmingCharacters(in: .whitespacesAndNewlines) == proposal.original { draft = "" }
         saveConversation()
+        if spokenCommandID == proposal.id {
+            spokenCommandID = nil
+            liveActivities.beginInteraction()
+            do { try voice.say(detail, voiceID: settings.voiceID) }
+            catch { self.error = error.localizedDescription }
+        }
     }
     private func append(_ text: String, to id: UUID) {
         guard activeID == id, let index = messages.firstIndex(where: { $0.id == id }) else { return }
@@ -155,6 +181,7 @@ final class CompanionStore: ObservableObject {
         }
     }
     func cancel(reason: Message.Interruption = .stopped) {
+        spokenCommandID = nil
         responseCheckpoint.cancel()
         if let id = activeID, let index = messages.firstIndex(where: { $0.id == id }) {
             messages[index].interruption = reason
