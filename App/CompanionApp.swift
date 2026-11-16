@@ -25,6 +25,8 @@ enum Palette {
 struct CompanionView: View {
     @ObservedObject var store: CompanionStore
     @ObservedObject var voice: VoiceService
+    @State private var frameRate = 60
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var showCommands = false
     @FocusState private var composerFocused: Bool
@@ -67,10 +69,17 @@ struct CompanionView: View {
         .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
         } message: { Text(store.error ?? "") }
+        .onAppear { updateFrameRate() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in updateFrameRate() }
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in updateFrameRate() }
         .onChange(of: voice.transcript) { _, text in store.draft = text }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
             store.cancel()
         }
+    }
+    private func updateFrameRate() {
+        let device = ProcessInfo.processInfo
+        frameRate = device.isLowPowerModeEnabled || device.thermalState == .serious || device.thermalState == .critical ? 30 : 60
     }
     private var header: some View {
         HStack(spacing: 12) {
@@ -90,7 +99,10 @@ struct CompanionView: View {
         ZStack(alignment: .bottom) {
             RadialGradient(colors: [Palette.lavender.opacity(0.17), .clear], center: .center, startRadius: 15, endRadius: 300)
             VStack(spacing: 0) {
-                AvatarView(phase: phase, voice: voice, reduceMotion: reduceMotion, ready: $store.characterReady, error: $store.characterError)
+                AvatarView(phase: phase, voice: voice, reduceMotion: reduceMotion,
+                           frameRate: frameRate,
+                           active: scenePhase == .active && !showSettings && !showCommands && store.proposedCommand == nil,
+                           ready: $store.characterReady, error: $store.characterError)
                 Color.clear.frame(height: 54)
             }
             if let error = store.characterError {

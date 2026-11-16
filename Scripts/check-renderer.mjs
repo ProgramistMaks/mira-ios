@@ -29,14 +29,49 @@ try {
   await page.evaluate(() => { document.body.style.background = '#0e0e13'; });
   await mkdir('/tmp/companion-review', { recursive: true });
   await page.setViewportSize({ width: 390, height: 420 });
+  await page.evaluate(() => window.companion.setViewport(390, 420));
   await page.waitForTimeout(1000);
   await page.screenshot({ path: '/tmp/companion-review/greeting.png' });
+  await page.waitForFunction(() => document.documentElement.dataset.motion === 'idle', undefined, { timeout: 8000 });
+  // A background tap and a vertical drag must not fire a character reaction.
+  await page.mouse.click(12, 12);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.motion), 'idle');
+  await page.mouse.move(195, 180); await page.mouse.down();
+  await page.mouse.move(195, 220, { steps: 5 }); await page.mouse.up();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.motion), 'idle');
+  await page.mouse.click(195, 180);
+  await page.waitForFunction(() => document.documentElement.dataset.motion === 'touch');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: '/tmp/companion-review/touch.png' });
+  await page.evaluate(() => window.companion.setState('listening', false));
+  await page.waitForFunction(() => document.documentElement.dataset.motion === 'listening');
+  // Review actual poses, not just a phase variable changed four times in one frame.
+  for (const phase of ['idle', 'listening', 'thinking', 'speaking']) {
+    await page.evaluate(phase => window.companion.setState(phase, false), phase);
+    await page.waitForFunction(phase => document.documentElement.dataset.motion === phase, phase);
+    await page.waitForTimeout(1400);
+    await page.screenshot({ path: `/tmp/companion-review/acting-${phase}.png` });
+  }
+  // Native sheets/background pause the canvas; resume must animate the existing scene.
+  await page.evaluate(() => window.companion.setActive(false));
+  const paused = await page.screenshot();
+  await page.waitForTimeout(250);
+  assert.deepEqual(await page.screenshot(), paused);
+  await page.evaluate(() => { window.companion.setFrameRate(30); window.companion.setActive(true); });
+  await page.waitForTimeout(350);
+  assert.notDeepEqual(await page.screenshot(), paused);
+  await page.evaluate(() => window.companion.setState('thinking', true));
+  await page.waitForFunction(() => document.documentElement.dataset.motion === 'reduced');
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: '/tmp/companion-review/reduced-motion.png' });
   for (const [width, height] of [[390, 420], [700, 800], [300, 400]]) {
     await page.setViewportSize({ width, height });
     await page.evaluate(({ width, height }) => window.companion.setViewport(width, height), { width, height });
     for (const phase of ['idle', 'listening', 'thinking', 'speaking']) {
       await page.evaluate(phase => window.companion.setState(phase, false), phase);
       assert.equal(await page.evaluate(() => window.companion.phase), phase);
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `/tmp/companion-review/${phase}-${width}.png` });
     }
     await page.evaluate(() => window.companion.setState('idle', true));
     // Let spring bones settle before visual inspection.
@@ -52,7 +87,7 @@ try {
   await broken.goto(address);
   await broken.waitForFunction(() => document.documentElement.dataset.status === 'error');
   assert.equal(await broken.evaluate(() => window.companion.ready), false);
-  console.log('PASS: VRM loads; all four states; three sizes; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
+  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

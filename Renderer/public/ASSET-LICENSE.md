@@ -18,3 +18,7 @@ or final visual parity with the user's reference videos.
 Three.js and @pixiv/three-vrm are MIT-licensed. The renderer build emits bundled
 code license notices in avatar.js.LEGAL.txt. Earlier commits used the pixiv
 VRM1_Constraint_Twist_Sample under VRM Public License 1.0 as a technical fixture.
+
+The six motion curves in `Renderer/acting.mjs` were authored specifically in this
+project. They do not contain third-party VRMA, dance or motion-capture assets.
+They animate the existing character rig and do not change the model's authorship.

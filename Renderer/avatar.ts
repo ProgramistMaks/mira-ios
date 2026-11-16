@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
-import { motion, greetingEnvelope, speechLevel } from './motion.mjs';
+import { motion, speechLevel } from './motion.mjs';
+import { ActingController } from './acting.mjs';
 
 declare global {
   interface Window {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
-      setViewport(width: number, height: number): void; setSpeech(level: number): void; ready: boolean; phase: string };
+      setViewport(width: number, height: number): void; setSpeech(level: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string };
   }
 }
 
@@ -15,6 +16,9 @@ const report = (type: string, detail = '') => {
   window.webkit?.messageHandlers.avatar.postMessage({ type, detail });
   document.documentElement.dataset.status = type;
 };
+const acting = new ActingController();
+let frameRate = 60;
+let active = true;
 let phase = 'idle';
 let reduced = false;
 let speechAmplitude = 0, speechReceivedAt = -Infinity;
@@ -23,6 +27,11 @@ let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   phase,
+  setActive(value) {
+    active = value === true;
+    if (!active) { speechAmplitude = 0; speechReceivedAt = -Infinity; }
+  },
+  setFrameRate(fps) { if (fps === 30 || fps === 60) frameRate = fps; },
   setSpeech(level) {
     speechAmplitude = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
     speechReceivedAt = performance.now();
@@ -34,6 +43,7 @@ window.companion = {
   setState(next, reduceMotion) {
     if (!['idle', 'listening', 'thinking', 'speaking'].includes(next)) return;
     phase = next; reduced = reduceMotion; window.companion.phase = phase;
+    acting.setPhase(phase); acting.update(0, reduced);
   },
 };
 
@@ -84,48 +94,84 @@ async function main() {
     camera.lookAt(0, center.y, 0); camera.updateProjectionMatrix();
   };
   applyResize = resize; resize(); addEventListener('resize', resize);
-  let rotation = 0, pointerX: number | null = null, pointerStart = 0, moved = false;
-  let elapsed = 0, gestureStart = 0;
+  let rotation = 0;
+  let pointer: { id: number; x: number; startX: number; startY: number; moved: boolean } | undefined;
+  const ray = new THREE.Raycaster();
+  const hitCharacter = (event: PointerEvent) => {
+    const box = renderer.domElement.getBoundingClientRect();
+    ray.setFromCamera(new THREE.Vector2((event.clientX - box.left) / box.width * 2 - 1,
+      -(event.clientY - box.top) / box.height * 2 + 1), camera);
+    // Bounds must match the current animated pose, not a cached T-pose.
+    avatar.scene.traverse(object => {
+      if (object instanceof THREE.SkinnedMesh) object.computeBoundingSphere();
+    });
+    return ray.intersectObject(avatar.scene, true).some(hit => hit.object.visible);
+  };
   renderer.domElement.addEventListener('pointerdown', event => {
-    pointerX = event.clientX; pointerStart = event.clientX; moved = false;
+    if (pointer || !event.isPrimary) return;
+    pointer = { id: event.pointerId, x: event.clientX, startX: event.clientX, startY: event.clientY, moved: false };
     renderer.domElement.setPointerCapture(event.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', event => {
-    if (pointerX === null) return;
-    rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointerX) * 0.006, -0.65, 0.65);
-    if (Math.abs(event.clientX - pointerStart) > 8) moved = true;
-    pointerX = event.clientX;
+    if (!pointer || pointer.id !== event.pointerId) return;
+    if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 8) pointer.moved = true;
+    if (!reduced) rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointer.x) * 0.006, -0.65, 0.65);
+    pointer.x = event.clientX;
   });
-  renderer.domElement.addEventListener('pointerup', () => {
-    if (!moved) gestureStart = elapsed;
-    pointerX = null;
+  renderer.domElement.addEventListener('pointerup', event => {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    const tap = !pointer.moved;
+    pointer = undefined;
+    if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+    if (tap && active && hitCharacter(event)) acting.trigger('touch');
   });
-  renderer.domElement.addEventListener('pointercancel', () => { pointerX = null; });
+  renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; });
+  renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; });
   renderer.domElement.addEventListener('webglcontextlost', event => { event.preventDefault(); report('error', 'context lost'); });
   renderer.domElement.addEventListener('webglcontextrestored', () => location.reload());
-  const head = avatar.humanoid.getNormalizedBoneNode('head');
-  const spine = avatar.humanoid.getNormalizedBoneNode('spine');
-  const elbow = avatar.humanoid.getNormalizedBoneNode('leftLowerArm');
-  const wrist = avatar.humanoid.getNormalizedBoneNode('leftHand');
+  const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
+  const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
+  const leftElbow = bone('leftLowerArm'), rightElbow = bone('rightLowerArm');
+  const leftHand = bone('leftHand'), rightHand = bone('rightHand');
+  const fingers = ['Index', 'Middle', 'Ring', 'Little'].flatMap(finger =>
+    ['Proximal', 'Intermediate', 'Distal'].map((joint, index) => ({
+      left: bone(`left${finger}${joint}` as Parameters<typeof bone>[0]),
+      right: bone(`right${finger}${joint}` as Parameters<typeof bone>[0]), scale: [0.8, 0.9, 0.55][index],
+    })));
   const clock = new THREE.Clock();
-  let mouth = 0;
-  renderer.setAnimationLoop(() => {
+  let mouth = 0, elapsed = 0, previousFrame = -Infinity;
+  acting.update(0, reduced); acting.trigger('greeting');
+  renderer.setAnimationLoop(timestamp => {
+    // A cap is a target, not a claim about measured device performance.
+    const cap = Math.min(frameRate, phase === 'thinking' || reduced ? 30 : 60);
+    if (timestamp - previousFrame < 1000 / cap - 1) return;
+    previousFrame = timestamp;
     const delta = Math.min(clock.getDelta(), 0.05);
-    if (document.hidden) return;
+    if (document.hidden || !active) return;
     elapsed += delta;
-    const pose = motion(elapsed, phase, reduced, speechLevel(speechAmplitude, (performance.now() - speechReceivedAt) / 1000));
-    const wave = greetingEnvelope(elapsed - gestureStart, reduced);
+    const pose = acting.update(delta, reduced);
+    document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
+    const face = motion(elapsed, phase, reduced, speechLevel(speechAmplitude, (performance.now() - speechReceivedAt) / 1000));
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
-    if (left) left.rotation.z = armSign * (1.2 - wave * 1.4 + pose.handSway);
-    if (right) right.rotation.z = -armSign * (1.2 + pose.handSway);
-    if (elbow) elbow.rotation.z = -armSign * wave * 1.25;
-    if (wrist) wrist.rotation.z = armSign * wave * 0.18 * Math.sin(elapsed * 16);
-    if (spine) spine.rotation.x = THREE.MathUtils.damp(spine.rotation.x, pose.breathe, 8, delta);
-    if (head) head.rotation.z = THREE.MathUtils.damp(head.rotation.z, pose.head, 8, delta);
-    avatar.expressionManager?.setValue('blink', pose.blink);
-    mouth = phase === 'speaking' ? THREE.MathUtils.damp(mouth, pose.mouth, 28, delta) : 0;
+    if (left) left.rotation.set(pose.leftRoll, armSign * pose.leftForward, armSign * (1.2 - pose.leftLift));
+    if (right) right.rotation.set(pose.rightRoll, -armSign * pose.rightForward, -armSign * (1.2 - pose.rightLift));
+    if (leftElbow) leftElbow.rotation.z = -armSign * pose.leftElbow;
+    if (rightElbow) rightElbow.rotation.z = armSign * pose.rightElbow;
+    if (leftHand) leftHand.rotation.set(0, pose.leftPalm, armSign * pose.leftWrist);
+    if (rightHand) rightHand.rotation.set(0, pose.rightPalm, -armSign * pose.rightWrist);
+    for (const finger of fingers) {
+      if (finger.left) finger.left.rotation.z = -armSign * pose.leftCurl * finger.scale;
+      if (finger.right) finger.right.rotation.z = armSign * pose.rightCurl * finger.scale;
+    }
+    if (spine) spine.rotation.set(pose.spineX, 0, pose.spineZ);
+    if (chest) chest.rotation.set(pose.chestX, pose.chestY, pose.chestZ);
+    if (neck) neck.rotation.x = pose.neckX;
+    if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
+    target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
+    avatar.expressionManager?.setValue('blink', face.blink);
+    mouth = phase === 'speaking' ? THREE.MathUtils.damp(mouth, face.mouth, 28, delta) : 0;
     avatar.expressionManager?.setValue('aa', mouth);
-    avatar.expressionManager?.setValue('happy', pose.smile + wave * 0.12);
+    avatar.expressionManager?.setValue('happy', pose.smile);
     avatar.update(delta);
     renderer.render(scene, camera);
     if (!window.companion.ready) { window.companion.ready = true; report('ready'); }

@@ -6,6 +6,8 @@ struct AvatarView: UIViewRepresentable {
     let phase: CompanionPhase
     let voice: VoiceService
     let reduceMotion: Bool
+    let frameRate: Int
+    let active: Bool
     @Binding var ready: Bool
     @Binding var error: String?
 
@@ -42,7 +44,11 @@ struct AvatarView: UIViewRepresentable {
         init(parent: AvatarView) { self.parent = parent }
         func update(_ view: WKWebView) {
             guard loaded else { return }
-            view.evaluateJavaScript("window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion))", completionHandler: nil)
+            view.evaluateJavaScript("""
+                window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion));
+                window.companion?.setFrameRate(\(parent.frameRate));
+                window.companion?.setActive(\(parent.active));
+                """, completionHandler: nil)
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: String], message.frameInfo.isMainFrame else { return }

@@ -30,7 +30,7 @@ error-free verbatim record. No user video was sent to a transcription service.
 ## Remaining quality gap
 
 The reference character has authored full-body acting, varied gestures, expressive
-speech and polished character/voice selection. The current Vita candidate still has
-procedural body movement, a simple amplitude-driven jaw and system TTS. Do not call
+speech and polished character/voice selection. The current Vita candidate now has original keyframed torso/arm/hand/gaze clips,
+but still lacks richer full-body acting and has an amplitude-driven jaw and system TTS. Do not call
 that comparable solely because CI passes. A recorded comparison on the actual target
 phone is required before user delivery, along with the remaining QUALITY.md gates.
