@@ -3,10 +3,6 @@ import Combine
 import CryptoKit
 
 enum LocalModelFile {
-    static let name = "Qwen3.5 9B · Q4_K_M"
-    static let bytes: Int64 = 5_680_522_464
-    static let sha256 = "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"
-    static let downloadURL = URL(string: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf")!
     static func directory() throws -> URL {
         var url = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                               appropriateFor: nil, create: true).appendingPathComponent("LocalModels", isDirectory: true)
@@ -15,26 +11,46 @@ enum LocalModelFile {
         try url.setResourceValues(values)
         return url
     }
-    static func installed() throws -> URL { try directory().appendingPathComponent("qwen3.5-9b-q4_k_m.gguf") }
+    static func installed(_ model: LocalModelSpec) throws -> URL {
+        // Preserve the first 9B download made before the catalogue was added.
+        let filename = model.id == "qwen35-9b-q4" ? "qwen3.5-9b-q4_k_m.gguf" : model.filename
+        return try directory().appendingPathComponent(filename)
+    }
     static func legacy() throws -> URL { try directory().appendingPathComponent("qwen2.5-1.5b-q4.gguf") }
 }
 
 @MainActor
 final class LocalModelStore: ObservableObject {
-    @Published private(set) var installed = false
+    @Published private(set) var selected: LocalModelSpec
+    @Published private(set) var installedIDs: Set<String> = []
+    var installed: Bool { installedIDs.contains(selected.id) }
     @Published private(set) var legacyInstalled = false
     @Published private(set) var downloading = false
     @Published private(set) var verifying = false
     @Published private(set) var progress = 0.0
     @Published var error: String?
     private var work: Task<Void, Never>?
-    init() { refresh() }
+    private let preferences: UserDefaults
+    init(preferences: UserDefaults = .standard) {
+        self.preferences = preferences
+        selected = preferences.string(forKey: "selectedLocalModel").flatMap(LocalModelCatalog.find)
+            ?? LocalModelCatalog.defaultModel
+        refresh()
+    }
+    func select(_ model: LocalModelSpec) {
+        guard !downloading else { return }
+        selected = model; error = nil
+        preferences.set(model.id, forKey: "selectedLocalModel")
+    }
     func refresh() {
-        installed = (try? LocalModelFile.installed().resourceValues(forKeys: [.fileSizeKey]).fileSize) == Int(LocalModelFile.bytes)
+        installedIDs = Set(LocalModelCatalog.models.filter {
+            (try? LocalModelFile.installed($0).resourceValues(forKeys: [.fileSizeKey]).fileSize) == Int($0.bytes)
+        }.map(\.id))
         legacyInstalled = (try? LocalModelFile.legacy()).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
     func download() {
         guard !downloading && !installed else { return }
+        let model = selected
         downloading = true; progress = 0; error = nil
         work = Task { [weak self] in
             guard let self else { return }
@@ -50,12 +66,12 @@ final class LocalModelStore: ObservableObject {
                 let capacity = try directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
                     .volumeAvailableCapacityForImportantUsage
                 // Download and final model share a volume; reserve 1 GB beyond the file.
-                if let capacity, capacity < LocalModelFile.bytes + 1_000_000_000 {
+                if let capacity, capacity < model.requiredDiskBytes {
                     throw NSError(domain: "LocalModel", code: 1, userInfo: [NSLocalizedDescriptionKey:
-                        "Для загрузки нужно не менее 6,7 ГБ свободного места."])
+                        "Для загрузки нужно ещё не менее \(ByteCountFormatter.string(fromByteCount: model.requiredDiskBytes, countStyle: .decimal)) свободного места."])
                 }
-                let delegate = DownloadProgress { [weak self] value in Task { @MainActor in self?.progress = value } }
-                let (temporary, response) = try await session.download(from: LocalModelFile.downloadURL, delegate: delegate)
+                let delegate = DownloadProgress(expectedBytes: model.bytes) { [weak self] value in Task { @MainActor in self?.progress = value } }
+                let (temporary, response) = try await session.download(from: model.downloadURL, delegate: delegate)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw CompanionError.invalidResponse }
                 try Task.checkCancellation()
                 let staging = try LocalModelFile.directory().appendingPathComponent(UUID().uuidString + ".download")
@@ -68,12 +84,17 @@ final class LocalModelStore: ObservableObject {
                         try Task.checkCancellation(); hash.update(data: data); count += Int64(data.count)
                     }
                     let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
-                    return count == LocalModelFile.bytes && digest == LocalModelFile.sha256
+                    return count == model.bytes && digest == model.sha256
                 }
                 let valid = try await withTaskCancellationHandler { try await verification.value } onCancel: { verification.cancel() }
                 try Task.checkCancellation()
                 guard valid else { throw CompanionError.invalidResponse }
-                try FileManager.default.moveItem(at: staging, to: LocalModelFile.installed())
+                let destination = try LocalModelFile.installed(model)
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    _ = try FileManager.default.replaceItemAt(destination, withItemAt: staging)
+                } else {
+                    try FileManager.default.moveItem(at: staging, to: destination)
+                }
                 staged = nil; self.refresh()
             } catch {
                 if !Task.isCancelled { self.error = "Не удалось загрузить модель: \(error.localizedDescription)" }
@@ -87,17 +108,20 @@ final class LocalModelStore: ObservableObject {
     }
     func remove() {
         guard !downloading else { return }
-        do { try FileManager.default.removeItem(at: LocalModelFile.installed()); refresh() }
+        do { try FileManager.default.removeItem(at: LocalModelFile.installed(selected)); refresh() }
         catch { self.error = error.localizedDescription }
     }
 }
 
 private final class DownloadProgress: NSObject, URLSessionDownloadDelegate {
     let update: @Sendable (Double) -> Void
-    init(update: @escaping @Sendable (Double) -> Void) { self.update = update }
+    let expectedBytes: Int64
+    init(expectedBytes: Int64, update: @escaping @Sendable (Double) -> Void) {
+        self.expectedBytes = expectedBytes; self.update = update
+    }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {}
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        update(min(1, Double(totalBytesWritten) / Double(LocalModelFile.bytes)))
+        update(min(1, Double(totalBytesWritten) / Double(expectedBytes)))
     }
 }

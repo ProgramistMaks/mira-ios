@@ -1,6 +1,8 @@
 import Foundation
 import llama
 
+public enum LocalPromptStyle: String, Sendable { case qwen35, gemma4 }
+
 public struct LocalTurn: Sendable {
     public let role: String
     public let text: String
@@ -27,7 +29,7 @@ public actor LocalGenerator {
     private var busy = false
     public init() {}
 
-    public func generate(modelURL: URL, turns: [LocalTurn], maxTokens: Int = 512,
+    public func generate(modelURL: URL, turns: [LocalTurn], profile: LocalPromptStyle = .qwen35, maxTokens: Int = 512,
                          onText: @escaping @Sendable (String) async -> Void) async throws -> Bool {
         guard !busy else { throw LocalError.busy }
         busy = true; defer { busy = false }
@@ -55,16 +57,16 @@ public actor LocalGenerator {
         defer { llama_sampler_free(sampler) }
 
         // Qwen3.5 non-thinking sampling, with generated-token presence penalty.
-        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 4096, 1, 0, 1.5))
-        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(20))
-        llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.8, 1))
-        llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.7))
+        llama_sampler_chain_add(sampler, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 4096, 1, 0, profile == .qwen35 ? 1.5 : 0))
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_k(profile == .qwen35 ? 20 : 64))
+        llama_sampler_chain_add(sampler, llama_sampler_init_top_p(profile == .qwen35 ? 0.8 : 0.95, 1))
+        llama_sampler_chain_add(sampler, llama_sampler_init_temp(profile == .qwen35 ? 0.7 : 1.0))
         llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED))
 
         var history = Array(turns.suffix(12))
         var tokens: [llama_token] = []
         while true {
-            let prompt = Self.prompt(history)
+            let prompt = Self.prompt(history, profile: profile)
             if prompt.utf8.count >= 100_000 && history.count > 1 {
                 history.removeFirst(); continue
             }
@@ -117,13 +119,27 @@ public actor LocalGenerator {
         guard count > 0 else { throw LocalError.decode }
         return Array(tokens.prefix(Int(count)))
     }
-    private static func prompt(_ turns: [LocalTurn]) -> String {
+    private static func escaped(_ text: String) -> String {
+        text.replacingOccurrences(of: "<|", with: "‹|").replacingOccurrences(of: "|>", with: "|›")
+            .replacingOccurrences(of: "<think>", with: "‹think›").replacingOccurrences(of: "</think>", with: "‹/think›")
+    }
+    public static func prompt(_ turns: [LocalTurn], profile: LocalPromptStyle = .qwen35) -> String {
         let system = "Ты Мира, личный помощник. Отвечай по-русски, кратко и естественно. Ты работаешь на телефоне без интернета. Не выдумывай результаты поиска и выполненные действия. Для заметок, поиска и напоминаний предложи раздел Команды."
+        if profile == .gemma4 {
+            // Gemma 4 uses turn/model tokens, not the Gemma 3 or ChatML format.
+            // BOS is inserted by llama_tokenize(add_special: true).
+            var text = "<|turn>system\n\(system)<turn|>\n"
+            for turn in turns {
+                let role = turn.role == "assistant" ? "model" : "user"
+                text += "<|turn>\(role)\n\(escaped(turn.text))<turn|>\n"
+            }
+            return text + "<|turn>model\n"
+        }
         var text = "<|im_start|>system\n\(system)<|im_end|>\n"
         for turn in turns {
             let role = turn.role == "assistant" ? "assistant" : "user"
             // Escape ChatML delimiters from conversation text, preserving role boundaries.
-            let content = turn.text.replacingOccurrences(of: "<|", with: "‹|").replacingOccurrences(of: "|>", with: "|›")
+            let content = escaped(turn.text)
             text += "<|im_start|>\(role)\n\(content)<|im_end|>\n"
         }
         // Official Qwen3.5 template with enable_thinking=false.

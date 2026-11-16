@@ -60,6 +60,7 @@ final class CompanionStore: ObservableObject {
         messages.append(reply); saveConversation()
         thinking = true; activeID = reply.id
         let connection = settings; let key = SecretStore.read()
+        let localSelection = localModel.selected
         work = Task { [weak self] in
             guard let self else { return }
             do {
@@ -68,9 +69,9 @@ final class CompanionStore: ObservableObject {
                 }
                 var completed = true
                 if mode == .local {
-                    completed = try await self.localGenerator.generate(modelURL: LocalModelFile.installed(),
+                    completed = try await self.localGenerator.generate(modelURL: LocalModelFile.installed(localSelection),
                         turns: history.filter { !$0.interrupted }.map { LocalTurn(role: $0.role.rawValue, text: $0.content) },
-                        onText: receive)
+                        profile: localSelection.profile, onText: receive)
                 } else {
                     try await ChatClient().stream(settings: connection, key: key, history: history) { [weak self] text in
                         self?.append(text, to: reply.id)

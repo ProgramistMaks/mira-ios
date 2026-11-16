@@ -64,6 +64,32 @@ final class LaunchTests: XCTestCase {
         XCUIDevice.shared.orientation = .portrait
     }
 
+    func testModelSelectionPersistsWithoutDownloading() {
+        let app = XCUIApplication()
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        XCTAssertTrue(app.buttons["Настройки"].waitForExistence(timeout: 30))
+        app.buttons["Настройки"].tap()
+        app.buttons["models.open"].tap()
+        let choice = app.buttons["models.select.qwen35-4b-q4"]
+        for _ in 0..<6 where !choice.isHittable { app.swipeUp() }
+        if choice.exists { choice.tap() }
+        XCTAssertTrue(app.descendants(matching: .any)["models.selected.qwen35-4b-q4"].exists)
+        capture("Local model catalogue — selected 4B and compatibility guidance")
+        let download = app.buttons["models.download"]
+        for _ in 0..<3 where !download.isHittable { app.swipeUp() }
+        download.tap()
+        XCTAssertTrue(app.buttons["Скачать"].waitForExistence(timeout: 5))
+        let cancel = app.buttons["Cancel"].exists ? app.buttons["Cancel"] : app.buttons["Отмена"]
+        cancel.tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["Настройки"].waitForExistence(timeout: 30))
+        app.buttons["Настройки"].tap()
+        XCTAssertTrue(app.staticTexts["Qwen3.5 4B · Q4_K_M"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Нужна загрузка · 2,74 ГБ"].exists)
+    }
+
     private func capture(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways

@@ -2,7 +2,7 @@
 
 Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud streaming chat, Russian speech recognition / Apple TTS, Tavily search, Keychain credential storage, local history/notes and confirmed EventKit reminders. A bundled Three.js/VRM scene runs inside an isolated WKWebView. It receives only animation state and audio-derived mouth amplitude, never conversation text or credentials. See [speech synchronization](Docs/SPEECH.md). This renderer is reusable for later Android/desktop hosts.
 
-**Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the local runtime has been compiled on macOS CI. Real Qwen inference, eleven native unit tests and one UI test passed; speech playback and offline command review are covered. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
+**Not ready for delivery.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the local runtime has been compiled on macOS CI. With the previous Qwen2.5 runtime, real inference, eleven native unit tests and one UI test passed; speech playback and offline command review are covered. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
 
 ## Renderer checks
 

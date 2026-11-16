@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 root="$PWD"
 artifact="$root/Packages/LocalLLM/Artifacts/llama.xcframework"
-if [[ -f "$artifact/Info.plist" && -f "$artifact/.mira-b12430-v1" ]]; then exit 0; fi
+if [[ -f "$artifact/Info.plist" && -f "$artifact/.mira-b12430-v2" ]]; then exit 0; fi
 [[ "$(uname -s)" == Darwin ]] || { echo 'Apple runtime preparation requires macOS.' >&2; exit 1; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/mira-llama.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -19,7 +19,7 @@ tar -xzf "$work/source.tar.gz" --strip-components=1 -C "$work/source"
 (
   cd "$work/source"
   # Simulator tests run the same inference engine on CPU; device Metal stays enabled.
-  sed 's/^GGML_METAL=ON$/GGML_METAL=OFF/' build-xcframework.sh > build-mira-simulator.sh
+  sed -e 's/^GGML_METAL=ON$/GGML_METAL=OFF/' -e '/libggml-metal.a/d' -e 's/2> \/dev\/null//' build-xcframework.sh > build-mira-simulator.sh
   bash build-mira-simulator.sh ios-sim
 )
 official="$work/apple/build-apple/llama.xcframework"
@@ -31,4 +31,4 @@ xcodebuild -create-xcframework \
 mkdir -p "$(dirname "$artifact")"
 rm -rf "$artifact"
 mv "$work/llama.xcframework" "$artifact"
-touch "$artifact/.mira-b12430-v1"
+touch "$artifact/.mira-b12430-v2"
