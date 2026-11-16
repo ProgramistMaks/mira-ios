@@ -16,9 +16,10 @@ error-free verbatim record. No user video was sent to a transcription service.
 
 ## Changes guided by this review
 
-- Explicit note, reminder and web-search phrases now route to a populated action
-  preview before any LLM setup check. Recognition is local and has no side effects.
-- Only the confirmation button executes the action. Cancellation leaves the draft
+- Explicit note/reminder phrases route to an action preview before the LLM setup
+  check. The rebuilt conversation sends explicit web searches directly to Tavily
+  and preserves source excerpts and links.
+- Only the confirmation button executes a note/reminder action. Cancellation leaves the draft
   intact. Successful actions, rather than model claims, produce history entries.
 - Reminder dates are selected and confirmed in the form; natural-language date
   extraction is not claimed. Search still requires an internet connection.
