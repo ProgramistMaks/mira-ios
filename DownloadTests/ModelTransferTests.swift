@@ -16,19 +16,27 @@ final class ModelTransferTests: XCTestCase {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let port = directory.appendingPathComponent("port")
         let script = try XCTUnwrap(Bundle.module.url(forResource: "server", withExtension: "py", subdirectory: "Fixtures"))
+        let diagnosticURL = directory.appendingPathComponent("server.log")
+        FileManager.default.createFile(atPath: diagnosticURL.path, contents: nil)
+        let diagnostics = try FileHandle(forWritingTo: diagnosticURL)
+        defer { try? diagnostics.close() }
         server = Process(); server.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         server.arguments = ["python3", "-u", script.path, port.path]
-        server.standardOutput = FileHandle.nullDevice; server.standardError = FileHandle.nullDevice
+        server.standardOutput = diagnostics; server.standardError = diagnostics
         try server.run()
-        for _ in 0..<100 {
+        // Cold Python imports on a busy hosted Mac can exceed two seconds.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(20))
+        while ContinuousClock.now < deadline {
             if let value = try? String(contentsOf: port, encoding: .utf8), let number = Int(value) {
                 baseURL = URL(string: "http://127.0.0.1:\(number)")!; return
             }
             if !server.isRunning { break }
             try await Task.sleep(for: .milliseconds(20))
         }
-        XCTFail("Local HTTP fixture did not start")
-        throw URLError(.cannotConnectToHost)
+        let state = server.isRunning ? "startup timed out" : "exit status \(server.terminationStatus)"
+        let log = (try? String(contentsOf: diagnosticURL, encoding: .utf8)) ?? "No diagnostics"
+        throw NSError(domain: "ModelTransferTests", code: 1, userInfo: [NSLocalizedDescriptionKey:
+            "Local HTTP fixture did not start (\(state)): \(log.prefix(4_000))"])
     }
 
     override func tearDown() {

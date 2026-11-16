@@ -1,5 +1,20 @@
 # Verification — 2026-11-16
 
+## Native validation resumed after user confirmation
+
+The user confirmed iOS build availability. Run `43932686138` tested source
+`c1fedc7deddc36ef9250ce593a52a6f539b89685` on macos-15-intel / Xcode 26.2.
+The runner started successfully; the previous billing rejection did not recur.
+The Swift package compiled on macOS and its twenty-eight interaction/file-reader
+tests passed, but all twelve HTTP cases failed during fixture setup before making
+their requests. The fixture's two-second readiness window expired or its process
+exited; stderr was suppressed, so that run does not identify the exact cause.
+Archive and native simulator tests were consequently skipped.
+
+The fixture now allows twenty seconds for cold startup and includes subprocess
+diagnostics in setup errors. All forty tests still pass locally on Linux after
+this change. A fresh hosted run is required to confirm the macOS correction.
+
 ## File verification progress and pause feedback
 
 The model store now uses `ModelFileVerifier` to stream completed files into the
