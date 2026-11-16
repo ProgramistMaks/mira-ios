@@ -27,9 +27,14 @@ resume directly at verification without another network request.
   installation remain pending. Earlier inference results do not validate this new
   transfer integration.
 
-The previously confirmed native build blocker is GitHub billing/spending limits.
-A fresh native attempt for this source is recorded separately once it completes.
-No finished IPA or screenshots are delivered before the release gate passes.
+Native run `43927090461` for source `b287ced9c7b805a523045ccc9fea91fd1bdcd336`
+was rejected before any build step on 2026-11-16. GitHub reported that recent account
+payments failed or the spending limit needs increasing. It did not compile or run
+tests. Runtime/model inference re-downloads were disabled for this transfer-only
+attempt; model pins and the inference runtime are unchanged from earlier validated
+source. No payment, spending-limit or account settings were modified, and no further
+native attempts were submitted after this rejection. No finished IPA or screenshots
+are delivered before the release gate passes.
 
 ## Dictation draft preservation and permission cancellation
 

@@ -47,3 +47,7 @@ successful HTTPS resume probe against the pinned Qwen URL, including separate pr
 launches. Native pause/relaunch UI, Wi-Fi restrictions, complete-file verification
 and installation still require iOS acceptance. No inference runtime or model pin was
 changed by this transfer update; see LOCAL-AI.md and VERIFICATION.md.
+
+Fresh native attempt `43927090461` for transfer source `b287ced` was rejected before
+execution by the same GitHub failed-payment/spending-limit block on 2026-11-16.
+It supplies no new native validation.
