@@ -1,5 +1,31 @@
 # Verification — 2026-11-16
 
+## User-reported layout defect — correction not yet visually verified
+
+The user's installed-app screenshot shows a narrow portrait app window within a
+wide black system canvas, a small character and a clipped welcome heading. This
+is not an acceptable visual delivery. The original downloaded IPA was inspected:
+`UIDeviceFamily` is `[1, 2]` and `UISupportedInterfaceOrientations` contains both
+portrait and landscape orientations. This does not explain the installed app's
+system compatibility presentation or establish that re-signing preserved those
+values. The signing/installation tool has been requested; the cause of the outer
+black area remains unresolved. Do not claim that a SwiftUI layout change removes
+system-imposed compatibility bounds.
+
+The welcome scroll view previously always anchored to the bottom. It now anchors
+to the top when history is empty; the empty greeting is compact. Scene sizing now
+uses space below the header, reserves room for text/voice controls, and gives the
+character a larger share of a fresh portrait conversation. The scene can shrink
+when the keyboard reduces the viewport instead of forcing text outside it. The
+native startup UI test now checks that the welcome heading is fully contained in
+its scroll viewport. Swift syntax parsing and whitespace checks passed; actual
+native visual validation of this correction is still pending. No replacement IPA
+has been handed to the user as a verified visual fix.
+
+The previously unavailable log for run `43963647091` is now readable: simulator
+`bootstatus` exceeded its 240-second timeout before xcodebuild tests began. This
+was simulator startup failure, not a new test assertion or compilation failure.
+
 ## Compact IPA delivered for user signing
 
 Package-only run `43965968225` completed successfully for source

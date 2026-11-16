@@ -63,19 +63,28 @@ struct CompanionView: View {
         }
     }
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             VStack(spacing: 0) {
                 header.padding(.horizontal, 24).padding(.vertical, 14)
-                let wide = geometry.size.width >= 600
-                let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
-                layout {
-                    stage.frame(width: wide ? geometry.size.width * 0.46 : nil,
-                                height: wide ? nil : max(160, geometry.size.height * (voiceMode ? 0.46 : 0.40)))
-                    Group {
-                        if voiceMode {
-                            VoiceConversationView(store: store, voice: voice) { switchToText() }
-                        } else { conversation }
-                    }.padding(.trailing, wide ? 20 : 0)
+                GeometryReader { content in
+                    let wide = content.size.width >= 600
+                    let layout = wide ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+                    // Measure below the header and reserve space for the composer,
+                    // including when the keyboard reduces the available height.
+                    let sceneFraction: CGFloat = voiceMode ? 0.48 : (store.messages.isEmpty ? 0.62 : 0.42)
+                    let panelMinimum: CGFloat = voiceMode ? 300 : 250
+                    let sceneHeight = max(0, min(content.size.height * sceneFraction,
+                                                 content.size.height - panelMinimum))
+                    layout {
+                        stage.frame(width: wide ? content.size.width * 0.46 : nil,
+                                    height: wide ? nil : sceneHeight)
+                            .clipped()
+                        Group {
+                            if voiceMode {
+                                VoiceConversationView(store: store, voice: voice) { switchToText() }
+                            } else { conversation }
+                        }.padding(.trailing, wide ? 20 : 0)
+                    }
                 }
             }
             .background(Palette.background)
@@ -211,10 +220,11 @@ struct CompanionView: View {
                     LazyVStack(alignment: .leading, spacing: 20) {
                         if store.messages.isEmpty {
                             VStack(alignment: .leading, spacing: 12) {
-                                Text("О чём поговорим?").font(.system(size: 28, weight: .medium, design: .serif))
-                                Text("Расскажи, как прошёл день.\nИли давай придумаем что-нибудь вместе.")
+                                Text("О чём поговорим?").font(.title2.weight(.medium))
+                                    .accessibilityIdentifier("conversation.welcome")
+                                Text("Расскажи, как прошёл день.")
                                     .font(.callout).foregroundStyle(.secondary)
-                            }.padding(.vertical, 24)
+                            }.padding(.vertical, 12)
                         }
                         ForEach(store.messages) { message in
                             VStack(alignment: .leading, spacing: 7) {
@@ -246,8 +256,11 @@ struct CompanionView: View {
                         Color.clear.frame(height: 1).id("bottom")
                     }.padding(.horizontal, 20)
                 }
-                .defaultScrollAnchor(.bottom)
-                .onChange(of: store.messages.last?.content) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+                .defaultScrollAnchor(store.messages.isEmpty ? .top : .bottom)
+                .accessibilityIdentifier("conversation.messages")
+                .onChange(of: store.messages.last?.content) { _, _ in
+                    if !store.messages.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
+                }
             }
             Button {
                 composerFocused = false

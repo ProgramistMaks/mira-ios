@@ -13,6 +13,12 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 120),
                       "Bundled VRM must actually load inside WKWebView")
         assertAvatarVisible(app)
+        let welcome = app.staticTexts["conversation.welcome"]
+        let transcript = app.descendants(matching: .any)["conversation.messages"]
+        XCTAssertTrue(welcome.exists, "A fresh conversation must show its opening prompt")
+        XCTAssertGreaterThanOrEqual(welcome.frame.minY, transcript.frame.minY,
+                                    "Initial bottom anchoring must not crop the welcome heading")
+        XCTAssertLessThanOrEqual(welcome.frame.maxY, transcript.frame.maxY)
         capture("Portrait — native app and loaded character")
         for label in ["Настройки", "Команды", "Начать запись", "Отправить"] {
             let control = app.buttons[label]
