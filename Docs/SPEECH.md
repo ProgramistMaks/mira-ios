@@ -14,9 +14,13 @@ or credentials. The renderer smooths mouth opening, closes it outside the speaki
 state, and expires missing bridge updates after 180 ms. There is no random speech
 oscillator. Reduced Motion still permits speech feedback.
 
-Stopping, backgrounding or audio interruption cancels synthesis, playback and the
-clock, resets the mouth and deletes the temporary audio. Playback completion does
-the same. Preparation times out after 45 seconds. Whole-utterance preparation adds
+Stopping or audio interruption cancels synthesis, playback and the clock, resets
+the mouth and deletes the temporary audio. Playback completion does the same.
+The widget/island update declares background audio: already-playing speech may
+continue while backgrounded or locked, with an ActivityKit Stop control. Recording,
+inference and speech preparation still cancel on backgrounding. This new background
+behavior awaits native/device verification; earlier speech tests do not certify it.
+Preparation times out after 45 seconds. Whole-utterance preparation adds
 latency; streaming playback is a future improvement, not claimed here.
 
 This is audio-amplitude synchronization, **not phoneme recognition or finished lip

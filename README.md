@@ -8,6 +8,8 @@ Liquid Glass is implemented and has internal iOS 26 visual evidence. The full UI
 
 Subsequent renderer changes reduce facial morph data and fix readiness/reload behavior after graphics context loss. Real-model Chromium checks passed; these changes also await native verification. See [verification evidence](Docs/VERIFICATION.md) for measured scope and remaining limits.
 
+[Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The new extension, lifecycle and route tests await native compilation/QA because hosted macOS builds remain blocked. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
+
 ## Renderer checks
 
 ```sh

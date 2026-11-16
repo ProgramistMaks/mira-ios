@@ -18,9 +18,13 @@ targets:
     dependencies:
       - package: LocalLLM
         product: LocalLLM
+      - target: MiraWidgets
+        embed: true
     sources:
-      - App
+      - path: App
+        excludes: [Info.plist]
       - Core
+      - Shared
       - path: Resources/Web
         type: folder
         buildPhase: resources
@@ -28,6 +32,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.personal.companion
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: App/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: 'Мира'
         INFOPLIST_KEY_NSMicrophoneUsageDescription: 'Микрофон нужен для разговора с Мирой.'
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: 'Распознавание превращает вашу речь в текст. Обработка может выполняться серверами Apple.'
@@ -36,6 +41,24 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: 'UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight'
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        MARKETING_VERSION: '0.1.0'
+        CURRENT_PROJECT_VERSION: '1'
+  MiraWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets
+        excludes: [Info.plist]
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.personal.companion.widgets
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Widgets/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: 'Мира'
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: '$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks'
         MARKETING_VERSION: '0.1.0'
         CURRENT_PROJECT_VERSION: '1'
   CompanionTests:

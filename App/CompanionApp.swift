@@ -9,8 +9,13 @@ struct CompanionApp: App {
         WindowGroup {
             CompanionView(store: store, voice: store.voice)
                 .preferredColorScheme(.dark)
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .background { store.cancel() }
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    if phase == .active { store.liveActivities.setForeground(true) }
+                    if phase == .background {
+                        let continueSpeech = store.voice.speaking
+                        if !continueSpeech { store.cancel() }
+                        store.liveActivities.setForeground(false, continuingSpeech: continueSpeech)
+                    }
                 }
         }
     }
@@ -29,6 +34,8 @@ struct CompanionView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
     @State private var showCommands = false
+    @State private var pendingRoute: MiraRoute?
+    @State private var routeWaitingForDismiss = false
     @FocusState private var composerFocused: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var phase: CompanionPhase {
@@ -61,20 +68,43 @@ struct CompanionView: View {
             .background(Palette.background)
         }
         .tint(Palette.lavender)
-        .sheet(isPresented: $showSettings) { SettingsView(store: store, voice: voice).tint(Palette.lavender).miraSheet() }
-        .sheet(item: $store.proposedCommand) { proposal in
+        .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice).tint(Palette.lavender).miraSheet() }
+        .sheet(item: $store.proposedCommand, onDismiss: didDismissSheet) { proposal in
             CommandsView(store: store, proposal: proposal).tint(Palette.lavender).miraSheet()
         }
-        .sheet(isPresented: $showCommands) { CommandsView(store: store).tint(Palette.lavender).miraSheet() }
+        .sheet(isPresented: $showCommands, onDismiss: didDismissSheet) { CommandsView(store: store).tint(Palette.lavender).miraSheet() }
         .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
         } message: { Text(store.error ?? "") }
         .onAppear { updateFrameRate() }
+        .onOpenURL { url in
+            guard let route = MiraRoute(url: url) else { return }
+            pendingRoute = route
+            if showSettings || showCommands || store.proposedCommand != nil {
+                routeWaitingForDismiss = true
+                showSettings = false; showCommands = false; store.proposedCommand = nil
+            } else { consumeRoute() }
+        }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { consumeRoute() } }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange).receive(on: RunLoop.main)) { _ in updateFrameRate() }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in updateFrameRate() }
         .onChange(of: voice.transcript) { _, text in store.draft = text }
         .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { _ in
             store.cancel()
+        }
+    }
+    private func didDismissSheet() {
+        routeWaitingForDismiss = false
+        consumeRoute()
+    }
+    private func consumeRoute() {
+        guard scenePhase == .active, !routeWaitingForDismiss, !showSettings, !showCommands, store.proposedCommand == nil,
+              let route = pendingRoute else { return }
+        pendingRoute = nil
+        switch route {
+        case .chat: composerFocused = true
+        case .commands: composerFocused = false; showCommands = true
+        case .settings: composerFocused = false; showSettings = true
         }
     }
     private func updateFrameRate() {

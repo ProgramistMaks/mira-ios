@@ -17,6 +17,8 @@ struct ConnectionSettings: Codable {
     var model = ""
     var voiceID = ""
     var speakReplies = true
+    // Optional so existing saved settings migrate without a decoding failure.
+    var liveActivitiesEnabled: Bool? = true
 
     func endpoint() throws -> URL {
         guard var url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),

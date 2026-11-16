@@ -1,6 +1,7 @@
 import SwiftUI
 import EventKit
 import LocalLLM
+import Combine
 
 struct Note: Codable, Identifiable {
     var id = UUID()
@@ -21,6 +22,8 @@ final class CompanionStore: ObservableObject {
     @Published var characterError: String?
     let voice = VoiceService()
     let localModel = LocalModelStore()
+    let liveActivities = MiraLiveActivityController()
+    private var activitySubscription: AnyCancellable?
     private let localGenerator = LocalGenerator()
     private var storage: LocalStore?
     private var work: Task<Void, Never>?
@@ -35,6 +38,23 @@ final class CompanionStore: ObservableObject {
             notes = try store.read("notes.json", as: [Note].self) ?? []
         } catch { self.error = "Не удалось прочитать сохранённые данные. \(error.localizedDescription)" }
         voice.onError = { [weak self] in self?.error = $0 }
+        MiraActivityActions.stop = { [weak self] sessionID in
+            guard let self, self.liveActivities.matches(sessionID: sessionID) else { return }
+            self.cancel()
+        }
+        activitySubscription = Publishers.CombineLatest(
+            Publishers.CombineLatest4($thinking, voice.$recording, voice.$preparing, voice.$speaking),
+            $settings.map { $0.liveActivitiesEnabled ?? true }
+        )
+        // Coalesce synchronous voice handovers; don't end/recreate an activity
+        // between thinking -> preparing -> speaking within the same run-loop turn.
+        .debounce(for: .milliseconds(120), scheduler: RunLoop.main)
+        .sink { [weak self] value in
+            let (state, enabled) = value
+            self?.liveActivities.update(phase: MiraActivityPhase.current(thinking: state.0, recording: state.1,
+                                                                         preparing: state.2, speaking: state.3),
+                                        enabled: enabled)
+        }
     }
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -108,6 +128,7 @@ final class CompanionStore: ObservableObject {
     func cancel() {
         activeID = nil; work?.cancel(); work = nil; thinking = false
         voice.stop(); saveConversation()
+        liveActivities.finish()
     }
     func saveSettings(key: String) throws {
         _ = try settings.endpoint()

@@ -1,5 +1,13 @@
 # Verification — 2026-11-16
 
+## WidgetKit and Dynamic Island — native verification pending
+
+Source now includes a WidgetKit app extension (five widget families), ActivityKit status/Stop controls, guarded deep links and a persisted Live Activities preference. The app embeds the extension; an archive checker requires the actual nested executable, correct extension point, versions, Live Activities flag and URL scheme before packaging. Details and native acceptance steps are in WIDGETS.md.
+
+Local validation checked YAML/plist structure, extension wiring, shell syntax, Python syntax, Swift grammar and whitespace. The archive checker accepted a synthetic valid fixture and rejected incorrect versions/IDs and a missing executable; this does not validate a compiled bundle. Swift grammar parsing is **not** Apple SDK type checking or compilation. Four native unit tests cover route validation, actual-phase selection, settings migration and the public status payload. A native UI test covers cold/warm routes, sheet transitions and draft preservation. These newly added native tests have **not run**; neither the extension nor the changed app source has compiled in Xcode yet.
+
+GitHub's previously confirmed billing/spending-limit block still prevents native validation; no new hosted run was dispatched for this change. Device Live Activities, interactive Stop, widget rendering/tints and signing remain unverified. The source now permits already-playing speech to continue in the declared audio background mode; recording, inference and speech preparation still stop when backgrounded. Actual playback continuity, Lock Screen Stop and natural completion in the background also await native/device checks. No finished IPA or widget screenshots were delivered.
+
 ## Renderer memory and context recovery
 
 The current source combines facial morph targets by VRM expression and fixes stale readiness after WebGL context loss. The animation loop cannot reassert readiness while the context is lost; recovery reloads the local scene and requires a rendered frame.

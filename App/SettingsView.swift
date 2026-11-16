@@ -1,4 +1,5 @@
 import SwiftUI
+import ActivityKit
 
 struct SettingsView: View {
     @ObservedObject var store: CompanionStore
@@ -23,6 +24,7 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 LocalModelSection(model: store.localModel, busy: store.thinking)
+                MiraActivitySettings(store: store, activities: store.liveActivities)
                 Section {
                     SecureField("Ключ Tavily", text: $searchKey)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -79,6 +81,28 @@ struct SettingsView: View {
             .confirmationDialog("Удалить весь разговор?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Удалить", role: .destructive) { store.clearConversation() }
             }
+        }
+    }
+}
+
+private struct MiraActivitySettings: View {
+    @ObservedObject var store: CompanionStore
+    @ObservedObject var activities: MiraLiveActivityController
+    var body: some View {
+        Section {
+            Toggle("Показывать разговор", isOn: Binding(
+                get: { store.settings.liveActivitiesEnabled ?? true },
+                set: { store.settings.liveActivitiesEnabled = $0; store.persistPreferences() }
+            ))
+            Text("Добавь виджет «Рядом с Мирой» через меню виджетов iPhone. Он открывает разговор, команды и настройки.")
+                .font(.footnote).foregroundStyle(.secondary)
+            if !ActivityAuthorizationInfo().areActivitiesEnabled {
+                Text("Live Activities отключены в настройках iPhone.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            if let issue = activities.issue { Text(issue).font(.footnote).foregroundStyle(.secondary) }
+        } header: { Text("Виджеты и Dynamic Island") } footer: {
+            Text("Остров и экран блокировки показывают состояние разговора и кнопку остановки. Текст сообщений не отображается. Готовая озвучка продолжает играть при сворачивании и блокировке; запись и генерация останавливаются. На iPhone без острова доступна карточка Live Activity.")
         }
     }
 }

@@ -34,3 +34,5 @@ User has a signing certificate and can sign/test IPA. Do not collect private key
 The user's private repository is ProgramistMaks/mira-ios; cloud builds are internal. No public release has been created.
 
 Latest hosted validation is blocked by GitHub Billing & plans: run `43850639531` did not start because GitHub reported a failed-payment or spending-limit issue. Liquid Glass has partial native visual evidence and a passing iOS 18 compatibility run, but the final loading/cancellation/contrast corrections still need native compilation and UI verification. See VERIFICATION.md for the exact tested commits and failures. No payment or spending-limit settings were changed.
+
+The subsequent WidgetKit/Dynamic Island extension and its integration are source-only until native compilation and lifecycle/UI tests run. All widget families, Stop interaction, background/stale behavior, accessibility, signing and actual-device presentation remain acceptance requirements; see WIDGETS.md.

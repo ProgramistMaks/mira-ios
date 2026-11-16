@@ -17,6 +17,7 @@ xcodebuild -version
 xcodebuild -project Companion.xcodeproj -scheme Companion -configuration Release \
   -destination 'generic/platform=iOS' -archivePath build/Companion.xcarchive \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
+python3 Scripts/check-widget-bundle.py build/Companion.xcarchive/Products/Applications/Companion.app
 mkdir -p build/unsigned/Payload
 ditto build/Companion.xcarchive/Products/Applications/Companion.app build/unsigned/Payload/Companion.app
 (
