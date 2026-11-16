@@ -75,9 +75,11 @@ struct LocalModelsView: View {
             }
         }
         .navigationTitle("Модели")
-        .confirmationDialog("Скачать \(model.selected.title) · \(model.selected.sizeLabel)? Оставь приложение открытым до конца загрузки. Свободного места нужно на 1 ГБ больше размера файла.",
-                            isPresented: $confirmDownload, titleVisibility: .visible) {
+        .alert("Загрузить модель?", isPresented: $confirmDownload) {
             Button("Скачать") { model.download() }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("\(model.selected.title) · \(model.selected.sizeLabel). Оставь приложение открытым до конца загрузки. Свободного места нужно на 1 ГБ больше размера файла.")
         }
         .confirmationDialog("Удалить \(model.selected.title)? Для запуска понадобится скачать её заново.",
                             isPresented: $confirmDelete, titleVisibility: .visible) {

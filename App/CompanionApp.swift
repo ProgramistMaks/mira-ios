@@ -109,6 +109,11 @@ struct CompanionView: View {
                            ready: $store.characterReady, error: $store.characterError)
                 Color.clear.frame(height: 54)
             }
+            if !store.characterReady && store.characterError == nil {
+                ProgressView("Загружаю персонажа…")
+                    .font(.callout).tint(Palette.lavender)
+                    .frame(maxHeight: .infinity).allowsHitTesting(false)
+            }
             if let error = store.characterError {
                 VStack(spacing: 12) {
                     Image(systemName: "person.crop.rectangle.badge.exclamationmark").font(.largeTitle)
@@ -122,7 +127,8 @@ struct CompanionView: View {
             .padding(.horizontal, 16).padding(.vertical, 10)
             .miraGlass(in: Capsule()).padding(.bottom, 16)
         }
-        .accessibilityElement(children: .ignore).accessibilityLabel("Мира. \(status)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(store.characterError ?? (store.characterReady ? "Мира. \(status)" : "Мира. Загружаю персонажа"))
         .accessibilityIdentifier(store.characterReady ? "avatar.ready" : "avatar.loading")
     }
     private var conversation: some View {

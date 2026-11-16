@@ -8,7 +8,9 @@ final class LaunchTests: XCTestCase {
         let app = XCUIApplication()
         XCUIDevice.shared.orientation = .portrait
         app.launch()
-        XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 60),
+        // The cold iOS 26 CI run loaded the renderer after the original sixty-second deadline.
+        // Still require both renderer readiness and actual character pixels; no placeholder may pass.
+        XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 120),
                       "Bundled VRM must actually load inside WKWebView")
         assertAvatarVisible(app)
         capture("Portrait — native app and loaded character")
@@ -45,7 +47,7 @@ final class LaunchTests: XCTestCase {
         app.terminate()
 
         app.launch()
-        XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 60))
+        XCTAssertTrue(app.descendants(matching: .any)["avatar.ready"].waitForExistence(timeout: 120))
         app.buttons["Команды"].tap()
         XCTAssertTrue(app.staticTexts[note].waitForExistence(timeout: 5), "Saved note must survive a cold launch")
         app.buttons["Готово"].tap()
@@ -93,9 +95,10 @@ final class LaunchTests: XCTestCase {
         let download = app.buttons["models.download"]
         for _ in 0..<3 where !download.isHittable { app.swipeUp() }
         download.tap()
-        XCTAssertTrue(app.buttons["Скачать"].waitForExistence(timeout: 5))
-        let cancel = app.buttons["Cancel"].exists ? app.buttons["Cancel"] : app.buttons["Отмена"]
-        cancel.tap()
+        let confirmation = app.alerts["Загрузить модель?"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        XCTAssertTrue(confirmation.buttons["Скачать"].exists)
+        confirmation.buttons["Отмена"].tap()
         app.terminate()
         app.launch()
         XCTAssertTrue(app.buttons["Настройки"].waitForExistence(timeout: 30))
