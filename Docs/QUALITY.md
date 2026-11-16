@@ -27,7 +27,19 @@ Videos sampled visually on 2026-11-15; full audio was machine-transcribed locall
 iOS app owns its scene. No claim of a system-wide desktop-style avatar or arbitrary control of other apps.
 Notes are app-local; reminders use EventKit; explicit web search uses Tavily or opens a browser. No search results are fabricated by the chat model.
 
-## Current blockers
+## Build budget — user preference (2026-11-16)
+
+Batch small changes and validate them locally. Do not dispatch a hosted macOS/iOS
+build for every small edit, documentation update or test adjustment. Reserve hosted
+builds for substantial feature milestones, important native fixes or an explicit
+user request. Run the relevant local checks before using hosted minutes. A small
+change that depends on Apple SDK/device behavior remains marked unverified until
+the next appropriate native build; local checks do not replace that validation.
+Do not race duplicate hosted builds or repeatedly retry runner-capacity failures.
+Re-run costly model downloads/inference only when model/runtime changes or a specific
+regression justify them. The iOS workflow remains manual (`workflow_dispatch`).
+
+## Current native status
 
 This workspace is Linux. macOS CI now selects Xcode 26.2/iOS 26.2 SDK for native Liquid Glass, while the minimum deployment target stays iOS 18. Prior real Qwen3.5 9B and Gemma 4 E2B inference through the Swift runtime on macOS passed; see VERIFICATION.md for exact toolchain, native test and screenshot evidence. Actual Duo/iOS 27.3 verification, local-model device performance and reference-quality review are still required.
 User has a signing certificate and can sign/test IPA. Do not collect private keys or passwords in chat.
