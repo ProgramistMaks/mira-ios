@@ -44,7 +44,9 @@ jobs:
       - name: Install project generator
         run: brew install xcodegen
       - name: Test interaction logic and resumable downloads
-        run: swift test --scratch-path build/activity-tests
+        run: |
+          swift test --scratch-path build/activity-tests
+          python3 Scripts/test-ipa-package.py
       - uses: actions/cache/restore@v4
         id: runtime-cache
         with:
@@ -84,6 +86,7 @@ jobs:
           name: mira-internal-unsigned
           path: |
             build/Mira-unsigned.ipa
+            build/Mira-package-report.json
           retention-days: 7
       - name: Quality status
         run: echo 'Internal build only. Visual parity, voice quality and physical-device checks are still required.'

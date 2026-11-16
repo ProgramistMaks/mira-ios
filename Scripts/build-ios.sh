@@ -18,12 +18,16 @@ xcodebuild -project Companion.xcodeproj -scheme Companion -configuration Release
   -destination 'generic/platform=iOS' -archivePath build/Companion.xcarchive \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
 python3 Scripts/check-widget-bundle.py build/Companion.xcarchive/Products/Applications/Companion.app
-mkdir -p build/unsigned/Payload
-ditto build/Companion.xcarchive/Products/Applications/Companion.app build/unsigned/Payload/Companion.app
+package_root="$(mktemp -d "${TMPDIR:-/tmp}/mira-package.XXXXXX")"
+trap 'rm -rf "$package_root"' EXIT
+mkdir -p "$package_root/Payload"
+ditto build/Companion.xcarchive/Products/Applications/Companion.app "$package_root/Payload/Companion.app"
 (
-  cd build/unsigned
-  /usr/bin/zip -qry ../Mira-unsigned.ipa Payload
+  cd "$package_root"
+  /usr/bin/zip -qry Mira-unsigned.ipa Payload
 )
+python3 Scripts/check-ipa.py "$package_root/Mira-unsigned.ipa" --report build/Mira-package-report.json
+mv -f "$package_root/Mira-unsigned.ipa" build/Mira-unsigned.ipa
 echo 'Compiled archive: build/Companion.xcarchive'
 echo 'Unsigned package for re-signing: build/Mira-unsigned.ipa'
 echo 'This package is not installable until correctly signed. It has not passed device QA.'

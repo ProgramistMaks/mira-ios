@@ -1,5 +1,28 @@
 # Verification — 2026-11-16
 
+## Single IPA packaging request — build still pending
+
+The user requested one installable package and explicitly chose to keep model
+weights downloadable inside the app. The current environment is Linux, with no
+signing secret bindings or local certificate/profile files found. GitHub's secrets
+listing returned HTTP 403, so the account's signing-secret availability could not
+be established. A certificate is still required for installation; no signed output
+is claimed.
+
+The device packaging script now stages a fresh Payload instead of merging into an
+old directory/ZIP. `check-ipa.py` verifies archive integrity, arm64 iOS device
+executables (rejecting simulator binaries), linked/embedded llama runtime, the VRM
+character and renderer, widget configuration/version matching, required privacy
+descriptions and absence of model weights. It emits a package report with SHA256
+and an explicit statement that it has not validated a code signature.
+
+Five synthetic packaging guard tests passed, plus shell syntax/whitespace checks.
+The downloaded previous actual native artifact from run `43841702974` was inspected
+internally: its app/runtime are iOS arm64, but the current package validator rejects
+it because it predates `MiraWidgets.appex`. It is not a substitute for the current
+app and was not delivered. Run `43950455692` remains the single pending native
+validation for the current application code; no duplicate run was dispatched.
+
 ## Voice conversation milestone — local checks completed
 
 This batch adds a voice conversation panel with a larger existing character scene,
