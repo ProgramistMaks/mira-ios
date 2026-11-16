@@ -12,6 +12,20 @@ final class LaunchTests: XCTestCase {
                       "Bundled VRM must actually load inside WKWebView")
         assertAvatarVisible(app)
         capture("Portrait — native app and loaded character")
+        for label in ["Настройки", "Команды", "Начать запись", "Отправить"] {
+            let control = app.buttons[label]
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, "Glass controls retain a usable hit target")
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44)
+        }
+        XCTAssertFalse(app.buttons["Отправить"].isEnabled)
+        let draft = app.descendants(matching: .any)["conversation.input"]
+        draft.tap()
+        draft.typeText("Glass draft")
+        XCTAssertTrue(app.buttons["Отправить"].isEnabled)
+        XCTAssertTrue(app.buttons["Отправить"].isHittable)
+        capture("Glass composer — keyboard and enabled send")
+        draft.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 11))
+        XCTAssertFalse(app.buttons["Отправить"].isEnabled)
 
         app.buttons["Настройки"].tap()
         XCTAssertTrue(app.navigationBars["Настройки"].waitForExistence(timeout: 5))

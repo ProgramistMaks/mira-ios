@@ -2,10 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 device_id=$(xcrun simctl list devices available -j | python3 -c '
-import json,sys
+import json,sys,os
 devices=json.load(sys.stdin)["devices"]
-candidates=[d for runtime, rows in devices.items() if "iOS" in runtime for d in rows if "iPhone" in d["name"] and d.get("isAvailable")]
-if not candidates: raise SystemExit("No available iPhone simulator installed")
+version=os.environ.get("MIRA_TEST_IOS_VERSION", "26.2")
+runtime_suffix="iOS-"+version.replace(".", "-")
+candidates=[d for runtime, rows in devices.items() if runtime.endswith(runtime_suffix) for d in rows if "iPhone" in d["name"] and d.get("isAvailable")]
+if not candidates: raise SystemExit("No available iPhone simulator for iOS "+version)
+candidates.sort(key=lambda d: (d["name"] != "iPhone 16 Pro", d["name"]))
 print(candidates[0]["udid"])
 ')
 xcodebuild -project Companion.xcodeproj -scheme Companion \

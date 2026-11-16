@@ -61,11 +61,11 @@ struct CompanionView: View {
             .background(Palette.background)
         }
         .tint(Palette.lavender)
-        .sheet(isPresented: $showSettings) { SettingsView(store: store, voice: voice).tint(Palette.lavender) }
+        .sheet(isPresented: $showSettings) { SettingsView(store: store, voice: voice).tint(Palette.lavender).miraSheet() }
         .sheet(item: $store.proposedCommand) { proposal in
-            CommandsView(store: store, proposal: proposal).tint(Palette.lavender)
+            CommandsView(store: store, proposal: proposal).tint(Palette.lavender).miraSheet()
         }
-        .sheet(isPresented: $showCommands) { CommandsView(store: store).tint(Palette.lavender) }
+        .sheet(isPresented: $showCommands) { CommandsView(store: store).tint(Palette.lavender).miraSheet() }
         .alert("Не получилось", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("Понятно") { store.error = nil }
         } message: { Text(store.error ?? "") }
@@ -89,10 +89,14 @@ struct CompanionView: View {
                 Text("ТВОЙ ЛИЧНЫЙ КОМПАНЬОН").font(.system(size: 9, weight: .medium)).tracking(2).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { showCommands = true } label: { Image(systemName: "square.grid.2x2").frame(width: 44, height: 44) }
-                .accessibilityLabel("Команды")
-            Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44) }
-                .accessibilityLabel("Настройки")
+            MiraGlassGroup {
+                HStack(spacing: 10) {
+                    Button { showCommands = true } label: { Image(systemName: "square.grid.2x2").frame(width: 24, height: 28) }
+                        .miraGlassButton().accessibilityLabel("Команды")
+                    Button { showSettings = true } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 28) }
+                        .miraGlassButton().accessibilityLabel("Настройки")
+                }.controlSize(.large)
+            }
         }
     }
     private var stage: some View {
@@ -116,7 +120,7 @@ struct CompanionView: View {
                 Text(status).font(.caption)
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
-            .background(.ultraThinMaterial, in: Capsule()).padding(.bottom, 16)
+            .miraGlass(in: Capsule()).padding(.bottom, 16)
         }
         .accessibilityElement(children: .ignore).accessibilityLabel("Мира. \(status)")
         .accessibilityIdentifier(store.characterReady ? "avatar.ready" : "avatar.loading")
@@ -156,6 +160,7 @@ struct CompanionView: View {
         }
     }
     private var composer: some View {
+        MiraGlassGroup {
         HStack(alignment: .bottom, spacing: 10) {
             Button {
                 if voice.recording { voice.stopRecording() }
@@ -167,20 +172,24 @@ struct CompanionView: View {
                 }
             } label: {
                 Image(systemName: voice.recording ? "stop.circle.fill" : "mic")
-                    .font(.title3).frame(width: 44, height: 44)
-            }.disabled(store.thinking).accessibilityLabel(voice.recording ? "Закончить запись" : "Начать запись")
+                    .font(.title3).frame(width: 24, height: 28)
+            }.miraGlassButton(prominent: voice.recording)
+                .disabled(store.thinking).accessibilityLabel(voice.recording ? "Закончить запись" : "Начать запись")
             TextField("Напиши Мире…", text: $store.draft, axis: .vertical)
-                .lineLimit(1...5).padding(.vertical, 12).accessibilityIdentifier("conversation.input")
+                .lineLimit(1...5).padding(.horizontal, 16).padding(.vertical, 14)
+                .miraGlass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .accessibilityIdentifier("conversation.input")
                 .focused($composerFocused)
             Button {
                 if store.thinking || voice.busy { store.cancel() } else { composerFocused = false; store.send() }
             } label: {
                 Image(systemName: store.thinking || voice.busy ? "stop.fill" : "arrow.up")
-                    .font(.system(size: 17, weight: .semibold)).frame(width: 44, height: 44)
-                    .foregroundStyle(Palette.background).background(Palette.lavender, in: Circle())
+                    .font(.system(size: 17, weight: .semibold)).frame(width: 24, height: 28)
             }
+            .miraGlassButton(prominent: true)
             .disabled(voice.recording || (!store.thinking && !voice.busy && store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             .accessibilityLabel(store.thinking || voice.busy ? "Остановить" : "Отправить")
-        }.padding(8).background(Palette.panel, in: RoundedRectangle(cornerRadius: 30))
+        }.controlSize(.large)
+        }
     }
 }
