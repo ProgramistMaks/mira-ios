@@ -1,5 +1,22 @@
 # Verification — 2026-11-16
 
+## Local model catalogue upgrade
+
+User-selected Qwen3.5 9B Q4_K_M and four local alternatives are now in the catalogue. All five pinned files were downloaded on Linux and matched their exact SHA256 and sizes.
+
+- Qwen3.5 9B Q4_K_M answered `17 × 23 = 391` and explained Rayleigh scattering in Russian using llama.cpp b12430.
+- Qwen3.5 2B Q4_K_M, 4B Q4_K_M and Gemma 4 E2B Q4_K_M answered a Russian name-recall prompt with `Барсик` (Gemma included punctuation), using their family-specific raw prompt templates. These commands ran without network permission.
+- Qwen3.5 9B Q3_K_M also completed the same Russian recall prompt with `Барсик`, using the raw Qwen template and the application's configured top-k/top-p/temperature/presence-penalty values.
+- CI run `43829220890`, commit `507f2de74b169cfa7bfd380aedbaf5315c7909f7`, completed successfully in 19m37s on Xcode 16.4 / iOS 18.5 SDK.
+- Unsigned iPhone archive compiled with llama.cpp b12430. The simulator slice was built from the pinned source and combined with official device/macOS slices.
+- The actual Swift `LocalGenerator` returned `4` and reached EOS with both Qwen3.5 9B Q4_K_M and Gemma 4 E2B Q4_K_M. Both exact files passed SHA256 verification on the macOS runner.
+- Fourteen native unit tests and two UI tests passed with zero failures. New tests cover family-specific turn boundaries, RAM guidance, saved model selection and recovery from an unknown saved model ID.
+- The UI test selected Qwen3.5 4B, opened and cancelled its download confirmation, restarted the app, then verified the persisted choice and the still-not-downloaded state. Previous speech playback, commands, notes and rotation tests also passed.
+- The native catalogue screenshot was reviewed: 4B's size, recommendation, selected marker and download button are legible; 2B and Gemma rows render correctly. This is internal simulator evidence, not a user-facing delivery or a physical-device certification.
+- Follow-up changes only document these results and delete temporary smoke-test weights after each successful inference to reduce CI disk usage; shell syntax was checked. Application behavior remains the validated source above.
+
+These are basic real-inference checks, not quality benchmarks or measurements on iPhone. No physical-device memory, thermal or speed certification exists.
+
 ## Speech and framing update
 
 Run `43821912875`, commit `d3d8aadc3f3b06e62aca793e33cff5b84da8e524`, passed:
@@ -13,7 +30,7 @@ Run `43821912875`, commit `d3d8aadc3f3b06e62aca793e33cff5b84da8e524`, passed:
 - Additional Chromium screenshots confirmed an open mouth with live amplitude and
   a closed mouth after bridge updates expired. These are internal review artifacts.
 
-## Latest validated source
+## Previous command and speech validation
 
 Run `43822824892`, commit `aa05a0e00e598e792c683cd9fcfde28a4bc9f499`,
 completed successfully in 12m5s:
