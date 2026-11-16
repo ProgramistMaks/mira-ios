@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, speechLevel } from './motion.mjs';
 import { ActingController } from './acting.mjs';
+import { PlantedStance } from './stance.mjs';
 
 declare global {
   interface Window {
@@ -139,6 +140,7 @@ async function main() {
   renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; });
   renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; });
   const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
+  const stance = new PlantedStance(avatar.scene, bone, height, avatar.meta.metaVersion === '0' ? -1 : 1);
   const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
   const leftElbow = bone('leftLowerArm'), rightElbow = bone('rightLowerArm');
   const leftHand = bone('leftHand'), rightHand = bone('rightHand');
@@ -162,6 +164,7 @@ async function main() {
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
     const face = motion(elapsed, phase, reduced, speechLevel(speechAmplitude, (performance.now() - speechReceivedAt) / 1000));
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
+    stance.apply(pose);
     if (left) left.rotation.set(pose.leftRoll, armSign * pose.leftForward, armSign * (1.2 - pose.leftLift));
     if (right) right.rotation.set(pose.rightRoll, -armSign * pose.rightForward, -armSign * (1.2 - pose.rightLift));
     if (leftElbow) leftElbow.rotation.z = -armSign * pose.leftElbow;

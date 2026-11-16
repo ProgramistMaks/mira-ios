@@ -8,6 +8,8 @@ Liquid Glass is implemented and has internal iOS 26 visual evidence. The full UI
 
 Subsequent renderer changes reduce facial morph data and fix readiness/reload behavior after graphics context loss. Real-model Chromium checks passed; these changes also await native verification. See [verification evidence](Docs/VERIFICATION.md) for measured scope and remaining limits.
 
+The six authored character motions now include pelvis weight shifts and small dips with planted feet and bending knees. Local tests cover contact stability and real VRM retargeting; native performance and reference-quality acceptance remain pending. See [animation details](Docs/ANIMATION.md).
+
 [Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The new extension, lifecycle and route tests await native compilation/QA because hosted macOS builds remain blocked. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
 
 The portable Swift suite has forty passing tests: twenty-two interaction cases, twelve HTTP download cases and six file-verification cases. Verification now reports progress, and pausing preserves the file for another attempt. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. The app uses those same sources; Apple framework integration, audio/composer behavior and the new download UI still need native verification. The user confirmed that iOS builds are available again on 2026-11-16; see the latest run evidence in VERIFICATION.md.

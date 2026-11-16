@@ -7,11 +7,17 @@ import { build } from 'esbuild';
 const root = new URL('../Resources/Web/', import.meta.url);
 const morphProbe = await build({ entryPoints: ['Scripts/check-morphs.mjs'], bundle: true,
   write: false, format: 'esm', target: ['chrome120'] });
+const stanceProbe = await build({ entryPoints: ['Scripts/check-stance.mjs'], bundle: true,
+  write: false, format: 'esm', target: ['chrome120'] });
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
   if (path === '/check-morphs.js') {
     response.setHeader('Content-Type', 'application/javascript');
     response.end(morphProbe.outputFiles[0].contents); return;
+  }
+  if (path === '/check-stance.js') {
+    response.setHeader('Content-Type', 'application/javascript');
+    response.end(stanceProbe.outputFiles[0].contents); return;
   }
   const files = { '/': ['index.html', 'text/html'], '/avatar.js': ['avatar.js', 'application/javascript'],
     '/character.vrm': ['character.vrm', 'model/gltf-binary'] };
@@ -59,6 +65,13 @@ try {
     await page.waitForTimeout(1400);
     await page.screenshot({ path: `/tmp/companion-review/acting-${phase}.png` });
   }
+  await page.mouse.move(195, 180); await page.mouse.down();
+  await page.mouse.move(305, 180, { steps: 10 }); await page.mouse.up();
+  await page.waitForTimeout(450);
+  await page.screenshot({ path: '/tmp/companion-review/stance-three-quarter.png' });
+  await page.mouse.move(305, 180); await page.mouse.down();
+  await page.mouse.move(195, 180, { steps: 10 }); await page.mouse.up();
+  await page.waitForTimeout(450);
   // Native sheets/background pause the canvas; resume must animate the existing scene.
   await page.evaluate(() => window.companion.setActive(false));
   const paused = await page.screenshot();
@@ -110,6 +123,15 @@ try {
   assert.ok(morphs.after.attributeBytes < morphs.before.attributeBytes, JSON.stringify(morphs));
   assert.ok(morphs.maxDelta < 0.00001, JSON.stringify(morphs));
   console.log('Morph regression:', JSON.stringify(morphs));
+  const stance = await page.evaluate(async () => (await import('/check-stance.js')).checkStance());
+  assert.ok(stance.samples > 1000, JSON.stringify(stance));
+  assert.ok(stance.maxHipDisplacement > 0.01, JSON.stringify(stance));
+  assert.ok(stance.maxNormalizedFootDrift < 0.00001, JSON.stringify(stance));
+  assert.ok(stance.maxRawFootDrift < 0.00001, JSON.stringify(stance));
+  assert.ok(stance.maxRawFootAngle < 0.00001, JSON.stringify(stance));
+  assert.ok(stance.maxLengthChange < 0.00001, JSON.stringify(stance));
+  assert.ok(stance.minKneeForward > -0.00001, JSON.stringify(stance));
+  console.log('Stance regression:', JSON.stringify(stance));
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);
   // A broken model must produce an explicit error, never a fake ready state.
@@ -118,7 +140,7 @@ try {
   await broken.goto(address);
   await broken.waitForFunction(() => document.documentElement.dataset.status === 'error');
   assert.equal(await broken.evaluate(() => window.companion.ready), false);
-  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
+  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; planted raw and normalized feet across all stance clips; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

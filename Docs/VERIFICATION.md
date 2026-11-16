@@ -1,5 +1,31 @@
 # Verification — 2026-11-16
 
+## Planted-foot character acting — local renderer validation
+
+The six authored clips now include bounded pelvis weight shifts, turns and dips.
+An analytic two-bone solver bends the legs while preserving the original foot
+positions/orientations in avatar-local space. It compensates pelvis height when
+needed to avoid extending a leg beyond its length. The stance resets its input
+rotations every frame; Reduce Motion blends back to the original quiet stance.
+
+- TypeScript checking, all fourteen renderer unit tests and the Safari-targeted
+  renderer bundle build passed. Five new cases cover all clips with both VRM
+  facing conventions, transformed/scaled parents, rapid transitions, Reduce Motion,
+  repeated rest poses, bounded/invalid input and incomplete leg rigs.
+- The real-model Chromium probe sampled **1,188 poses** across all six clips while
+  turning the parent scene. It checked normalized and retargeted raw foot contacts,
+  raw foot orientation, leg lengths and forward knee bending with a `1e-5` tolerance.
+  Pelvis displacement exceeded 1 cm, so the contact check did not pass by keeping
+  the entire model motionless.
+- The browser suite also covers four sustained phases at three viewport sizes,
+  hit-tested touch, drag rejection, scene pause/resume, Reduce Motion, WebGL recovery,
+  unchanged optimized facial morphs, no external requests and explicit load failure.
+  Front and three-quarter screenshots were inspected internally for pose/framing.
+- This is local Chromium/WebGL evidence. It does not establish WKWebView performance,
+  device frame times, final acting quality or parity with the user's reference videos.
+  Per the build-budget preference, no hosted workflow was dispatched and no IPA or
+  screenshots were delivered. Apple SDK/inference sources and model pins are unchanged.
+
 ## Native validation resumed after user confirmation
 
 The user confirmed iOS build availability. Run `43932686138` tested source
@@ -244,7 +270,7 @@ Metal performance, memory use or thermal behavior on the target device.
 
 ## Local checks
 
-- TypeScript type check, nine current renderer tests and renderer bundle build passed.
+- TypeScript type check, fourteen current renderer tests and renderer bundle build passed.
 - Chromium/WebGL loaded the actual Vita VRM model, exercised four states and three viewport sizes, checked native viewport resizing, and made no external renderer requests.
 - A missing model produced the expected explicit failure.
 - Browser screenshots were reviewed internally for pose, materials, framing and greeting.
