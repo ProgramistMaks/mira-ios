@@ -18,6 +18,15 @@ The portable Swift suite has seventy-nine passing tests, including automatic con
 
 The [automatic conversation](Docs/SPEECH.md) listens, detects the end of a phrase, answers aloud and listens again while explicitly enabled. Stop/navigation/error/background disarms it. A real voice preview works without a model; missing AI configuration is shown before recording. Optional chat preserves an editable draft. Native and physical-device verification of this rebuild is pending.
 
+## Cream design
+
+The user selected the light cream reference. The native UI now uses a warm paper
+background, honey glass controls and a larger character with the conversation dock
+below it (beside it in landscape). A live [browser design preview](Design/README.md)
+uses the actual bundled VRM. It is not a native screenshot or a finished app; Vita's
+character design remains different from the reference. Local visual review covered
+four viewport sizes. No paid iOS build was run for this UI change.
+
 ## Renderer checks
 
 ```sh

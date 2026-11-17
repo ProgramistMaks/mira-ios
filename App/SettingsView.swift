@@ -105,6 +105,8 @@ struct SettingsView: View {
                     Link("Условия использования · CC0", destination: URL(string: "https://creativecommons.org/publicdomain/zero/1.0/")!)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Palette.background)
             .navigationTitle("Настройки")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Готово") { voice.stop(); dismiss() } } }
             .onAppear { key = SecretStore.read(); searchKey = SecretStore.read(account: "tavily") }

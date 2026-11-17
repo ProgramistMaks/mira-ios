@@ -76,9 +76,9 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(28, 1, 0.01, 100);
   const key = new THREE.DirectionalLight(0xfff0e4, 1.25);
   key.position.set(2, 3, 4); scene.add(key);
-  const rim = new THREE.DirectionalLight(0x9e8bff, 0.6);
+  const rim = new THREE.DirectionalLight(0xe8d7ad, 0.45);
   rim.position.set(-2, 2, -2); scene.add(rim);
-  scene.add(new THREE.HemisphereLight(0xe4e0ff, 0x3a314f, 0.75));
+  scene.add(new THREE.HemisphereLight(0xfff9ee, 0x777a67, 0.85));
   const loader = new GLTFLoader();
   loader.register(parser => new VRMLoaderPlugin(parser));
   const gltf = await loader.loadAsync('character.vrm');
@@ -109,7 +109,7 @@ async function main() {
     const viewportHeight = Math.max(1, nativeSize?.height ?? innerHeight);
     renderer.setSize(width, viewportHeight);
     camera.aspect = width / viewportHeight;
-    const distance = height * 0.58 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const distance = height * 0.54 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     camera.position.set(0, center.y + height * 0.03, distance * Math.max(1, 0.65 / camera.aspect));
     camera.lookAt(0, center.y, 0); camera.updateProjectionMatrix();
   };

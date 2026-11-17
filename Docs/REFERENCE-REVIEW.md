@@ -28,6 +28,16 @@ error-free verbatim record. No user video was sent to a transcription service.
 - Character scene and status use separate vertical space so the status no longer
   needs to cover the feet. Native screenshot review is required for each change.
 
+## User-selected cream direction — 2026-11-17
+
+The user selected the light cream version visible around 12–16 seconds in the first
+video. That reference has warm paper-like surfaces, thin rounded controls, muted
+accents and a character sharing the workspace. The mobile adaptation now uses those
+colors/material roles, a larger character and a compact conversation dock; optional
+forms open separately. This follows the user's request to prioritize automatic
+conversation, rather than copying the desktop block-editor layout onto a phone.
+The existing Vita candidate is unchanged; matching character styling remains open.
+
 ## Remaining quality gap
 
 The reference character has authored full-body acting, varied gestures, expressive

@@ -149,7 +149,10 @@ final class LaunchTests: XCTestCase {
                         let buffer = raw.bindMemory(to: UInt8.self)
                         var count = 0
                         for index in stride(from: 0, to: buffer.count, by: 4) {
-                            if max(buffer[index], max(buffer[index + 1], buffer[index + 2])) > 115 { count += 1 }
+                            // The cream background is bright too. Require the current
+                            // character's saturated blue/cyan pixels instead of brightness.
+                            let red = Int(buffer[index]), green = Int(buffer[index + 1]), blue = Int(buffer[index + 2])
+                            if blue > red + 22 && max(green, blue) - red > 40 { count += 1 }
                         }
                         return count
                     }

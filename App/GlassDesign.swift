@@ -34,7 +34,7 @@ private struct MiraGlassSurface<S: Shape>: ViewModifier {
 
 private extension Shape {
     func strokeBorderFallback(_ opacity: Double) -> some View {
-        stroke(.white.opacity(opacity), lineWidth: 1).allowsHitTesting(false)
+        stroke(Palette.accent.opacity(opacity), lineWidth: 0.7).allowsHitTesting(false)
     }
 }
 
@@ -52,7 +52,7 @@ private struct MiraGlassButton: ViewModifier {
             content.buttonStyle(.borderedProminent).buttonBorderShape(.circle)
         } else {
             content.buttonStyle(.bordered).buttonBorderShape(.circle)
-                .tint(reduceTransparency ? .white : Palette.lavender)
+                .tint(reduceTransparency ? Palette.ink : Palette.accent)
         }
     }
 }

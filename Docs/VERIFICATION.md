@@ -1,8 +1,30 @@
-# Verification — 2026-11-16
+# Verification — 2026-11-17
 
-## Latest status: macOS verification blocked by GitHub billing
+## Cream design selected by the user — local visual review
 
-Latest application source: `561dd63` on `rebuild/voice-first` (draft PR #1).
+The user explicitly chose the reference's light cream direction on 2026-11-17.
+The native home now uses warm paper/olive/honey tokens, a compact wordmark/header,
+a larger character scene and a slim glass conversation dock. Chat/settings adopt
+light surfaces, and the Dynamic Island retains its system-dark surface with a
+matching honey accent. Character lighting and camera framing were adjusted.
+The original Vita asset is unchanged and still differs from the reference character.
+
+TypeScript checks, renderer build, all 27 renderer tests and Swift syntax parsing
+passed. The real bundled VRM was visually reviewed in an explicitly labelled browser
+preview at 390×780, 320×568, 844×390 and 820×1000, including active conversation and
+optional chat. Control bounds and no horizontal overflow passed. The native startup
+pixel assertion now requires character color rather than general brightness, which
+would incorrectly accept an empty cream background.
+
+These are browser design screenshots, not native screenshots. The final native
+layout/glass, accessibility sizes and physical-device voice/search remain unverified.
+No GitHub Actions run or new IPA was produced for this design change. See
+`Design/README.md` for reproduction and exact preview limitations.
+
+
+## Last macOS attempt: blocked by GitHub billing
+
+Source at the last macOS attempt: `561dd63` on `rebuild/voice-first` (draft PR #1).
 Run `43972857986` did not start any job steps. GitHub check annotation:
 “The job was not started because recent account payments have failed or your
 spending limit needs to be increased. Please check the 'Billing & plans' section

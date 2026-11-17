@@ -110,7 +110,9 @@ struct CommandsView: View {
                         }
                     }
                 }
-            }.navigationTitle(proposal?.title ?? "Команды")
+            }.scrollContentBackground(.hidden)
+            .background(Palette.background)
+            .navigationTitle(proposal?.title ?? "Команды")
             .onDisappear { searchTask?.cancel() }
             .interactiveDismissDisabled(saving)
             .toolbar {
