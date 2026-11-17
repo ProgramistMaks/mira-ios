@@ -32,7 +32,9 @@ export class PerformanceController {
       enabled:settings.enabled!==false,
     };
     if(Object.keys(next).every(k=>next[k]===this.settings[k]))return;
-    this.settings=next;this.choose();
+    this.settings=next;
+    if(next.variant>=0&&['greeting','touch'].includes(this.base.clip))this.base.begin(this.phase);
+    this.choose();
   }
   choose(touch=false) {
     this.from={...this.pose};this.fadeAge=0;this.age=0;
@@ -70,6 +72,10 @@ export class PerformanceController {
     const pause=this.phase==='listening'?5:this.phase==='idle'?4:2.5;
     this.nextAt=this.duration+pause+this.random()*4;
   }
+  replay() {
+    if(['greeting','touch'].includes(this.base.clip))this.base.begin(this.phase);
+    this.choose();
+  }
   setPhase(phase) {
     if(!automaticEmotions[phase]||phase===this.phase)return;
     this.base.setPhase(phase);this.moodTurns=0;this.choose();
@@ -95,8 +101,8 @@ export class PerformanceController {
       if(!directReaction)this.age=0;
     }
     // During speech pauses the arms settle instead of delivering silent emphatic gestures.
-    const activity=this.phase==='speaking'?.25+.75*emphasis.energy:1;
-    const conversationalBase={...base};
+    const activity=this.settings.variant<0&&this.phase==='speaking'?.25+.75*emphasis.energy:1;
+    const conversationalBase=this.settings.variant>=0&&!directReaction?{...REST,smile:base.smile}:{...base};
     // Automatic idle/listening no longer repeat the full short base sway/nod loop.
     // Keep authored one-shots and manually selected demonstrations intact.
     if(this.settings.enabled&&this.settings.variant<0&&!directReaction){

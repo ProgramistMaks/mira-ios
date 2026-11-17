@@ -143,7 +143,7 @@ test('secondary motion is small, preserves manual gaze and does not author facia
   const quiet=new PerformanceController(2), audible=new PerformanceController(2);
   for(const actor of [quiet,audible]){actor.configure({variant:encodeVariant(26,0,0,0)});actor.setPhase('speaking');}
   for(let i=0;i<120;i++){quiet.update(1/60,false,0);audible.update(1/60,false,.7);}
-  assert.ok(audible.pose.rightLift>quiet.pose.rightLift+.1);
+  assert.ok(Math.abs(audible.pose.rightLift-quiet.pose.rightLift)<1e-9,'Manual previews retain full movement without audio');
   for(let i=0;i<60;i++)audible.update(1/60,true,.7);
   for(const key of Object.keys(REST).filter(k=>k!=='smile'))assert.equal(audible.pose[key],REST[key]);
 });
@@ -161,4 +161,19 @@ test('greeting and touch release into gesture preparation without a mid-stroke j
     }
     assert.ok(ended);
   }
+});
+
+test('all 52 manual previews are independent of conversation phase and silent speech',()=>{
+  for(let g=0;g<GESTURES.length;g++){
+    const actors=['idle','listening','thinking','speaking'].map(phase=>{const a=new PerformanceController(8);a.setPhase(phase);a.configure({variant:encodeVariant(g,0,0,0),intensity:.7});return a;});
+    for(let frame=0;frame<180;frame++){
+      const poses=actors.map(a=>a.update(1/60,false,0));
+      for(const pose of poses.slice(1))for(const key of Object.keys(REST).filter(k=>k!=='smile'))assert.ok(Math.abs(pose[key]-poses[0][key])<1e-9,`${g} ${key}`);
+    }
+  }
+});
+test('manual preview cancels greeting and replay restarts the same gesture without changing its ID',()=>{
+  const a=new PerformanceController(4);a.trigger('greeting');a.update(.05);
+  a.configure({variant:encodeVariant(12,0,0,0)});assert.equal(a.clip,'idle');
+  advance(a,5);const id=a.variant,before={...a.pose};a.replay();assert.equal(a.variant,id);assert.equal(a.age,0);assert.ok(difference(before,a.update(0))<1e-12);
 });

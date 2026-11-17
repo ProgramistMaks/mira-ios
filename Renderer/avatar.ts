@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, SpeechSamples } from './motion.mjs';
 import { PerformanceController } from './performance.mjs';
+import { ArmTargets } from './arm-targets.mjs';
 import { ArmRig } from './arms.mjs';
 import { VARIANT_COUNT } from './expression-library.mjs';
 import { PlantedStance } from './stance.mjs';
@@ -16,7 +17,7 @@ declare global {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
       setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
-      configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
+      replayGesture(): void; configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
 }
@@ -49,6 +50,7 @@ window.companion = {
   bodyCatalog: BODY_CATALOG, bodyStatus: {},
   configureBody(settings) { body.configure(settings); },
   configurePerformance(settings) { acting.configure(settings); },
+  replayGesture() { acting.replay(); },
   phase,
   setActive(value) {
     if (!active && value === true) resetPhysics?.();
@@ -165,6 +167,7 @@ async function main() {
   const stance = new PlantedStance(avatar.scene, bone, height, avatar.meta.metaVersion === '0' ? -1 : 1);
   const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
   const arms = new ArmRig(bone, armSign);
+  const armTargets = new ArmTargets(avatar.scene, bone, height, armSign);
   const articulation = new ArticulationRig(bone, armSign);
   const secondary = new SecondaryPhysics(avatar.springBoneManager);
   resetPhysics = () => secondary.reset();
@@ -210,6 +213,7 @@ async function main() {
     if (chest) chest.rotation.set(pose.chestX, pose.chestY, pose.chestZ);
     if (neck) neck.rotation.set(pose.neckX, pose.neckY, pose.neckZ);
     if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
+    armTargets.apply(pose);
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {

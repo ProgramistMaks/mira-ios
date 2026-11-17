@@ -26,6 +26,7 @@ struct MotionCatalogue: Decodable {
 }
 
 struct MotionSettingsView: View {
+    @AppStorage("bodyMode") private var bodyMode = "natural"
     @AppStorage("expressionsEnabled") private var enabled = true
     @AppStorage("expressionEmotion") private var emotion = "auto"
     @AppStorage("expressionIntensity") private var intensity = 0.7
@@ -44,7 +45,7 @@ struct MotionSettingsView: View {
                     Section("Выразительность") {
                         Slider(value: $intensity, in: 0.35...1) { Text("Выразительность") }
                         Text(intensity < 0.55 ? "Сдержанно" : intensity < 0.85 ? "Естественно" : "Выразительно")
-                        Toggle("Подбирать автоматически", isOn: Binding(get: { variant < 0 }, set: { variant = $0 ? -1 : 0 }))
+                        Toggle("Подбирать автоматически", isOn: Binding(get: { variant < 0 }, set: { variant = $0 ? -1 : 0; bodyMode = "natural" }))
                         if variant < 0 {
                             Picker("Настроение", selection: $emotion) {
                                 Text("По состоянию разговора").tag("auto")
@@ -75,7 +76,7 @@ struct MotionSettingsView: View {
     }
     private func dimension(_ title: String, entries: [MotionCatalogue.Entry], index: Int, catalogue: MotionCatalogue) -> some View {
         Picker(title, selection: Binding(get: { catalogue.indices(variant)[index] }, set: { value in
-            var indices = catalogue.indices(variant); indices[index] = value; variant = catalogue.identifier(indices)
+            var indices = catalogue.indices(variant); indices[index] = value; variant = catalogue.identifier(indices); bodyMode = "natural"
         })) {
             ForEach(Array(entries.enumerated()), id: \.element.id) { offset, entry in Text(entry.title).tag(offset) }
         }

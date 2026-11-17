@@ -9,22 +9,26 @@ const gesture = (id, title, phases, peak, echo = {}, duration = 7) => ({
 });
 const all = ['idle', 'listening', 'thinking', 'speaking'];
 export const GESTURES = [
-  gesture('soft-nod', 'Мягкий кивок', all, { headX: .065, neckX: .012 }, { headX: -.018 }),
+  {id:'soft-nod',title:'Мягкий кивок',phases:all,duration:4.8,frames:[[0,{}],[.26,{headX:.095,neckX:.018}],[.55,{headX:-.018}],[.8,{}],[1,{}]]},
   gesture('double-nod', 'Двойной кивок', ['listening','speaking'], { headX: .10, chestX: .018 }, { headX: -.03 }, 5.8),
-  gesture('tilt-left', 'Наклон головы влево', all, { headZ: .09, headY: -.025 }, { headZ: .055 }),
-  gesture('tilt-right', 'Наклон головы вправо', all, { headZ: -.09, headY: .025 }, { headZ: -.055 }),
+  {id:'tilt-left',title:'Наклон головы влево',phases:all,duration:6.2,frames:[[0,{}],[.25,{headZ:.16,headY:-.035}],[.67,{headZ:.14,headY:-.025}],[1,{}]]},
+  {id:'tilt-right',title:'Наклон головы вправо',phases:all,duration:6.2,frames:[[0,{}],[.25,{headZ:-.16,headY:.035}],[.67,{headZ:-.14,headY:.025}],[1,{}]]},
   gesture('look-aside', 'Взгляд в сторону', ['idle','thinking'], { headY: .13, neckX: -.018 }, { headY: .07 }),
-  gesture('look-back', 'Взгляд через плечо', ['idle','thinking'], { headY: -.13, chestY: -.035 }, { headY: -.06 }),
+  gesture('look-back', 'Взгляд через плечо', ['idle','thinking'], { headY: -.40, chestY: -.14 }, { headY: -.25, chestY: -.08 }),
   gesture('open-left', 'Открытая левая ладонь', ['idle','speaking'], { leftLift: .46, leftElbow: .70, leftPalm: -.48, leftCurl: -.12 }, { leftLift: .30, leftElbow: .50 }),
   gesture('open-right', 'Открытая правая ладонь', ['idle','speaking'], { rightLift: .46, rightElbow: .70, rightPalm: .48, rightCurl: -.12 }, { rightLift: .30, rightElbow: .50 }),
   gesture('both-palms', 'Обе ладони открыты', ['idle','speaking'], { leftLift: .27, rightLift: .27, leftForward: .35, rightForward: .35, leftElbow: .65, rightElbow: .65, leftPalm: -.35, rightPalm: .35 }, { leftLift: .18, rightLift: .18 }),
   gesture('explain-left', 'Объяснение левой рукой', ['speaking'], { leftLift: .58, leftElbow: .80, leftWrist: .12, chestY: .035 }, { leftLift: .35, leftElbow: .45, leftWrist: -.08 }),
   gesture('explain-right', 'Объяснение правой рукой', ['speaking'], { rightLift: .58, rightElbow: .80, rightWrist: -.12, chestY: -.035 }, { rightLift: .35, rightElbow: .45, rightWrist: .08 }),
-  gesture('small-shrug', 'Лёгкое пожатие плечами', ['idle','speaking'], { leftLift: .21, rightLift: .21, leftElbow: .45, rightElbow: .45, headZ: .04 }, { headZ: -.035 }),
-  gesture('hand-to-heart', 'Рука у груди', ['idle','listening','speaking'], { leftLift: .25, leftForward: .35, leftElbow: 1.35, leftCurl: -.04, chestX: .018 }, { leftElbow: 1.05, leftForward: .22 }),
+  gesture('small-shrug', 'Лёгкое пожатие плечами', ['idle','speaking'], { leftShoulderLift:.15, rightShoulderLift:.15, leftLift: .08, rightLift: .08, leftElbow: .25, rightElbow: .25, headZ: .04 }, { headZ: -.035 }),
+  {id:'hand-to-heart',title:'Рука у груди',phases:['idle','listening','speaking'],duration:6.5,
+    frames:[[0,{}],[.12,{leftLift:.12,leftForward:.18,leftElbow:.25}],
+      [.36,{leftChestReach:1,leftCurl:-.04,chestX:.018}],
+      [.68,{leftChestReach:1,leftCurl:-.04,chestX:.018}],
+      [.9,{leftLift:.08,leftElbow:.18}],[1,{}]]},
   gesture('reassure', 'Поддерживающий жест', ['listening','speaking'], { rightLift: .27, rightElbow: .65, rightPalm: .28, headX: .05 }, { rightLift: .18, headX: .02 }),
-  gesture('small-wave-left', 'Небольшой взмах слева', ['idle'], { leftLift: .88, leftElbow: 1.02, leftWrist: -.22, leftCurl: -.16 }, { leftLift: .86, leftElbow: 1.00, leftWrist: .20, leftCurl: -.16 }, 5.5),
-  gesture('small-wave-right', 'Небольшой взмах справа', ['idle'], { rightLift: .88, rightElbow: 1.02, rightWrist: .22, rightCurl: -.16 }, { rightLift: .86, rightElbow: 1.00, rightWrist: -.20, rightCurl: -.16 }, 5.5),
+  gesture('small-wave-left', 'Небольшой взмах слева', ['idle'], { leftWaveReach: 1, leftLift: .88, leftElbow: 1.02, leftWrist: -.22, leftCurl: -.16 }, { leftWaveReach: 1, leftLift: .86, leftElbow: 1.00, leftWrist: .20, leftCurl: -.16 }, 5.5),
+  gesture('small-wave-right', 'Небольшой взмах справа', ['idle'], { rightWaveReach: 1, rightLift: .88, rightElbow: 1.02, rightWrist: .22, rightCurl: -.16 }, { rightWaveReach: 1, rightLift: .86, rightElbow: 1.00, rightWrist: -.20, rightCurl: -.16 }, 5.5),
   gesture('idea', 'Появилась идея', ['thinking','speaking'], { leftLift: .36, leftElbow: .92, leftCurl: .10, headX: -.04, chestX: -.015 }, { leftLift: .20, leftElbow: .64 }),
   gesture('consider', 'Обдумывание', ['idle','thinking'], { headX: -.05, headZ: .055, leftElbow: .18, leftPalm: -.15 }, { headZ: -.025 }),
   gesture('listen-close', 'Внимательно слушает', ['listening'], { chestX: .035, neckX: .025, headX: .035, rightElbow: .14 }, { headX: -.015 }),
@@ -93,7 +97,7 @@ export function boundedPose(pose) {
   const out={ ...REST, ...FACE_REST };
   for(const key of POSE_KEYS) {
     let lo=-.20,hi=.20;
-    if(key==='hipsSide'){lo=-.025;hi=.025;} else if(key==='hipsDrop'){lo=0;hi=.025;}
+    if(key.endsWith('Reach')){lo=0;hi=1;} else if(key==='headY'){lo=-.45;hi=.45;} else if(key==='hipsSide'){lo=-.025;hi=.025;} else if(key==='hipsDrop'){lo=0;hi=.025;}
     else if(key==='hipsForward'){lo=-.02;hi=.02;} else if(key==='hipsYaw'){lo=-.06;hi=.06;}
     else if(key==='hipsRoll'){lo=-.04;hi=.04;}
     else if(key.endsWith('Elbow')){lo=0;hi=2.60;} else if(key.endsWith('Lift')){lo=0;hi=1.38;}
@@ -128,7 +132,7 @@ export function sampleVariant(id, progress, base=REST, intensity=.7, gestureWeig
     // gestures on the same joints while the base speaking clip is active.
     if(gestureArms[selection.gesture].some(side=>key.startsWith(side)))
       result[key]+=(REST[key]-result[key])*ownership;
-    result[key]+=((a[key]??0)+((b[key]??0)-(a[key]??0))*weight)*amount*clamp(gestureWeight,0,1);
+    result[key]+=((a[key]??0)+((b[key]??0)-(a[key]??0))*weight)*(key.endsWith('Reach')?1:amount)*clamp(gestureWeight,0,1);
   }
   for(const key of ['hipsSide','hipsDrop','hipsForward','hipsYaw','hipsRoll'])result[key]+=stance[key]*amount;
   result.headX+=e.headX*amount;result.headZ+=e.headZ*amount;

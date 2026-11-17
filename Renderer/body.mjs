@@ -10,7 +10,7 @@ for (const [side, title] of [['left', 'Левая'], ['right', 'Правая']])
   for (const [key, label, min, max, initial] of [
     ['ShoulderLift','Плечо: подъём',-.15,.28,0], ['ShoulderForward','Плечо: вперёд',-.2,.3,0],
     ['Lift','Рука: подъём',0,1.7,0], ['Forward','Рука: вперёд',-.3,1.05,0], ['Roll','Рука: вращение',-.55,.55,0],
-    ['Elbow','Локоть',.05,1.8,.1], ['Palm','Поворот предплечья',-1.2,1.2,0],
+    ['Elbow','Локоть',.05,2.6,.1], ['Palm','Поворот предплечья',-1.2,1.2,0],
     ['Flex','Запястье: сгибание',-.45,.45,0], ['Wrist','Запястье: отклонение',-.4,.4,0],
   ]) channel(side+key,label,group,min,max,initial);
   const fingerNames = ['Большой','Указательный','Средний','Безымянный','Мизинец'];
@@ -69,8 +69,8 @@ export class BodyController {
       ['Thumb','Index','Middle','Ring','Little'].forEach((f,i)=>{
         for(let j=0;j<3;j++) pose[`${s}${f}${j}`]=clamp(curl*[.8,.9,.55][j]*(f==='Thumb'?.45:1+i*.025),0,f==='Thumb'?.85:1.35);
       });
-      pose[s+'ShoulderLift']=reduced?0:Math.max(0,pose[s+'Lift'])*.08;
-      pose[s+'ShoulderForward']=reduced?0:pose[s+'Forward']*.08;
+      pose[s+'ShoulderLift']=reduced?0:(base[s+'ShoulderLift']??0)+Math.max(0,pose[s+'Lift'])*.08;
+      pose[s+'ShoulderForward']=reduced?0:(base[s+'ShoulderForward']??0)+pose[s+'Forward']*.08;
       pose[s+'Spread']=reduced?0:.022+(index?.004:0);
       pose[s+'ThumbOpposition']=reduced?0:.08+curl*.12;
     }
@@ -107,7 +107,7 @@ export class BodyController {
     }
     // Accessibility overrides both automatic movement and deliberately animated test loops.
     const target=reduced?{...REST,...neutral}:pose;
-    for(const c of BODY_CHANNELS){
+    for(const c of [...BODY_CHANNELS,...['leftChestReach','rightChestReach','leftWaveReach','rightWaveReach'].map(id=>({id,min:0,max:1,initial:0}))]){
       const value=Number.isFinite(target[c.id])?clamp(target[c.id],c.min,c.max):c.initial;
       const state=reduced?{position:value,velocity:0}:followJoint(this.current[c.id],this.velocities[c.id]??0,value,dt,responseRate(c.id));
       this.current[c.id]=clamp(state.position,c.min,c.max);this.velocities[c.id]=this.current[c.id]===state.position?state.velocity:0;pose[c.id]=this.current[c.id];
@@ -133,7 +133,7 @@ export class ArticulationRig {
     for(const {node,kind,side,index,joint,rest}of this.entries){
       const sign=(side==='left'?-1:1)*this.sign;let x=0,y=0,z=0;
       if(kind==='upperChest'){x=pose.upperChestX??0;y=pose.upperChestY??0;z=pose.upperChestZ??0;}
-      if(kind==='shoulder'){z=sign*(pose[side+'ShoulderLift']??0);y=-sign*(pose[side+'ShoulderForward']??0);}
+      if(kind==='shoulder'){z=sign*(pose[side+'ShoulderLift']??0);y=(side==='left'?-1:1)*(pose[side+'ShoulderForward']??0);}
       if(kind==='toes')x=this.sign*(pose[side+'Toes']??0);
       if(kind==='finger'){
         z=sign*(pose[joint]??0);

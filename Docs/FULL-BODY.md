@@ -95,3 +95,49 @@ of natural movement plus joint demonstrations; foot-target error remains below
 1e-12 model units. TypeScript/build and Swift syntax checks pass. This does not
 establish human-quality acting: visual review, contact quality and measured
 physical iPhone performance remain unverified. No paid native build dispatched.
+
+## Gesture regression repair and complete catalogue audit
+
+A user reported stationary/identical arms and an incorrect hand-to-heart gesture.
+Reproduction on the actual Vita skeleton found its old wrist about 0.40 model
+units lateral to the chest; VRM0 forward-arm yaw also pointed behind the torso.
+Body demo/manual mode could overwrite selected catalogue gestures entirely, and
+silent speaking attenuated manual previews. The looping conversational base also
+obscured differences between small preview gestures.
+
+Corrections:
+- Forward yaw now follows the VRM convention. Body elbow controls allow the
+  existing authored 2.6-radian range instead of truncating at 1.8.
+- Near-chest and left/right waving use body-relative wrist goals and two-bone IK.
+  Goals blend through complete solved joint rotations, avoiding elbow pole flips.
+  Arm lengths remain fixed; IK elbow bend is limited to 2.6 radians, forearm twist
+  to 1.2 and combined wrist bend to 0.6. Near-chest is not guaranteed cloth contact.
+- Manual catalogue previews use a quiet base, retain full gesture amplitude in
+  all conversation phases, and cancel a decorative greeting when selected.
+- Site gesture selection exits body demo mode, resumes the scene and replays the
+  selected track. Reduced Motion is respected and reported, not silently disabled.
+  Native catalogue pickers also restore body gesture mode.
+- Soft nod has a single stroke, double nod keeps two, head tilts have a sustained
+  hold, looking over a shoulder turns the torso, and shrug uses shoulder bones.
+  IDs remain stable. Similar nod/listening families are not claimed to be wholly
+  different activities; numerical trajectory uniqueness is not visual acceptance.
+
+`Scripts/check-gesture-catalog.mjs` runs all 52 tracks through the production
+PerformanceController -> BodyController -> stance/arms/articulation/targets ->
+real VRM retargeting stack at 60 Hz, 70% intensity, neutral emotion and stance.
+It checks finite/bounded controls, nonzero joint motion, fixed segment lengths,
+raw vs normalized wrist positions, IK goals and frame discontinuities, and reports
+nearby trajectories using both translation and quaternion rotation. It writes
+`/tmp/mira-gesture-audit.json`; this is a reproducible diagnostic, not a screenshot.
+
+Observed maxima: elbow 2.27536 rad; target error 4.94e-7 model units; raw skin-wrist
+retarget error 8.96e-16; tracked joint displacement 0.03248 model units/frame and
+angular displacement 0.09040 rad/frame. Wrist-goal constraints are checked at full
+reach. These are sampled motion bounds, not a claim of full-body collision safety.
+
+58 renderer tests pass, including both facing conventions, incomplete arm rigs,
+all 52 manual gestures across four phases, and replay/greeting interruption.
+13 Site tests pass, including selection from a conflicting body demo and replay.
+TypeScript, production build and Swift syntax parsing pass. Managed browser QA
+is unavailable; no alternative browser path was used. Visual review, full cloth
+collision, native compilation and physical iPhone testing remain outstanding.
