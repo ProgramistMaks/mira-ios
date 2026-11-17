@@ -4,6 +4,8 @@ import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 const files = new Map([
   ['/Design/cream.html', ['Design/cream.html','text/html']],
+  ['/Design/screens.css', ['Design/screens.css','text/css']],
+  ['/Design/screens.js', ['Design/screens.js','application/javascript']],
   ['/Resources/Web/index.html',['Resources/Web/index.html','text/html']],
   ['/Resources/Web/avatar.js',['Resources/Web/avatar.js','application/javascript']],
   ['/Resources/Web/character.vrm',['Resources/Web/character.vrm','model/gltf-binary']],
@@ -19,7 +21,7 @@ try{
  await page.goto(`http://127.0.0.1:${server.address().port}/Design/cream.html`);
  const scene=page.frames().find(f=>f.url().endsWith('/Resources/Web/index.html'));
  await scene.waitForFunction(()=>window.companion?.ready===true,undefined,{timeout:30000});
- for(const [name,width,height,state] of [['portrait',390,780,'setup'],['conversation',390,780,'listening'],['compact',320,568,'idle'],['landscape',844,390,'idle'],['expanded',820,1000,'idle']]){
+ if(!process.env.MIRA_REVIEW_PAGES_ONLY) for(const [name,width,height,state] of [['portrait',390,780,'setup'],['conversation',390,780,'listening'],['compact',320,568,'idle'],['landscape',844,390,'idle'],['expanded',820,1000,'idle']]){
   await page.setViewportSize({width,height});await page.evaluate(state=>window.setPreviewState(state),state);
   await page.waitForTimeout(1400);
   const screen=await page.locator('.screen').boundingBox();const stage=await page.locator('.stage').boundingBox();
@@ -29,6 +31,26 @@ try{
   await page.locator('.screen').screenshot({path:`${output}/${name}.png`});
   console.log(`${name}: ${width}×${height}, character stage ${Math.round(stage.width)}×${Math.round(stage.height)}, controls inside screen`);
  }
- await page.setViewportSize({width:390,height:780});await page.locator('.chat').click();await page.locator('.sheet.open').screenshot({path:`${output}/chat.png`});await page.locator('.close').click();
+ for(const width of [390,320,844]) {
+  await page.setViewportSize({width,height:width===844?390:780});
+  for(const name of ['settings','models','voice','search','cloud','commands','chat','messages','widgets','appearance','data']){
+   await page.evaluate(name=>window.openDesignPage(name),name);
+   assert.equal(await page.locator('.sheet-content').evaluate(el=>el.scrollWidth>el.clientWidth+1),false,`${name}: no horizontal overflow`);
+   const close=await page.locator('.close').boundingBox();const screen=await page.locator('.screen').boundingBox();
+   assert.ok(close.height>=44 && close.y>=screen.y && close.y+close.height<=screen.y+screen.height);
+   if(width===390)await page.locator('.screen').screenshot({path:`${output}/${name}.png`});
+  }
+  console.log(`All 11 secondary previews fit ${width}px width`);
+ }
+ await page.setViewportSize({width:390,height:780});
+ await page.evaluate(()=>window.openDesignPage('models'));
+ await page.locator('#model-query').fill('gemma');assert.equal(await page.locator('#model-cards .model-top').count(),1);
+ await page.locator('[data-filter="installed"]').click();assert.ok(await page.getByText('Пока нет загруженных моделей').isVisible());
+ await page.locator('[data-clear-models]').click();assert.equal(await page.locator('#model-cards .model-top').count(),5);
+ await page.evaluate(()=>window.openDesignPage('commands'));
+ await page.locator('[data-command="search"]').click();assert.ok(await page.getByRole('button',{name:'Искать в Мире',exact:true}).isVisible());
+ await page.evaluate(()=>window.openDesignPage('chat'));
+ await page.locator('[data-prompt]').first().click();assert.equal(await page.locator('.compose-preview input').inputValue(),'Давай придумаем идею');
+ console.log('Design navigation, catalogue filtering and draft-only prompt selection passed. No app services invoked.');
  assert.deepEqual(errors,[]);console.log('Live WebGL scene and browser layout checks passed. This does not validate SwiftUI or native Liquid Glass.');
 }finally{await browser?.close();server.close();}

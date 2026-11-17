@@ -240,48 +240,36 @@ struct CompanionView: View {
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 20) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
                         if store.messages.isEmpty {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("О чём поговорим?").font(.title2.weight(.medium))
+                            VStack(alignment: .leading, spacing: 16) {
+                                MiraScreenIntro(title: searchMode ? "Что найдём?" : "О чём поговорим?",
+                                                detail: searchMode ? "Задай вопрос — найденные источники останутся здесь." : "Расскажи, как прошёл день, или начни с небольшой идеи.",
+                                                symbol: searchMode ? "globe" : "text.bubble")
                                     .accessibilityIdentifier("conversation.welcome")
-                                Text("Расскажи, как прошёл день.")
-                                    .font(.callout).foregroundStyle(.secondary)
-                            }.padding(.vertical, 12)
+                                if store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    ForEach(searchMode ? ["Что нового в космосе?", "Идеи для прогулки"] : ["Давай придумаем идею", "Помоги составить план на день"], id: \.self) { prompt in
+                                        Button {
+                                            store.draft = prompt; composerFocused = true
+                                        } label: {
+                                            HStack { Text(prompt); Spacer(); Image(systemName: "arrow.up.left") }
+                                                .font(.subheadline).padding(14).frame(maxWidth: .infinity, minHeight: 44)
+                                                .background(.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+                                        }.buttonStyle(.plain).disabled(voice.recordingBusy || store.thinking)
+                                    }
+                                }
+                            }.padding(.vertical, 16)
                         }
                         ForEach(store.messages) { message in
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(message.role == .user ? "ТЫ" : "МИРА")
-                                    .font(.system(size: 9, weight: .semibold)).tracking(2).foregroundStyle(Palette.accent)
-                                if message.content.isEmpty && store.activeID == message.id { ProgressView() }
-                                else { Text(message.content).textSelection(.enabled).font(.system(size: 16)).lineSpacing(5) }
-                                if let sources = message.sources {
-                                    ForEach(sources) { source in
-                                        if let url = source.safeURL {
-                                            Link(source.title, destination: url).font(.callout)
-                                        }
-                                    }
-                                }
-                                if message.interrupted && store.activeID != message.id {
-                                    Text(message.interruption?.title ?? "Ответ прерван")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                        .accessibilityIdentifier("conversation.interrupted.\(message.id)")
-                                    if store.question(for: message.id) != nil {
-                                        Button {
-                                            if store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                                if store.restoreQuestion(for: message.id) { composerFocused = true }
-                                            } else { questionToRestore = message.id }
-                                        } label: {
-                                            Label("Вернуть вопрос", systemImage: "arrow.uturn.backward")
-                                                .font(.caption).frame(minHeight: 44)
-                                        }
-                                        .disabled(store.thinking || voice.recordingBusy)
-                                        .accessibilityIdentifier("conversation.restore.\(message.id)")
-                                    }
-                                }
-                            }
-                            .padding(18).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(message.role == .user ? Palette.panel : .clear, in: RoundedRectangle(cornerRadius: 20))
+                            ConversationMessageView(message: message, active: store.activeID == message.id,
+                                searching: store.searching, canRestore: store.question(for: message.id) != nil,
+                                busy: store.thinking || voice.recordingBusy,
+                                canSpeak: !store.thinking && !voice.recordingBusy && !voice.busy,
+                                restore: {
+                                    if store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        if store.restoreQuestion(for: message.id) { composerFocused = true }
+                                    } else { questionToRestore = message.id }
+                                }, speak: { store.replay(message) })
                         }
                         Color.clear.frame(height: 1).id("bottom")
                     }.padding(.horizontal, 20)
@@ -292,7 +280,15 @@ struct CompanionView: View {
                     if !store.messages.isEmpty { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
-            composer.padding(16)
+            VStack(alignment: .leading, spacing: 8) {
+                if searchMode {
+                    Label("Поиск в интернете · источники сохранятся в чате", systemImage: "globe")
+                        .font(.caption).foregroundStyle(Palette.muted)
+                }
+                composer
+            }.padding(16)
+                .background(Palette.background)
+                .overlay(alignment: .top) { Rectangle().fill(Palette.accent.opacity(0.12)).frame(height: 0.7) }
         }
     }
     private var composer: some View {
@@ -314,7 +310,7 @@ struct CompanionView: View {
                 .accessibilityLabel(voice.finishingRecording ? "Оставить текущий текст" : (voice.requestingRecording ? "Отменить запись" : (voice.recording ? "Закончить запись" : "Начать запись")))
             TextField(searchMode ? "Что найти в интернете?" : "Напиши Мире…", text: $store.draft, axis: .vertical)
                 .lineLimit(1...5).padding(.horizontal, 16).padding(.vertical, 14)
-                .miraGlass(in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .miraGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .accessibilityIdentifier("conversation.input")
                 .disabled(voice.recordingBusy)
                 .focused($composerFocused)

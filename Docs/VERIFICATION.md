@@ -1,5 +1,27 @@
 # Verification — 2026-11-17
 
+## Whole-interface cream pass
+
+The native chat, model catalogue, commands and settings now share warm paper
+surfaces, source cards and readable status notices. Settings use focused navigation
+pages for voice, search, cloud, widgets, appearance and local data. Chat preserves
+draft-restore confirmation and adds explicit reply playback. Model search and
+installed filtering preserve download, verification, pause and deletion controls.
+Manual commands show one action at a time; proposed actions still require confirmation.
+Search probing requires the displayed key to be saved, and saved indicators reset
+when connection details change. No renderer, character or runtime files changed.
+
+Local verification for this pass:
+
+- Changed SwiftUI files passed Swift frontend syntax parsing (no Apple SDK typecheck).
+- All 11 labelled browser previews fit 390, 320 and 844-pixel widths, including
+  scrollable content and visible close controls. Settings, models, sample messages
+  and commands screenshots were inspected. Filtering, command tabs and suggestions
+  passed browser interaction checks; no microphone, cloud API or downloads invoked.
+- These are design previews, not native screenshots. Native navigation, accessibility,
+  Dynamic Type, keyboard layout and service behavior remain to be checked on iOS.
+- No paid macOS workflow dispatched; the previously recorded billing block remains.
+
 ## Interface refinement; character explicitly retained
 
 The user confirmed that they really like Vita. This revision changes only native

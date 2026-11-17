@@ -20,6 +20,10 @@ The [automatic conversation](Docs/SPEECH.md) listens, detects the end of a phras
 
 ## Cream design
 
+Chat, settings, model selection and commands now share cream surfaces and grouped
+navigation; the catalogue supports search and installed-only filtering. See
+[design preview instructions](Design/README.md) for the 11 secondary screen previews.
+
 The user selected the light cream reference. The native UI now uses a warm paper
 background, honey glass controls and a larger character with the conversation dock
 below it (beside it in landscape). A live [browser design preview](Design/README.md)

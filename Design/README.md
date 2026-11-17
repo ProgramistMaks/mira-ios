@@ -19,8 +19,11 @@ does not establish device performance or voice quality.
 
 `cream.html` is an explicitly labelled **browser design preview**, using the actual
 bundled Three/VRM renderer. Its controls only demonstrate layout/states. No microphone,
-AI, model downloads or search services are invoked. The optional settings/chat
-panels are visual sketches, not replicas of the complete native forms. CSS approximates
+AI, model downloads or search services are invoked. The screen selector covers settings, models, voice, search, cloud, commands,
+empty chat, sample messages, widgets, appearance and data. Shared paper cards,
+source links and grouped navigation follow the native implementation, but browser
+forms approximate SwiftUI rather than reproducing its exact layout. Sample messages
+are labelled examples; credentials and downloads do not invoke services. CSS approximates
 the glass; it is not native Liquid Glass or a screenshot from an iOS build.
 
 Run from the repository root:
@@ -40,7 +43,10 @@ node Scripts/review-cream-design.mjs
 Screenshots default to `/tmp/mira-cream-review`; override `MIRA_DESIGN_OUTPUT` to
 choose another directory. The script loads the real character and checks controls
 inside the preview frame at 390×780, 320×568, 844×390 and 820×1000. It also captures
-an active conversation state and the optional chat sketch. These checks do not
+an active conversation state, then checks all 11 secondary screens at widths
+390, 320 and 844, catalogue filtering, command tabs and draft-only suggestions.
+Use `MIRA_REVIEW_PAGES_ONLY=1` to limit a review to secondary screens without
+repeating unchanged home captures. These checks do not
 prove SwiftUI layout, physical iPhone sizing, native glass or automatic speech.
 No paid macOS workflow was run for this design change; the last GitHub billing
 restriction remains unresolved. Native startup's pixel check was adapted so a
