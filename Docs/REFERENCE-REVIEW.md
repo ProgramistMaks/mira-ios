@@ -49,11 +49,21 @@ Commands and Settings are functional native destinations. Status labels reflect
 selection/capture state, not fictitious connections. The browser preview remains
 an approximation; no native result or complete reference parity is claimed.
 
+## Latest reference-function pass
+
+The current code now includes ordered routine blocks, a persistent study timer,
+optional Fish Audio voice library, and import/selection of self-contained VRM
+characters/costume variants. Vita remains selected by default. See
+[implementation and validation boundaries](DUO-AND-REFERENCE-FEATURES.md).
+Desktop plugins, embedding inside other games, arbitrary local TTS checkpoint import
+and full motion/phoneme parity remain unfinished; they must not be inferred from
+new navigation entries or preview screenshots.
+
 ## Remaining quality gap
 
 The reference character has authored full-body acting, varied gestures, expressive
 speech and polished character/voice selection. The current Vita candidate now has original keyframed torso/arm/hand/gaze clips,
-plus pelvis weight shifts and dips with planted-foot leg IK. Broader acting variety
-and character selection remain unfinished; speech still uses an amplitude-driven jaw and system TTS. Do not call
+plus pelvis weight shifts and dips with planted-foot leg IK. Broader acting variety and native validation of imported characters remain unfinished;
+speech uses an amplitude-driven jaw with system TTS or the new optional Fish Audio path. Do not call
 that comparable solely because CI passes. A recorded comparison on the actual target
 phone is required before user delivery, along with the remaining QUALITY.md gates.

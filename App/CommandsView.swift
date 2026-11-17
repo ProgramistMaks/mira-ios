@@ -53,6 +53,13 @@ struct CommandsView: View {
                         }.pickerStyle(.segmented).disabled(searching || saving)
                     }
                 }
+                if proposal == nil {
+                    Section {
+                        NavigationLink { RoutinesView(companion: store, routines: store.routines) } label: {
+                            MiraSettingsRow(title: "Сценарии и учёба", detail: "Одна фраза запускает цепочку блоков", symbol: "square.stack.3d.up")
+                        }
+                    }
+                }
                 Section(inputTitle) {
                     TextField(inputTitle, text: $text, axis: .vertical)
                         .lineLimit(3...6).accessibilityIdentifier("command.input")

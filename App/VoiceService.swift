@@ -22,6 +22,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate, AVS
     private var playbackEnvelope: SpeechEnvelope?
     private var sceneActive = true
     private var renderTimeout: Task<Void, Never>?
+    private var cloudSpeech: Task<Void, Never>?
     @Published private(set) var recording = false
     @Published private(set) var requestingRecording = false
     @Published private(set) var finishingRecording = false
@@ -171,6 +172,28 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate, AVS
         try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
         try session.setActive(true)
         playbackCompletion = onFinished; speechText = text; speechVoiceID = voiceID
+        if UserDefaults.standard.string(forKey: "speechProvider") == "fish" {
+            let key = SecretStore.read(account: "fish-audio")
+            let reference = UserDefaults.standard.string(forKey: "fishVoiceID") ?? ""
+            guard !key.isEmpty, !reference.isEmpty else {
+                stop(); throw RoutineError.invalid("Выбери голос и сохрани ключ Fish Audio в настройках голоса.")
+            }
+            let id = UUID(); generation = id; preparing = true
+            let render = SpeechRenderSession(); self.render = render
+            cloudSpeech = Task { [weak self] in
+                do {
+                    let audio = try await FishVoiceClient().render(text: text, reference: reference, key: key, session: render)
+                    try Task.checkCancellation()
+                    guard let self, self.generation == id else { render.cancel(); return }
+                    try self.play(audio); self.cloudSpeech = nil
+                } catch {
+                    render.cancel()
+                    guard let self, self.generation == id, !Task.isCancelled else { return }
+                    self.stop(); self.onError?(error.localizedDescription)
+                }
+            }
+            return
+        }
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(identifier: voiceID) ?? voices.first ?? AVSpeechSynthesisVoice(language: "ru-RU")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.94
@@ -267,6 +290,7 @@ final class VoiceService: NSObject, ObservableObject, AVAudioPlayerDelegate, AVS
         }
     }
     func stop() {
+        cloudSpeech?.cancel(); cloudSpeech = nil
         directUtterance = nil; playbackCompletion = nil
         synth.stopSpeaking(at: .immediate)
         playbackClock?.cancel(); playbackClock = nil

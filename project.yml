@@ -26,6 +26,7 @@ targets:
       - Core
       - ConversationCore
       - SpeechCore
+      - InteractionCore
       - DownloadCore
       - Shared
       - ActivityCore
@@ -69,7 +70,7 @@ targets:
   CompanionTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [Tests, LifecycleTests, ConversationTests, SpeechCoreTests]
+    sources: [Tests, LifecycleTests, ConversationTests, SpeechCoreTests, InteractionTests]
     dependencies:
       - target: Companion
     settings:

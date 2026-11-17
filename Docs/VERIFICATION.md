@@ -1,5 +1,18 @@
 # Verification — 2026-11-17
 
+## Themes, Duo geometry and reference actions
+
+Latest source adds four persistent themes, removes redundant reply/home playback
+controls, adds editable routines with a study timer, optional Fish Audio voices,
+and local VRM import. Geometry responds to window size and, when compiled with an
+iOS 27.1+ SDK, documented fold/camera reserved regions. See
+[feature scope, sources and limitations](DUO-AND-REFERENCE-FEATURES.md).
+
+12 focused portable tests passed; Swift syntax, project/workflow YAML and build
+scripts checked. Browser previews cover 16 secondary screens at three widths and
+four themes in five size/fold cases. These are not native/device/service checks.
+No macOS run or IPA was produced. The prior billing block remains unresolved.
+
 ## Whole-interface cream pass
 
 The native chat, model catalogue, commands and settings now share warm paper

@@ -26,9 +26,10 @@ case "${MIRA_NATIVE_TEST_SCOPE:-full}" in
   *) echo 'Unknown native test scope' >&2; exit 2 ;;
 esac
 echo "Native test scope: ${MIRA_NATIVE_TEST_SCOPE:-full}"
+source Scripts/duo-build-settings.sh
 xcodebuild -project Companion.xcodeproj -scheme Companion \
   -destination "platform=iOS Simulator,id=$device_id" \
   -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
   -test-timeouts-enabled YES -default-test-execution-time-allowance 1200 \
   -maximum-test-execution-time-allowance 1200 \
-  -resultBundlePath build/Tests.xcresult "$@" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/native-tests.log
+  -resultBundlePath build/Tests.xcresult "$@" "SWIFT_ACTIVE_COMPILATION_CONDITIONS=\$(inherited) $mira_duo_conditions" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee build/native-tests.log

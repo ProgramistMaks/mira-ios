@@ -51,3 +51,17 @@ prove SwiftUI layout, physical iPhone sizing, native glass or automatic speech.
 No paid macOS workflow was run for this design change; the last GitHub billing
 restriction remains unresolved. Native startup's pixel check was adapted so a
 bright cream background alone cannot count as a visible character.
+
+
+## Themes and Duo preview
+
+The toolbar now selects Cream, Night, Sakura or Sage, plus a **simulated** book or
+tabletop fold. Scenario, editor, voice library, theme and character pages are design
+previews of the new native destinations. All service/file actions remain disabled
+or explicitly labelled demonstrations in the browser. The microphone is drawn as
+an SVG; musical-note glyphs and reply playback buttons were removed.
+
+`MIRA_REVIEW_DUO_ONLY=1` runs the four-theme / five-size-posture visual matrix
+without repeating the secondary form checks. See `Docs/DUO-AND-REFERENCE-FEATURES.md`
+for the actual SDK requirements and unverified native behavior. Native lighting,
+geometry and character content are unchanged by theme switching.

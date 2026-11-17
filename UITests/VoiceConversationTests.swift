@@ -9,11 +9,10 @@ final class VoiceConversationTests: XCTestCase {
         app.launch()
         let conversation = app.buttons["home.conversation"]
         XCTAssertTrue(conversation.waitForExistence(timeout: 30))
-        XCTAssertEqual(conversation.label, "Подготовить Миру",
-                       "Without downloaded weights or a provider, setup must be visible before recording")
-        XCTAssertTrue(app.buttons["home.previewVoice"].isHittable,
-                      "Voice preview must be available without a model or API key")
-        conversation.tap()
+        XCTAssertEqual(conversation.label, "Начать разговор",
+                       "Offline routine commands do not require an LLM")
+        XCTAssertFalse(app.buttons["home.previewVoice"].exists)
+        app.buttons["Настройки"].tap()
         XCTAssertTrue(app.navigationBars["Настройки"].waitForExistence(timeout: 5))
         app.buttons["Готово"].tap()
         app.buttons["home.chat"].tap()
@@ -42,7 +41,7 @@ final class VoiceConversationTests: XCTestCase {
         app.buttons["Готово"].tap()
         XCTAssertTrue(conversation.isHittable)
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = "Voice-first home — setup, voice preview and optional chat"
+        attachment.name = "Voice-first home — automatic conversation and optional chat"
         attachment.lifetime = .keepAlways
         add(attachment)
     }

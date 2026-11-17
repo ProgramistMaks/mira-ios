@@ -39,6 +39,9 @@ struct SettingsView: View {
                 }
                 Section("Приложение") {
                     NavigationLink {
+                        settingsPage("Оформление") { Section("Тема") { ThemeSelectionView() } }
+                    } label: { MiraSettingsRow(title: "Оформление", detail: "Кремовая, ночная, сакура и шалфей", symbol: "paintpalette") }
+                    NavigationLink {
                         settingsPage("Виджеты и остров") { MiraActivitySettings(store: store, activities: store.liveActivities) }
                     } label: { MiraSettingsRow(title: "Виджеты и остров", detail: "Разговор на экране блокировки", symbol: "rectangle.topthird.inset.filled") }
                     NavigationLink {
@@ -122,10 +125,9 @@ struct SettingsView: View {
                 .font(.footnote).foregroundStyle(.secondary)
             Toggle("Озвучивать текстовый чат", isOn: $store.settings.speakReplies)
             Text("В автоматическом разговоре Мира всегда отвечает голосом.").font(.footnote).foregroundStyle(.secondary)
-            Picker("Голос", selection: $store.settings.voiceID) {
-                Text("Автоматически").tag("")
-                ForEach(voice.voices, id: \.identifier) { item in Text(item.name).tag(item.identifier) }
-            }
+            NavigationLink {
+                VoiceLibraryView(store: store, voice: voice)
+            } label: { MiraSettingsRow(title: "Библиотека голосов", detail: "Голоса iPhone и Fish Audio", symbol: "waveform") }
             Button(voice.busy ? "Остановить голос" : "Послушать голос") {
                 if voice.busy { voice.stop(); return }
                 store.liveActivities.beginInteraction()
@@ -157,6 +159,7 @@ struct SettingsView: View {
     }
     private var appearanceSection: some View {
         Section("Персонаж") {
+            NavigationLink("Персонажи и костюмы VRM") { CharacterLibraryView() }
             Picker("Плавность анимации", selection: $requestedFrameRate) {
                 ForEach([30, 60, 120, 240], id: \.self) { rate in
                     Text(rate <= screenMaximumFPS ? "До \(rate) кадров/с" : "До \(rate) кадров/с · недоступно")

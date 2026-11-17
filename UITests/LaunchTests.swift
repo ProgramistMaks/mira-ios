@@ -14,7 +14,7 @@ final class LaunchTests: XCTestCase {
                       "Bundled VRM must actually load inside WKWebView")
         assertAvatarVisible(app)
         capture("Portrait — voice-first home and loaded character")
-        for id in ["home.chat", "home.conversation", "home.previewVoice"] {
+        for id in ["home.chat", "home.conversation"] {
             XCTAssertTrue(app.buttons[id].isHittable)
             XCTAssertGreaterThanOrEqual(app.buttons[id].frame.height, 44)
         }

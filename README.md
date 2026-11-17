@@ -75,3 +75,10 @@ Russian first-launch and signing instructions: [INSTALL-RU.md](Docs/INSTALL-RU.m
 - [Apple: distributing apps to registered devices](https://developer.apple.com/documentation/xcode/distributing-your-app-to-registered-devices/)
 
 No secrets, paid API use, third-party messages or external releases are part of the local implementation.
+
+
+The current source also includes four saved themes, adaptive Duo layouts, editable
+routines/study timers, optional Fish Audio and local VRM import. Physical fold
+regions require a build with the iOS 27.1+ SDK; older toolchains use size adaptation.
+These additions have not been compiled or device-validated yet. See
+[feature scope and remaining reference gaps](Docs/DUO-AND-REFERENCE-FEATURES.md).

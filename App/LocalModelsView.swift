@@ -1,17 +1,18 @@
 import SwiftUI
 
 struct LocalModelSection: View {
+    @Environment(\.miraPalette) private var palette
     @ObservedObject var model: LocalModelStore
     let busy: Bool
     var body: some View {
         Section("Локальная модель") {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "cpu").font(.title2).foregroundStyle(Palette.accent)
+                Image(systemName: "cpu").font(.title2).foregroundStyle(palette.accent)
                     .frame(width: 36, height: 40).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(model.selected.title).font(.subheadline.weight(.semibold))
                     Text(model.installed ? "Модель загружена · \(model.selected.sizeLabel)" : "Нужна загрузка · \(model.selected.sizeLabel)")
-                        .font(.footnote).foregroundStyle(Palette.muted)
+                        .font(.footnote).foregroundStyle(palette.muted)
                 }
             }.padding(.vertical, 4)
             if model.downloading {
@@ -27,6 +28,7 @@ struct LocalModelSection: View {
 }
 
 struct LocalModelsView: View {
+    @Environment(\.miraPalette) private var palette
     @ObservedObject var model: LocalModelStore
     let busy: Bool
     @State private var query = ""
@@ -49,7 +51,7 @@ struct LocalModelsView: View {
                 DisclosureGroup("О памяти и совместимости") {
                     Text("Оперативная память устройства: \(ByteCountFormatter.string(fromByteCount: Int64(memory), countStyle: .memory))")
                     Text("Метки ниже — предварительная оценка. iOS выделяет приложению только часть памяти. Даже рекомендуемая модель требует проверки на твоём устройстве; размер файла не равен расходу памяти.")
-                        .font(.footnote).foregroundStyle(Palette.muted)
+                        .font(.footnote).foregroundStyle(palette.muted)
                 }
                 Picker("Показать модели", selection: $installedOnly) {
                     Text("Все модели").tag(false)
@@ -69,12 +71,12 @@ struct LocalModelsView: View {
                         HStack(alignment: .top, spacing: 8) {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(item.name).font(.headline)
-                                Text(item.quantization).font(.caption.monospaced()).foregroundStyle(Palette.muted)
+                                Text(item.quantization).font(.caption.monospaced()).foregroundStyle(palette.muted)
                             }
                             Spacer(minLength: 4)
                             MiraBadge(title: item.sizeLabel)
                         }
-                        Text(item.guidanceText(physicalMemory: memory)).font(.footnote).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+                        Text(item.guidanceText(physicalMemory: memory)).font(.footnote).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
                         if model.installedIDs.contains(item.id) {
                             Label("Загружена", systemImage: "internaldrive")
                                 .font(.footnote).foregroundStyle(.secondary)
@@ -84,7 +86,7 @@ struct LocalModelsView: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                         if model.selected.id == item.id {
-                            Label("Выбрана", systemImage: "checkmark.circle.fill").foregroundStyle(Palette.accent)
+                            Label("Выбрана", systemImage: "checkmark.circle.fill").foregroundStyle(palette.accent)
                                 .accessibilityIdentifier("models.selected.\(item.id)")
                         } else {
                             Button("Выбрать модель", systemImage: "checkmark.circle") { model.select(item) }
@@ -114,7 +116,7 @@ struct LocalModelsView: View {
                         if let error = model.error { MiraNotice(text: error, symbol: "exclamationmark.circle") }
                     }
                     Link("Источник и лицензия Apache 2.0", destination: item.sourceURL).font(.caption)
-                }.listRowBackground(model.selected.id == item.id ? Palette.honey.opacity(0.22) : Color.white.opacity(0.7))
+                }.listRowBackground(model.selected.id == item.id ? palette.honey.opacity(0.22) : palette.surface)
             }
             if model.legacyInstalled {
                 Section("Прежняя загрузка") {
@@ -150,6 +152,7 @@ struct LocalModelsView: View {
 }
 
 private struct ModelTransferStatus: View {
+    @Environment(\.miraPalette) private var palette
     @ObservedObject var model: LocalModelStore
     var body: some View {
         if model.pausing {

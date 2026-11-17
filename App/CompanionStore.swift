@@ -17,6 +17,8 @@ final class CompanionStore: ObservableObject {
     @Published var draft = ""
     @Published var error: String?
     @Published var proposedCommand: CommandProposal?
+    @Published var proposedRoutine: MiraRoutine?
+    let routines = RoutineStore()
     @Published var thinking = false
     @Published private(set) var automatic = AutomaticConversation()
     @Published private(set) var liveTranscript = ""
@@ -96,6 +98,10 @@ final class CompanionStore: ObservableObject {
             spokenCommandID = speakReply == true ? proposal.id : nil
             proposedCommand = proposal; return
         }
+        if let routine = MiraRoutine.matching(text, in: routines.library) {
+            automatic.stop(); automaticCaptureSession = nil; voice.stop()
+            proposedRoutine = routine; return
+        }
         let mode = settings.inferenceMode ?? .cloud
         do {
             if mode == .local {
@@ -165,12 +171,7 @@ final class CompanionStore: ObservableObject {
         searchConfigured = !SecretStore.read(account: "tavily").isEmpty
     }
     func startAutomaticConversation() async {
-        guard !automatic.active, proposedCommand == nil else { return }
-        refreshConnections()
-        guard (settings.inferenceMode ?? .cloud) == .local ? localModel.installed : cloudConfigured else {
-            failConversation("Сначала скачай локальную модель или подключи ИИ в настройках. Голос можно проверить кнопкой «Послушать Миру».")
-            return
-        }
+        guard !automatic.active, proposedCommand == nil, proposedRoutine == nil else { return }
         cancel()
         let id = automatic.start()
         await listenAutomatically(session: id)
@@ -213,11 +214,6 @@ final class CompanionStore: ObservableObject {
     private func failConversation(_ message: String) {
         automatic.stop(); automaticCaptureSession = nil
         voice.stop(); error = message
-    }
-    func previewVoice() {
-        cancel(); liveActivities.beginInteraction()
-        do { try voice.say("Привет! Я Мира. Так звучит мой голос. Давай поговорим.", voiceID: settings.voiceID) }
-        catch { failConversation(error.localizedDescription) }
     }
     func searchWeb(_ query: String, original: String? = nil, speakReply: Bool = true, clearDraft: Bool = false) {
         guard !thinking, !voice.recordingBusy else { return }
@@ -273,14 +269,6 @@ final class CompanionStore: ObservableObject {
         cancel()
         await startRecording()
     }
-    func replay(_ message: Message) {
-        guard message.role == .assistant, !message.interrupted,
-              !message.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !thinking, !voice.recordingBusy, !voice.busy else { return }
-        liveActivities.beginInteraction()
-        do { try voice.say(message.content, voiceID: settings.voiceID) }
-        catch { self.error = error.localizedDescription }
-    }
     func recordCommandResult(_ proposal: CommandProposal, detail: String) {
         messages.append(Message(role: .user, content: proposal.original))
         messages.append(Message(role: .assistant, content: detail))
@@ -302,6 +290,7 @@ final class CompanionStore: ObservableObject {
         }
     }
     func cancel(reason: Message.Interruption = .stopped) {
+        routines.cancel()
         automatic.stop(); automaticCaptureSession = nil; searching = false
         spokenCommandID = nil
         responseCheckpoint.cancel()

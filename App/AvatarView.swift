@@ -4,6 +4,7 @@ import Combine
 
 struct AvatarView: UIViewRepresentable {
     let phase: CompanionPhase
+    var characterID: String = "vita"
     let voice: VoiceService
     let reduceMotion: Bool
     let frameRate: Int
@@ -15,7 +16,8 @@ struct AvatarView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.setURLSchemeHandler(BundleScheme(), forURLScheme: "companion")
+        configuration.setURLSchemeHandler(context.coordinator.assets, forURLScheme: "companion")
+        context.coordinator.assets.characterID = characterID
         configuration.userContentController.add(context.coordinator, name: "avatar")
         let view = AvatarWebView(frame: .zero, configuration: configuration)
         view.isOpaque = false; view.backgroundColor = .clear
@@ -53,19 +55,28 @@ struct AvatarView: UIViewRepresentable {
     class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var parent: AvatarView
         var loaded = false
+        private var lastCommand: String?
+        let assets = BundleScheme()
         var mouthSubscription: AnyCancellable?
         var mouthBridge: MouthBridge?
         init(parent: AvatarView) { self.parent = parent }
         func update(_ view: WKWebView) {
+            if assets.characterID != parent.characterID {
+                assets.characterID = parent.characterID
+                loaded = false; lastCommand = nil; mouthBridge?.reset(); parent.voice.setSceneActive(false)
+                view.reload(); return
+            }
             let visible = loaded && parent.ready && parent.active
             mouthBridge?.setState(ready: loaded && parent.ready, active: parent.active)
             parent.voice.setSceneActive(visible)
             guard loaded else { return }
-            view.evaluateJavaScript("""
+            let command = """
                 window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion));
                 window.companion?.setFrameRate(\(parent.frameRate));
                 window.companion?.setActive(\(parent.active));
-                """, completionHandler: nil)
+                """
+            guard command != lastCommand else { return }; lastCommand = command
+            view.evaluateJavaScript(command, completionHandler: nil)
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: String], message.frameInfo.isMainFrame else { return }
@@ -76,11 +87,11 @@ struct AvatarView: UIViewRepresentable {
             }
             if body["type"] == "error" {
                 parent.ready = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
-                parent.error = "Не удалось загрузить персонажа. Попробуй перезапустить приложение."
+                parent.error = "Не удалось загрузить персонажа. Выбери Vita в настройках персонажей."
             }
         }
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-            loaded = false; parent.ready = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
+            loaded = false; lastCommand = nil; parent.ready = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             loaded = true; update(webView)
@@ -91,7 +102,7 @@ struct AvatarView: UIViewRepresentable {
             parent.error = "Не удалось открыть сцену персонажа."
         }
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            loaded = false; parent.ready = false; mouthBridge?.reset()
+            loaded = false; lastCommand = nil; parent.ready = false; mouthBridge?.reset()
             parent.voice.setSceneActive(false); webView.reload()
         }
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
@@ -121,17 +132,19 @@ private final class AvatarWebView: WKWebView {
     }
 }
 
-/// Only bundled files; the bridge receives animation state and mouth amplitude, never keys or text.
-private final class BundleScheme: NSObject, WKURLSchemeHandler {
+/// Bundled renderer and selected validated local VRM; the bridge receives animation state and mouth amplitude, never keys or text.
+final class BundleScheme: NSObject, WKURLSchemeHandler {
+    var characterID = "vita"
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url,
               let root = Bundle.main.resourceURL?.appendingPathComponent("Web"),
               url.host == "local" else {
             urlSchemeTask.didFailWithError(URLError(.badURL)); return
         }
-        let file = root.appendingPathComponent(url.path).standardizedFileURL
-        guard file.path.hasPrefix(root.standardizedFileURL.path + "/"),
-              let data = try? Data(contentsOf: file) else {
+        let bundled = root.appendingPathComponent(url.path).standardizedFileURL
+        guard bundled.path.hasPrefix(root.standardizedFileURL.path + "/") else { urlSchemeTask.didFailWithError(URLError(.badURL)); return }
+        let file = url.path == "/character.vrm" ? (CharacterFiles.file(for: characterID) ?? bundled) : bundled
+        guard let data = try? Data(contentsOf: file) else {
             urlSchemeTask.didFailWithError(URLError(.fileDoesNotExist)); return
         }
         let types = ["html": "text/html", "js": "application/javascript", "vrm": "model/gltf-binary"]

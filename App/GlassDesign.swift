@@ -14,6 +14,7 @@ struct MiraGlassGroup<Content: View>: View {
 }
 
 private struct MiraGlassSurface<S: Shape>: ViewModifier {
+    @Environment(\.miraPalette) private var palette
     let shape: S
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
@@ -23,22 +24,17 @@ private struct MiraGlassSurface<S: Shape>: ViewModifier {
             // Native glass adapts to Reduce Transparency, Increase Contrast and Reduce Motion.
             content.glassEffect(.regular, in: shape)
         } else if reduceTransparency {
-            content.background(Palette.panel, in: shape)
-                .overlay(shape.strokeBorderFallback(contrast == .increased ? 0.5 : 0.2))
+            content.background(palette.panel, in: shape)
+                .overlay(shape.stroke(palette.accent.opacity(contrast == .increased ? 0.5 : 0.2), lineWidth: 0.7))
         } else {
             content.background(.regularMaterial, in: shape)
-                .overlay(shape.strokeBorderFallback(contrast == .increased ? 0.5 : 0.16))
+                .overlay(shape.stroke(palette.accent.opacity(contrast == .increased ? 0.5 : 0.16), lineWidth: 0.7))
         }
     }
 }
 
-private extension Shape {
-    func strokeBorderFallback(_ opacity: Double) -> some View {
-        stroke(Palette.accent.opacity(opacity), lineWidth: 0.7).allowsHitTesting(false)
-    }
-}
-
 private struct MiraGlassButton: ViewModifier {
+    @Environment(\.miraPalette) private var palette
     let prominent: Bool
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     func body(content: Content) -> some View {
@@ -52,7 +48,7 @@ private struct MiraGlassButton: ViewModifier {
             content.buttonStyle(.borderedProminent).buttonBorderShape(.circle)
         } else {
             content.buttonStyle(.bordered).buttonBorderShape(.circle)
-                .tint(reduceTransparency ? Palette.ink : Palette.accent)
+                .tint(reduceTransparency ? palette.ink : palette.accent)
         }
     }
 }
