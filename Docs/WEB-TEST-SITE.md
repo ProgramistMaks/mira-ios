@@ -5,15 +5,17 @@ Published URL: https://mira-motion-lab.fungait8.chatgpt.site
 Owner-only Sites access; sign in with the owner's ChatGPT account. Site project:
 `appgprj_6afc1d7a03a48191ac670113db951f36`. Its source checkout is
 `/workspace/sites/mira-motion-lab`, with a separate Sites Git repository.
-Published source: `84612459356a136d112d44b8f86e2761b6753ae6`.
-The renderer snapshot comes from native commit `181f9a1` and contains 52 gesture
+Published source: `6fdfa18daeec377b60f0032e0009091b76b868a6`.
+The renderer snapshot comes from native commit `3938193` and contains 52 gesture
 tracks / 29,952 combinations. Later native changes do not update the Site automatically.
 
-Full-body publication: `appgdep_6afc2815ef5081919ca0a0815403b173`,
+Natural behavior publication: `appgdep_6afc2d2ae6448191b37456f70e77d682`,
 reported succeeded on 2026-11-17. The **Тело и физика** panel has 93 control
 channels including 30 independent finger joints, shoulder/neck/pelvis controls,
 active leg IK, eye/mouth tests, spring tuning and optional denser hair geometry.
-The full body implementation and asset limits are in [FULL-BODY.md](FULL-BODY.md).
+Natural mode now has irregular secondary actions, gaze leading the head,
+velocity-preserving joint response, varied breathing and support changes. The
+reset button also restores automatic gesture selection. The full body implementation and asset limits are in [FULL-BODY.md](FULL-BODY.md).
 
 The Site provides real animation controls, wrist close-ups, themes, VRM import,
 browser speech, automatic conversation, audio-file amplitude synchronization,
