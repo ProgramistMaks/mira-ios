@@ -101,6 +101,8 @@ struct BodyCatalogue: Decodable {
 }
 
 private struct BodySettingsSections: View {
+    @AppStorage("expressionVariant") private var expressionVariant = -1
+    @AppStorage("expressionsEnabled") private var expressionsEnabled = true
     @AppStorage("bodyMode") private var mode = "natural"
     @AppStorage("bodyControls") private var controlsJSON = "{}"
     @AppStorage("secondaryPhysics") private var physics = true
@@ -130,7 +132,7 @@ private struct BodySettingsSections: View {
                     }
                     Text("Большие углы нескольких суставов одновременно могут вызвать пересечения. Колено управляет подъёмом стопы; это проверка подвижности, а не ходьба.").font(.footnote).foregroundStyle(.secondary)
                 }
-                Button("Вернуть живое поведение") { mode = "natural"; controlsJSON = "{}" }
+                Button("Вернуть живое поведение") { mode = "natural"; controlsJSON = "{}"; expressionVariant = -1; expressionsEnabled = true }
             }
             Section("Волосы и одежда") {
                 Toggle("Физика модели", isOn: $physics)
