@@ -26,7 +26,7 @@ const report = (type: string, detail = '') => {
   document.documentElement.dataset.status = type;
 };
 const acting = new PerformanceController(crypto.getRandomValues(new Uint32Array(1))[0]);
-const body = new BodyController();
+const body = new BodyController(crypto.getRandomValues(new Uint32Array(1))[0]);
 let resetPhysics: (() => void) | undefined;
 let frameRate = 60;
 let active = true;
@@ -192,7 +192,8 @@ async function main() {
     if (delta === null) return;
     elapsed += delta;
     const audioLevel = speechSamples.level();
-    const pose = body.update(acting.update(delta, reduced, audioLevel), delta, reduced);
+    const pose = body.update(acting.update(delta, reduced, audioLevel), delta, reduced, {phase, automatic:acting.settings.variant < 0 && acting.settings.enabled, directReaction:['greeting','touch'].includes(acting.clip)});
+    window.companion.bodyStatus.behavior = body.behaviorLabel;
     if (detail.mode !== body.detail) { detail.set(body.detail); bodyStatus(); }
     secondary.configure(body, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
@@ -212,10 +213,10 @@ async function main() {
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {
-      avatar.lookAt.autoUpdate = !faceTest;
-      if (faceTest) { avatar.lookAt.yaw = pose.eyeYaw; avatar.lookAt.pitch = pose.eyePitch; }
+      avatar.lookAt.autoUpdate = !(faceTest || pose.naturalGaze);
+      if (faceTest || pose.naturalGaze) { avatar.lookAt.yaw = pose.eyeYaw; avatar.lookAt.pitch = pose.eyePitch; }
     }
-    avatar.expressionManager?.setValue('blink', faceTest ? 0 : face.blink);
+    avatar.expressionManager?.setValue('blink', faceTest ? 0 : pose.naturalGaze ? pose.naturalBlink : face.blink);
     avatar.expressionManager?.setValue('blinkLeft', faceTest ? pose.blinkLeft : 0);
     avatar.expressionManager?.setValue('blinkRight', faceTest ? pose.blinkRight : 0);
     mouth = phase === 'speaking' ? THREE.MathUtils.damp(mouth, face.mouth, 28, delta) : 0;

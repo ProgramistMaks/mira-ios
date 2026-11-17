@@ -21,26 +21,15 @@ export class SpeechEmphasis {
   }
 }
 
-// Low-amplitude, continuous secondary motion, sampled in scene time rather than
-// random joint noise each frame. Hidden time is excluded by the host timeline.
+// Retained compatibility entry point for restrained, audio-driven body accents.
+// NaturalBehavior owns nonperiodic attention, respiration and secondary actions.
 export function humanizePose(pose, time, intensity, phase, emphasis, automaticGaze) {
   const result={...pose}, amount=unit(intensity);
-  const breath=(1-Math.cos(time*1.12+.12*Math.sin(time*.23)))*.5;
-  result.chestX-=breath*.007*amount;
-  result.spineX+=breath*.003*amount;
-  result.leftLift+=breath*.006*amount;
-  result.rightLift+=breath*.0045*amount;
-  result.leftWrist+=Math.sin(time*.71)*.006*amount;
-  result.rightWrist+=Math.sin(time*.63+.8)*.005*amount;
+  // Automatic respiration/postural motion is owned by NaturalBehavior. Keep
+  // this layer limited to actual speech accents to avoid stacking idle loops.
   if(phase==='speaking') {
     result.headX+=emphasis.beat*.022*amount;
     result.chestX+=emphasis.beat*.004*amount;
-  }
-  if(automaticGaze) {
-    // Brief glances return towards the partner; manual gaze selections are kept.
-    const glance=((1-Math.cos(time*.73))*.5)**3;
-    const attention=phase==='listening'?.12+.35*glance:.25+.75*glance;
-    result.gazeX*=attention;result.gazeY*=attention;
   }
   return boundedPose(result);
 }

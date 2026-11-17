@@ -115,7 +115,7 @@ private struct BodySettingsSections: View {
         if let catalogue = BodyCatalogue.bundled {
             Section("Тело и суставы") {
                 Picker("Поведение", selection: $mode) { ForEach(catalogue.modes) { Text($0.title).tag($0.id) } }
-                Text("Каждый палец сгибается по трём суставам. Для проверки выбери кисти, корпус, ноги, лицо или отдельные суставы. Изменения видны после возврата к персонажу.").font(.footnote).foregroundStyle(.secondary)
+                Text("В живом поведении взгляд опережает голову, руки и пальцы движутся с разным темпом. Мира меняет опору, расслабляет кисти и делает паузы. Для проверки отдельных движений выбери демонстрацию. Изменения видны после возврата к персонажу.").font(.footnote).foregroundStyle(.secondary)
                 if mode == "manual" {
                     ForEach(Array(Set(catalogue.channels.map(\.group))).sorted(), id: \.self) { group in
                         DisclosureGroup(group) {

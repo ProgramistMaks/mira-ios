@@ -43,7 +43,7 @@ assert.ok(other.quaternion.angleTo(new THREE.Quaternion())<.2);
 maxFingerAngle=ref.quaternion.angleTo(new THREE.Quaternion());
 for(const mode of ['natural','hands','mobility','legs','face']){
   controller.configure({mode});
-  for(let i=0;i<720;i++){
+  for(let i=0;i<(mode==='natural'?5400:720);i++){
     const p=controller.update(REST,1/60);stance.apply(p);arms.apply(p);articulation.apply(p);
     for(const name of ['spine','chest','neck','head'])bone(name)?.rotation.set(p[name+'X']??0,p[name+'Y']??0,p[name+'Z']??0);
     physics.configure({physics:true,wind:.7,softness:.7});vrm.update(1/60);

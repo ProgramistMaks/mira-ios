@@ -97,8 +97,13 @@ export class PerformanceController {
     // During speech pauses the arms settle instead of delivering silent emphatic gestures.
     const activity=this.phase==='speaking'?.25+.75*emphasis.energy:1;
     const conversationalBase={...base};
+    // Automatic idle/listening no longer repeat the full short base sway/nod loop.
+    // Keep authored one-shots and manually selected demonstrations intact.
+    if(this.settings.enabled&&this.settings.variant<0&&!directReaction){
+      for(const key of Object.keys(REST))if(key!=='smile')conversationalBase[key]=REST[key]+(base[key]-REST[key])*.22;
+    }
     if(this.settings.enabled&&this.phase==='speaking')for(const key of Object.keys(REST)) {
-      if(/^(left|right)/.test(key))conversationalBase[key]=REST[key]+(base[key]-REST[key])*activity;
+      if(/^(left|right)/.test(key))conversationalBase[key]=REST[key]+(conversationalBase[key]-REST[key])*activity;
     }
     const gestureWeight=directReaction?0:activity;
     let target=this.settings.enabled?sampleVariant(this.variant,Math.min(1,this.age/this.duration),conversationalBase,this.settings.intensity,gestureWeight):{...base,...FACE_REST};

@@ -1,4 +1,5 @@
 import { Euler, Quaternion } from 'three';
+import { NaturalBehavior, followJoint, responseRate } from './natural-behavior.mjs';
 import { REST } from './acting.mjs';
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -46,7 +47,7 @@ export const BODY_CATALOG = {version:1,channels:BODY_CHANNELS,modes:BODY_MODES};
 const neutral = Object.fromEntries(BODY_CHANNELS.map(c=>[c.id,c.initial]));
 
 export class BodyController {
-  constructor() { this.mode='natural'; this.controls={}; this.physics=true; this.wind=0; this.softness=.5; this.detail='standard'; this.time=0; this.current={...REST,...neutral}; }
+  constructor(seed) { this.behavior=new NaturalBehavior(seed);this.velocities={};this.behaviorLabel="Спокойная пауза";this.mode='natural'; this.controls={}; this.physics=true; this.wind=0; this.softness=.5; this.detail='standard'; this.time=0; this.current={...REST,...neutral}; }
   configure(settings={}) {
     if (!settings || typeof settings!=='object') return;
     if (BODY_MODES.some(m=>m.id===settings.mode) && this.mode!==settings.mode) { this.mode=settings.mode; this.time=0; }
@@ -59,21 +60,24 @@ export class BodyController {
     if(Number.isFinite(settings.softness))this.softness=clamp(settings.softness,0,1);
     if(['standard','high'].includes(settings.detail))this.detail=settings.detail;
   }
-  update(base,delta,reduced=false) {
+  update(base,delta,reduced=false,context={}) {
     const dt=Number.isFinite(delta)?clamp(delta,0,.05):0; this.time+=reduced?0:dt;
     const t=this.time, wave=(speed,offset=0)=>.5-.5*Math.cos(t*speed+offset);
-    const pose={...REST,...neutral,...base};
+    let pose={...REST,...neutral,...base};
     for(const [s,index] of [['left',0],['right',1]]) {
       const curl=Number.isFinite(base[s+'Curl'])?base[s+'Curl']:.16;
       ['Thumb','Index','Middle','Ring','Little'].forEach((f,i)=>{
-        for(let j=0;j<3;j++) pose[`${s}${f}${j}`]=clamp(curl*[.8,.9,.55][j]*(f==='Thumb'?.45:1+i*.025)+(reduced?0:.009*Math.sin(t*1.3-i*.6-j*.18+index)),0,f==='Thumb'?.85:1.35);
+        for(let j=0;j<3;j++) pose[`${s}${f}${j}`]=clamp(curl*[.8,.9,.55][j]*(f==='Thumb'?.45:1+i*.025),0,f==='Thumb'?.85:1.35);
       });
-      pose[s+'ShoulderLift']=reduced?0:.014*Math.sin(t*.8+index*.5)+Math.max(0,pose[s+'Lift'])*.055;
+      pose[s+'ShoulderLift']=reduced?0:Math.max(0,pose[s+'Lift'])*.08;
       pose[s+'ShoulderForward']=reduced?0:pose[s+'Forward']*.08;
-      pose[s+'Spread']=reduced?0:.018+.012*Math.sin(t*.7+index);
+      pose[s+'Spread']=reduced?0:.022+(index?.004:0);
       pose[s+'ThumbOpposition']=reduced?0:.08+curl*.12;
     }
-    if(!reduced){pose.hipsPitch=.008*Math.sin(t*.65);pose.neckY=(pose.headY??0)*.25;pose.neckZ=(pose.headZ??0)*.2;pose.spineY=(pose.chestY??0)*.18;}
+    if(!reduced){pose.neckY=(pose.headY??0)*.25;pose.neckZ=(pose.headZ??0)*.2;pose.spineY=(pose.chestY??0)*.18;}
+    const spontaneous=this.mode==='natural'&&!reduced&&context.automatic!==false&&!context.directReaction;
+    pose=this.behavior.apply(pose,dt,{phase:context.phase??'idle',active:spontaneous});
+    this.behaviorLabel=spontaneous?this.behavior.label:BODY_MODES.find(m=>m.id===this.mode)?.title??'';
     if(this.mode!=='natural') {
       Object.assign(pose,REST,neutral);
       if(this.mode==='hands') for(const [s,index]of [['left',0],['right',1]]) {
@@ -103,8 +107,11 @@ export class BodyController {
     }
     // Accessibility overrides both automatic movement and deliberately animated test loops.
     const target=reduced?{...REST,...neutral}:pose;
-    const alpha=reduced?1:1-Math.exp(-dt*12);
-    for(const c of BODY_CHANNELS){const value=Number.isFinite(target[c.id])?clamp(target[c.id],c.min,c.max):c.initial;this.current[c.id]=reduced?value:this.current[c.id]+(value-this.current[c.id])*alpha;pose[c.id]=this.current[c.id];}
+    for(const c of BODY_CHANNELS){
+      const value=Number.isFinite(target[c.id])?clamp(target[c.id],c.min,c.max):c.initial;
+      const state=reduced?{position:value,velocity:0}:followJoint(this.current[c.id],this.velocities[c.id]??0,value,dt,responseRate(c.id));
+      this.current[c.id]=clamp(state.position,c.min,c.max);this.velocities[c.id]=this.current[c.id]===state.position?state.velocity:0;pose[c.id]=this.current[c.id];
+    }
     return pose;
   }
 }
@@ -113,6 +120,7 @@ export class ArticulationRig {
   constructor(bone,armSign=1) {
     this.bone=bone;this.sign=armSign;this.entries=[];this.q=new Quaternion();this.euler=new Euler();
     const add=(name,kind,side,index,joint)=>{const node=bone(name);if(node)this.entries.push({node,kind,side,index,joint,rest:node.quaternion.clone()});};
+    add('upperChest','upperChest');
     for(const side of ['left','right']){
       add(side+'Shoulder','shoulder',side);add(side+'Toes','toes',side);
       ['Thumb','Index','Middle','Ring','Little'].forEach((finger,index)=>{
@@ -124,6 +132,7 @@ export class ArticulationRig {
   apply(pose){
     for(const {node,kind,side,index,joint,rest}of this.entries){
       const sign=(side==='left'?-1:1)*this.sign;let x=0,y=0,z=0;
+      if(kind==='upperChest'){x=pose.upperChestX??0;y=pose.upperChestY??0;z=pose.upperChestZ??0;}
       if(kind==='shoulder'){z=sign*(pose[side+'ShoulderLift']??0);y=-sign*(pose[side+'ShoulderForward']??0);}
       if(kind==='toes')x=this.sign*(pose[side+'Toes']??0);
       if(kind==='finger'){

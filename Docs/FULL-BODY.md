@@ -22,7 +22,7 @@ and 29,952 compositional IDs remain stable.
 - Natural behavior adds separated finger motion, thumb opposition, mild shoulder
   participation, neck rotation and pelvis micro-motion. Dedicated hands/body/legs/
   face demos and manual controls replace normal gestures until reset. Transitions
-  use bounded exponential blending, and Reduce Motion overrides test loops too.
+  use velocity-preserving joint following, and Reduce Motion overrides test loops too.
 
 The original Vita asset has no separate coccyx bone. This region moves through the
 pelvis. Extreme simultaneous manual joint angles can intersect body/clothing;
@@ -69,3 +69,29 @@ subdivided. More vertices do not by themselves create more physical joints.
 
 No paid macOS workflow was dispatched for this update. The last known GitHub
 billing block remains unresolved; no new IPA is claimed. See QUALITY.md.
+
+## Natural behavior revision
+
+`natural-behavior.mjs` replaces short repeated secondary loops with seeded,
+phase-aware events and quiet intervals: sequential finger release, palm opening,
+wrist relaxation, thumb/index gathering, finger extension/spread, one-sided
+shoulder adjustment, attentive nod and foot unloading after support transfer.
+Events avoid immediate repetition; they do not infer emotion or semantic agreement.
+Large authored arm gestures suppress competing hand events. Greeting, touch,
+manual catalogue choices, body demos and Reduce Motion retain priority.
+
+Gaze changes start in the eyes; head, neck, trunk, wrists and phalanges use
+separate critically damped response rates with velocity preserved through target
+changes. Breath duration and inhale/exhale timing vary by cycle. Weight shifts
+hold for 9–18 seconds instead of continuously rocking side to side. Natural gaze
+uses VRM's supported eye control and irregular blinks, occasionally paired.
+The upper-chest bone now participates in breathing and torso movement.
+Audio remains the sole source of speaking mouth amplitude; no synthetic lip sync.
+
+54 renderer tests pass, including deterministic event schedules, actual pauses,
+context suppression, joint limits, interruption continuity and frame-rate
+independence of the joint follower. The real Vita geometry probe runs 90 seconds
+of natural movement plus joint demonstrations; foot-target error remains below
+1e-12 model units. TypeScript/build and Swift syntax checks pass. This does not
+establish human-quality acting: visual review, contact quality and measured
+physical iPhone performance remain unverified. No paid native build dispatched.
