@@ -1,5 +1,10 @@
 # Character acting and rendering
 
+A compositional layer now adds **13,824 selectable combinations** of 24 gestures,
+12 emotional styles, 8 gaze targets and 6 stances. These are not 13,824 independently
+authored clips. See [performance library](PERFORMANCE-LIBRARY.md) for selection,
+transitions, settings, exhaustive numeric checks and actual-rig evidence.
+
 `Renderer/acting.mjs` contains six original authored keyframe clips: idle, listening, thinking, speaking, greeting and touch. They drive the normalized VRM pelvis, torso, neck, head, upper/lower arms, wrists, finger joints and eye target. Pelvis weight shifts, small turns and dips now engage the legs through `Renderer/stance.mjs`. These are original authored motions with analytic leg IK, not motion capture or the final reference-quality animation set.
 
 - Both feet retain their initial avatar-local position and orientation. The normalized two-bone leg solver bends the knees forward, preserves segment lengths and lowers the pelvis when a shift would otherwise overextend the far leg. Foot contacts follow the parent turntable; they do not stay fixed to the browser world when the character turns.

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, SpeechSamples } from './motion.mjs';
-import { ActingController } from './acting.mjs';
+import { PerformanceController } from './performance.mjs';
+import { VARIANT_COUNT } from './expression-library.mjs';
 import { PlantedStance } from './stance.mjs';
 import { AnimationTimeline } from './animation-timeline.mjs';
 
@@ -10,7 +11,8 @@ declare global {
   interface Window {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
-      setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string };
+      setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
+      configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
 }
 
@@ -18,7 +20,7 @@ const report = (type: string, detail = '') => {
   window.webkit?.messageHandlers.avatar.postMessage({ type, detail });
   document.documentElement.dataset.status = type;
 };
-const acting = new ActingController();
+const acting = new PerformanceController(crypto.getRandomValues(new Uint32Array(1))[0]);
 let frameRate = 60;
 let active = true;
 let phase = 'idle';
@@ -36,6 +38,8 @@ let nativeSize: { width: number; height: number } | undefined;
 let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
+  variantCount: VARIANT_COUNT,
+  configurePerformance(settings) { acting.configure(settings); },
   phase,
   setActive(value) {
     active = value === true;
@@ -157,6 +161,13 @@ async function main() {
       left: bone(`left${finger}${joint}` as Parameters<typeof bone>[0]),
       right: bone(`right${finger}${joint}` as Parameters<typeof bone>[0]), scale: [0.8, 0.9, 0.55][index],
     })));
+  // VRM0 may keep surprise as a custom name; imported rigs may omit it.
+  const expressionName = (names: string[]) => names.find(name => avatar.expressionManager?.getExpression(name));
+  const expressiveChannels = [
+    ['angry', expressionName(['angry'])], ['sad', expressionName(['sad'])],
+    ['relaxed', expressionName(['relaxed'])], ['surprise', expressionName(['surprised', 'Surprised'])],
+  ] as const;
+  let displayedVariant = -1;
   let mouth = 0, elapsed = 0;
   acting.update(0, reduced); acting.trigger('greeting');
   renderer.setAnimationLoop(timestamp => {
@@ -168,6 +179,10 @@ async function main() {
     elapsed += delta;
     const pose = acting.update(delta, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
+    if (displayedVariant !== acting.variant) {
+      displayedVariant = acting.variant;
+      document.documentElement.dataset.variation = String(displayedVariant);
+    }
     const face = motion(elapsed, phase, reduced, speechSamples.level());
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
     stance.apply(pose);
@@ -190,6 +205,7 @@ async function main() {
     mouth = phase === 'speaking' ? THREE.MathUtils.damp(mouth, face.mouth, 28, delta) : 0;
     avatar.expressionManager?.setValue('aa', mouth);
     avatar.expressionManager?.setValue('happy', pose.smile);
+    for (const [channel, name] of expressiveChannels) if (name) avatar.expressionManager?.setValue(name, pose[channel]);
     avatar.update(delta);
     renderer.render(scene, camera);
     if (!window.companion.ready) { window.companion.ready = true; report('ready'); }

@@ -36,6 +36,10 @@ struct CompanionView: View {
     @State private var controlsHeight: CGFloat = 200
     @State private var frameRate = 60
     @State private var screenMaximumFPS = 60
+    @AppStorage("expressionsEnabled") private var expressionsEnabled = true
+    @AppStorage("expressionEmotion") private var expressionEmotion = "auto"
+    @AppStorage("expressionIntensity") private var expressionIntensity = 0.7
+    @AppStorage("expressionVariant") private var expressionVariant = -1
     @AppStorage("characterID") private var characterID = "vita"
     @AppStorage("animationFrameRate") private var requestedFrameRate = 120
     @Environment(\.scenePhase) private var scenePhase
@@ -240,7 +244,8 @@ struct CompanionView: View {
                 Ellipse().fill(palette.accent.opacity(0.12))
                     .frame(width: 160, height: 16).blur(radius: 12).padding(.bottom, 12)
             }.allowsHitTesting(false).accessibilityHidden(true)
-            AvatarView(phase: phase, characterID: characterID, voice: voice, reduceMotion: reduceMotion,
+            AvatarView(phase: phase, characterID: characterID, expressionEmotion: expressionEmotion,
+                       expressionIntensity: expressionIntensity, expressionVariant: expressionVariant, expressionsEnabled: expressionsEnabled, voice: voice, reduceMotion: reduceMotion,
                        frameRate: frameRate,
                        active: scenePhase == .active && !showSettings && !showCommands && !showChat && store.proposedCommand == nil && store.proposedRoutine == nil,
                        screenMaximumFPS: $screenMaximumFPS,

@@ -4,6 +4,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { speechProbeBundle, checkSpeech } from './check-speech.mjs';
+import { encodeVariant, VARIANT_COUNT } from '../Renderer/expression-library.mjs';
 
 const root = new URL('../Resources/Web/', import.meta.url);
 const speechProbe = await speechProbeBundle();
@@ -87,6 +88,26 @@ try {
   await page.waitForFunction(() => document.documentElement.dataset.motion === 'reduced');
   await page.waitForTimeout(500);
   await page.screenshot({ path: '/tmp/companion-review/reduced-motion.png' });
+  assert.equal(await page.evaluate(() => window.companion.variantCount), VARIANT_COUNT);
+  await page.setViewportSize({ width: 480, height: 720 });
+  await page.evaluate(() => {
+    document.body.style.background = '#f5f0e4';
+    window.companion.setViewport(480,720);
+    window.companion.setFrameRate(30);
+    window.companion.setState('idle',false);
+  });
+  for(const [name,gesture,emotion,gaze,stance] of [
+    ['warm-palms',8,1,0,0], ['joy-wave',14,2,1,1],
+    ['thoughtful',17,5,4,4], ['surprised',11,11,3,2],
+    ['supportive',12,8,0,3], ['confident',22,7,2,5],
+  ]) {
+    const variant=encodeVariant(gesture,emotion,gaze,stance);
+    await page.evaluate(variant => window.companion.configurePerformance({variant,intensity:1}),variant);
+    await page.waitForFunction(variant => document.documentElement.dataset.variation===String(variant),variant);
+    await page.waitForTimeout(2200);
+    await page.screenshot({path:`/tmp/companion-review/performance-${name}.png`});
+  }
+  await page.evaluate(() => window.companion.configurePerformance({variant:-1,intensity:.7}));
   for (const [width, height] of [[390, 420], [700, 800], [300, 400]]) {
     await page.setViewportSize({ width, height });
     await page.evaluate(({ width, height }) => window.companion.setViewport(width, height), { width, height });
@@ -143,7 +164,7 @@ try {
   await broken.goto(address);
   await broken.waitForFunction(() => document.documentElement.dataset.status === 'error');
   assert.equal(await broken.evaluate(() => window.companion.ready), false);
-  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; planted raw and normalized feet across all stance clips; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
+  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; six composed performances; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; planted raw and normalized feet across all stance clips and composed gesture/stance pairs; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

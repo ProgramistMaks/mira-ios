@@ -1,5 +1,30 @@
 # Verification — 2026-11-17
 
+## 13,824 compositional character performances
+
+The character now has 24 additive gestures × 12 emotional styles × 8 gaze targets
+× 6 grounded stances, selectable in native settings. These are distinct combinations,
+not 13,824 independent authored clips. See [catalogue and limits](PERFORMANCE-LIBRARY.md).
+
+- All 34 renderer tests pass, including exhaustive uniqueness of sampled trajectories
+  for all 13,824 identifiers, bounded joints/faces, recent-repeat exclusion, phase
+  eligibility, interruption continuity, reduced motion and frame-step consistency.
+- TypeScript checking and renderer build pass. Changed SwiftUI files pass syntax
+  parsing; this is not Apple SDK typechecking.
+- Actual-Vita Chromium QA covers six composed performances, three viewport sizes,
+  speech-driven mouth motion, touch/drag, pause/resume and context-loss recovery.
+  The real-rig probe checks 2,340 samples, including every gesture/stance pair on
+  four base poses at two points. Feet, rotations and bone lengths retain tolerance
+  below 1e-5. Optimized facial morphs match the original model (maximum delta 0).
+- Visual review identified overly wide gestures; their authored tracks were narrowed.
+  This is sampled browser evidence, not exhaustive collision testing or device QA.
+- The compiled renderer plus catalogue grows by about 17 KB before IPA compression.
+  No large clip pack, network download or separate animation service was introduced.
+
+No macOS run or new IPA was produced. Native settings, WKWebView performance and
+physical-device/reference-quality acceptance remain unverified. The latest known
+GitHub billing block was not bypassed and no paid workflow was dispatched.
+
 ## Themes, Duo geometry and reference actions
 
 Latest source adds four persistent themes, removes redundant reply/home playback

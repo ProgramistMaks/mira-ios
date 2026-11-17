@@ -160,6 +160,7 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         Section("Персонаж") {
             NavigationLink("Персонажи и костюмы VRM") { CharacterLibraryView() }
+            NavigationLink("Эмоции и движения") { MotionSettingsView() }
             Picker("Плавность анимации", selection: $requestedFrameRate) {
                 ForEach([30, 60, 120, 240], id: \.self) { rate in
                     Text(rate <= screenMaximumFPS ? "До \(rate) кадров/с" : "До \(rate) кадров/с · недоступно")

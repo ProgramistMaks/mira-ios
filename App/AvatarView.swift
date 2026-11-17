@@ -5,6 +5,10 @@ import Combine
 struct AvatarView: UIViewRepresentable {
     let phase: CompanionPhase
     var characterID: String = "vita"
+    var expressionEmotion = "auto"
+    var expressionIntensity = 0.7
+    var expressionVariant = -1
+    var expressionsEnabled = true
     let voice: VoiceService
     let reduceMotion: Bool
     let frameRate: Int
@@ -70,7 +74,13 @@ struct AvatarView: UIViewRepresentable {
             mouthBridge?.setState(ready: loaded && parent.ready, active: parent.active)
             parent.voice.setSceneActive(visible)
             guard loaded else { return }
+            let settings: [String: Any] = ["emotion": parent.expressionEmotion,
+                "intensity": parent.expressionIntensity.isFinite ? parent.expressionIntensity : 0.7,
+                "variant": parent.expressionVariant, "enabled": parent.expressionsEnabled]
+            let encoded = (try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys])) ?? Data("{}".utf8)
+            let performance = String(decoding: encoded, as: UTF8.self)
             let command = """
+                window.companion?.configurePerformance(\(performance));
                 window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion));
                 window.companion?.setFrameRate(\(parent.frameRate));
                 window.companion?.setActive(\(parent.active));
