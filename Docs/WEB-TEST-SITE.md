@@ -5,11 +5,11 @@ Published URL: https://mira-motion-lab.fungait8.chatgpt.site
 Owner-only Sites access; sign in with the owner's ChatGPT account. Site project:
 `appgprj_6afc1d7a03a48191ac670113db951f36`. Its source checkout is
 `/workspace/sites/mira-motion-lab`, with a separate Sites Git repository.
-Published source: `6fdfa18daeec377b60f0032e0009091b76b868a6`.
-The renderer snapshot comes from native commit `3938193` and contains 52 gesture
+Published source: `6a556b0fe43ea2709953e90a8a23545f9a9d6df3`.
+The renderer snapshot comes from native commit `a79763b` and contains 52 gesture
 tracks / 29,952 combinations. Later native changes do not update the Site automatically.
 
-Natural behavior publication: `appgdep_6afc2d2ae6448191b37456f70e77d682`,
+Gesture repair publication: `appgdep_6afc313cf4b08191b36fdd40485aaf7c`,
 reported succeeded on 2026-11-17. The **Тело и физика** panel has 93 control
 channels including 30 independent finger joints, shoulder/neck/pelvis controls,
 active leg IK, eye/mouth tests, spring tuning and optional denser hair geometry.
@@ -35,3 +35,7 @@ was unavailable, so no substitute browser driver was used and Site visual QA,
 microphone/TTS, full local inference and real credentialed providers remain
 unverified. Native Sites deployment reported success on 2026-11-17. This is a
 functional test site, not reference-quality or native-device acceptance.
+
+The latest revision repairs hand-to-chest/wave goals and conflicting demo modes,
+adds replay/quick controls, and audits all 52 tracks on the actual Vita skeleton.
+See FULL-BODY.md for measured limits and remaining visual verification gaps.
