@@ -93,3 +93,18 @@ test('missing leg bones disable stance as a whole without moving the hips', () =
   stance.apply(sampleClip('thinking', 2));
   assert.deepEqual(model.nodes.hips.position, before);
 });
+
+test('knee flex lifts its foot, opposite foot stays planted, ankles and toes do not stretch bones',()=>{
+  for(const forward of [1,-1]){
+    const model=rig(forward);
+    const lengths=[model.nodes.leftLowerLeg.position.length(),model.nodes.leftFoot.position.length()];
+    model.stance.apply({...REST,leftKnee:1.2,leftFootPitch:.3,leftFootSide:.03,hipsPitch:.1});
+    const left=model.root.worldToLocal(model.nodes.leftFoot.getWorldPosition(new Vector3()));
+    const right=model.root.worldToLocal(model.nodes.rightFoot.getWorldPosition(new Vector3()));
+    assert.ok(left.y>model.anchors[0].position.y+.1);
+    assert.ok(right.distanceTo(model.anchors[1].position)<1e-6);
+    const target=model.stance.legs[0].anchor.clone().add(model.stance.legs[0].offset);assert.ok(left.distanceTo(target)<1e-6);
+    assert.deepEqual([model.nodes.leftLowerLeg.position.length(),model.nodes.leftFoot.position.length()],lengths);
+    model.stance.apply(REST);contacts(model);
+  }
+});

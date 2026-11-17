@@ -9,6 +9,12 @@ struct AvatarView: UIViewRepresentable {
     var expressionIntensity = 0.7
     var expressionVariant = -1
     var expressionsEnabled = true
+    var bodyMode = "natural"
+    var bodyControls = "{}"
+    var secondaryPhysics = true
+    var physicsWind = 0.0
+    var physicsSoftness = 0.5
+    var hairDetail = "standard"
     let voice: VoiceService
     let reduceMotion: Bool
     let frameRate: Int
@@ -79,7 +85,15 @@ struct AvatarView: UIViewRepresentable {
                 "variant": parent.expressionVariant, "enabled": parent.expressionsEnabled]
             let encoded = (try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys])) ?? Data("{}".utf8)
             let performance = String(decoding: encoded, as: UTF8.self)
+            let controls = parent.bodyControls.utf8.count <= 32000
+                ? (try? JSONDecoder().decode([String: Double].self, from: Data(parent.bodyControls.utf8))) ?? [:] : [:]
+            let bodySettings: [String: Any] = ["mode": parent.bodyMode, "controls": controls,
+                "physics": parent.secondaryPhysics, "wind": parent.physicsWind.isFinite ? parent.physicsWind : 0,
+                "softness": parent.physicsSoftness.isFinite ? parent.physicsSoftness : 0.5, "detail": parent.hairDetail]
+            let bodyData = (try? JSONSerialization.data(withJSONObject: bodySettings, options: [.sortedKeys])) ?? Data("{}".utf8)
+            let bodyJSON = String(decoding: bodyData, as: UTF8.self)
             let command = """
+                window.companion?.configureBody(\(bodyJSON));
                 window.companion?.configurePerformance(\(performance));
                 window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion));
                 window.companion?.setFrameRate(\(parent.frameRate));

@@ -787,3 +787,11 @@ pixels, settings, note persistence and portrait/landscape screenshots.
 - Perceived reference-voice comparison, final animation/voice quality and visual parity. Full machine transcription and feature review are recorded in REFERENCE-REVIEW.md.
 
 See QUALITY.md for the full delivery gate. Successful CI does not clear it.
+
+## Full-body controls and physics, 2026-11-17
+
+See [FULL-BODY.md](FULL-BODY.md) for 93 control channels, 50 renderer tests and
+actual Vita skeleton/mesh checks. Hair density is measured at 26,130 / 62,046
+whole-character triangles; physics uses 80 existing spring joints. These checks
+are independent of visual/device acceptance. Swift parsing does not establish
+native type checking. No new macOS run or IPA was produced for this update.

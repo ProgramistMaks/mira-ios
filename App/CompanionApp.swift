@@ -40,6 +40,12 @@ struct CompanionView: View {
     @AppStorage("expressionEmotion") private var expressionEmotion = "auto"
     @AppStorage("expressionIntensity") private var expressionIntensity = 0.7
     @AppStorage("expressionVariant") private var expressionVariant = -1
+    @AppStorage("bodyMode") private var bodyMode = "natural"
+    @AppStorage("bodyControls") private var bodyControls = "{}"
+    @AppStorage("secondaryPhysics") private var secondaryPhysics = true
+    @AppStorage("physicsWind") private var physicsWind = 0.0
+    @AppStorage("physicsSoftness") private var physicsSoftness = 0.5
+    @AppStorage("hairDetail") private var hairDetail = "standard"
     @AppStorage("characterID") private var characterID = "vita"
     @AppStorage("animationFrameRate") private var requestedFrameRate = 120
     @Environment(\.scenePhase) private var scenePhase
@@ -245,7 +251,9 @@ struct CompanionView: View {
                     .frame(width: 160, height: 16).blur(radius: 12).padding(.bottom, 12)
             }.allowsHitTesting(false).accessibilityHidden(true)
             AvatarView(phase: phase, characterID: characterID, expressionEmotion: expressionEmotion,
-                       expressionIntensity: expressionIntensity, expressionVariant: expressionVariant, expressionsEnabled: expressionsEnabled, voice: voice, reduceMotion: reduceMotion,
+                       expressionIntensity: expressionIntensity, expressionVariant: expressionVariant, expressionsEnabled: expressionsEnabled,
+                       bodyMode: bodyMode, bodyControls: bodyControls, secondaryPhysics: secondaryPhysics,
+                       physicsWind: physicsWind, physicsSoftness: physicsSoftness, hairDetail: hairDetail, voice: voice, reduceMotion: reduceMotion,
                        frameRate: frameRate,
                        active: scenePhase == .active && !showSettings && !showCommands && !showChat && store.proposedCommand == nil && store.proposedRoutine == nil,
                        screenMaximumFPS: $screenMaximumFPS,

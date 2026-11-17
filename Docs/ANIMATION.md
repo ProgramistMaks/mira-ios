@@ -29,3 +29,8 @@ High-refresh API sources checked on 2026-11-16:
 - https://developer.apple.com/documentation/uikit/uiscreen/maximumframespersecond
 
 The workflow's real-inference check defaults to enabled. For changes confined to character/UI code it can be disabled after verifying the local model catalogue, inference code and runtime are unchanged from a previously successful inference run. This animation update retains the runtime tested in run `43829220890`.
+
+Full-body update: independent phalanges/thumbs, shoulders, neck/pelvis, active leg
+IK, eye/mouth tests, spring tuning and optional denser hair are documented in
+[FULL-BODY.md](FULL-BODY.md). The default stance remains planted; deliberate
+foot lifts are enabled by the body demonstration/manual layer.

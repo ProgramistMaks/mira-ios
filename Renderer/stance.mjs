@@ -11,6 +11,7 @@ class PlantedLeg {
     this.restLower = lower.quaternion.clone();
     this.restFoot = foot.quaternion.clone();
     this.anchor = root.worldToLocal(foot.getWorldPosition(new Vector3()));
+    this.offset = new Vector3(); this.footEuler = new Euler(); this.footTilt = new Quaternion();
     this.anchorRotation = root.getWorldQuaternion(new Quaternion()).invert()
       .multiply(foot.getWorldQuaternion(new Quaternion()));
     for (const name of ['a', 'b', 'c', 'target', 'direction', 'bend', 'knee', 'source', 'desired']) this[name] = new Vector3();
@@ -23,8 +24,19 @@ class PlantedLeg {
   }
   measure() {
     this.upper.getWorldPosition(this.a); this.lower.getWorldPosition(this.b); this.foot.getWorldPosition(this.c);
-    this.target.copy(this.anchor); this.root.localToWorld(this.target);
+    this.target.copy(this.anchor).add(this.offset); this.root.localToWorld(this.target);
     this.upperLength = this.a.distanceTo(this.b); this.lowerLength = this.b.distanceTo(this.c);
+  }
+  configure(pose, side, height) {
+    this.offset.set(0, 0, 0); this.measure();
+    const knee = Math.max(0, bounded(pose, side + 'Knee', 1.4));
+    const a = this.upperLength, b = this.lowerLength;
+    const worldScale = this.root.getWorldScale(new Vector3()).y;
+    const kneeLift = (a + b - Math.sqrt(a*a + b*b + 2*a*b*Math.cos(knee))) / Math.max(1e-8, worldScale);
+    this.offset.set((side === 'left' ? -1 : 1) * bounded(pose, side + 'FootSide', .07),
+      Math.max(0, bounded(pose, side + 'FootLift', .1)), bounded(pose, side + 'FootForward', .09) * this.forward).multiplyScalar(height);
+    this.offset.y += kneeLift;
+    this.footTilt.setFromEuler(this.footEuler.set(-this.forward * bounded(pose, side + 'FootPitch', .4), 0, bounded(pose, side + 'FootRoll', .2)));
   }
   requiredDrop(up) {
     this.measure();
@@ -58,7 +70,7 @@ class PlantedLeg {
     this.aim(this.upper, this.source.subVectors(this.b, this.a), this.desired.subVectors(this.knee, this.a));
     this.lower.getWorldPosition(this.b); this.foot.getWorldPosition(this.c);
     this.aim(this.lower, this.source.subVectors(this.c, this.b), this.desired.subVectors(this.target, this.b));
-    this.worldRotation.copy(rootRotation).multiply(this.anchorRotation);
+    this.worldRotation.copy(rootRotation).multiply(this.anchorRotation).multiply(this.footTilt);
     this.foot.parent.getWorldQuaternion(this.parentRotation).invert();
     this.foot.quaternion.copy(this.parentRotation.multiply(this.worldRotation));
   }
@@ -83,10 +95,10 @@ export class PlantedStance {
     // An incomplete rig keeps its original pose; never animate only one leg.
     if (this.legs.length !== 2) return;
     const side = bounded(pose, 'hipsSide', 0.025), forward = bounded(pose, 'hipsForward', 0.02);
-    const drop = Math.max(0, bounded(pose, 'hipsDrop', 0.025));
-    for (const leg of this.legs) leg.reset();
+    const drop = Math.max(0, bounded(pose, 'hipsDrop', 0.06));
+    for (const [index, leg] of this.legs.entries()) { leg.reset(); leg.configure(pose, index === 0 ? 'left' : 'right', this.height); }
     this.hips.quaternion.copy(this.restRotation)
-      .multiply(this.tilt.setFromEuler(this.euler.set(0, bounded(pose, 'hipsYaw', 0.06), bounded(pose, 'hipsRoll', 0.04))));
+      .multiply(this.tilt.setFromEuler(this.euler.set(bounded(pose, 'hipsPitch', .12), bounded(pose, 'hipsYaw', 0.06), bounded(pose, 'hipsRoll', 0.04))));
     this.position.copy(this.origin).addScaledVector(this.up.set(side, -drop, forward * this.forward), this.height);
     this.root.localToWorld(this.position);
     this.hips.position.copy(this.hips.parent.worldToLocal(this.position));

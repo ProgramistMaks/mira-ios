@@ -84,3 +84,7 @@ routines/study timers, optional Fish Audio and local VRM import. Physical fold
 regions require a build with the iOS 27.1+ SDK; older toolchains use size adaptation.
 These additions have not been compiled or device-validated yet. See
 [feature scope and remaining reference gaps](Docs/DUO-AND-REFERENCE-FEATURES.md).
+
+Full-body controls: [joint, physics and hair-density details](Docs/FULL-BODY.md).
+The private test site exposes these under **Тело и физика**; iOS source has the
+same settings in **Эмоции и движения**. Native device verification is pending.

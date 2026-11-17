@@ -21,9 +21,9 @@ export class ArmRig {
   apply(pose) {
     for(const {side,sign,upper,lower,hand,axis} of this.arms) {
       const facing=this.armSign, turn=finite(pose,`${side}Palm`,1.2)*facing;
-      upper?.rotation.set(finite(pose,`${side}Roll`,.2),
+      upper?.rotation.set(finite(pose,`${side}Roll`,.55),
         sign*facing*finite(pose,`${side}Forward`,1.12),
-        sign*facing*(1.2-finite(pose,`${side}Lift`,1.38)));
+        sign*facing*(1.2-finite(pose,`${side}Lift`,1.7)));
       if(lower){
         lower.rotation.set(0,0,-sign*facing*finite(pose,`${side}Elbow`,2.6));
         lower.quaternion.multiply(this.twist.setFromAxisAngle(axis,turn));

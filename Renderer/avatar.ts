@@ -6,6 +6,9 @@ import { PerformanceController } from './performance.mjs';
 import { ArmRig } from './arms.mjs';
 import { VARIANT_COUNT } from './expression-library.mjs';
 import { PlantedStance } from './stance.mjs';
+import { BodyController, ArticulationRig, BODY_CATALOG } from './body.mjs';
+import { SecondaryPhysics } from './secondary-physics.mjs';
+import { HairDetail } from './hair-detail.mjs';
 import { AnimationTimeline } from './animation-timeline.mjs';
 
 declare global {
@@ -13,6 +16,7 @@ declare global {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
       setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
+      configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
 }
@@ -22,6 +26,8 @@ const report = (type: string, detail = '') => {
   document.documentElement.dataset.status = type;
 };
 const acting = new PerformanceController(crypto.getRandomValues(new Uint32Array(1))[0]);
+const body = new BodyController();
+let resetPhysics: (() => void) | undefined;
 let frameRate = 60;
 let active = true;
 let phase = 'idle';
@@ -40,9 +46,12 @@ let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   variantCount: VARIANT_COUNT,
+  bodyCatalog: BODY_CATALOG, bodyStatus: {},
+  configureBody(settings) { body.configure(settings); },
   configurePerformance(settings) { acting.configure(settings); },
   phase,
   setActive(value) {
+    if (!active && value === true) resetPhysics?.();
     active = value === true;
     syncVisibility();
   },
@@ -156,11 +165,16 @@ async function main() {
   const stance = new PlantedStance(avatar.scene, bone, height, avatar.meta.metaVersion === '0' ? -1 : 1);
   const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
   const arms = new ArmRig(bone, armSign);
-  const fingers = ['Index', 'Middle', 'Ring', 'Little'].flatMap(finger =>
-    ['Proximal', 'Intermediate', 'Distal'].map((joint, index) => ({
-      left: bone(`left${finger}${joint}` as Parameters<typeof bone>[0]),
-      right: bone(`right${finger}${joint}` as Parameters<typeof bone>[0]), scale: [0.8, 0.9, 0.55][index],
-    })));
+  const articulation = new ArticulationRig(bone, armSign);
+  const secondary = new SecondaryPhysics(avatar.springBoneManager);
+  resetPhysics = () => secondary.reset();
+  const detail = new HairDetail(avatar.scene);
+  const bodyStatus = () => {
+    window.companion.bodyStatus = { joints: articulation.entries.length, physics: secondary.counts,
+      triangles: detail.triangles, hairDetailAvailable: detail.available, detail: detail.mode, error: detail.error,
+      coccyx: false, cloth: 'spring-bones' };
+  };
+  bodyStatus();
   // VRM0 may keep surprise as a custom name; imported rigs may omit it.
   const expressionName = (names: string[]) => names.find(name => avatar.expressionManager?.getExpression(name));
   const expressiveChannels = [
@@ -178,7 +192,9 @@ async function main() {
     if (delta === null) return;
     elapsed += delta;
     const audioLevel = speechSamples.level();
-    const pose = acting.update(delta, reduced, audioLevel);
+    const pose = body.update(acting.update(delta, reduced, audioLevel), delta, reduced);
+    if (detail.mode !== body.detail) { detail.set(body.detail); bodyStatus(); }
+    secondary.configure(body, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
     if (displayedVariant !== acting.variant) {
       displayedVariant = acting.variant;
@@ -188,18 +204,25 @@ async function main() {
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
     stance.apply(pose);
     arms.apply(pose);
-    for (const finger of fingers) {
-      if (finger.left) finger.left.rotation.z = -armSign * pose.leftCurl * finger.scale;
-      if (finger.right) finger.right.rotation.z = armSign * pose.rightCurl * finger.scale;
-    }
-    if (spine) spine.rotation.set(pose.spineX, 0, pose.spineZ);
+    articulation.apply(pose);
+    if (spine) spine.rotation.set(pose.spineX, pose.spineY, pose.spineZ);
     if (chest) chest.rotation.set(pose.chestX, pose.chestY, pose.chestZ);
-    if (neck) neck.rotation.x = pose.neckX;
+    if (neck) neck.rotation.set(pose.neckX, pose.neckY, pose.neckZ);
     if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
-    avatar.expressionManager?.setValue('blink', face.blink);
+    const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
+    if (avatar.lookAt) {
+      avatar.lookAt.autoUpdate = !faceTest;
+      if (faceTest) { avatar.lookAt.yaw = pose.eyeYaw; avatar.lookAt.pitch = pose.eyePitch; }
+    }
+    avatar.expressionManager?.setValue('blink', faceTest ? 0 : face.blink);
+    avatar.expressionManager?.setValue('blinkLeft', faceTest ? pose.blinkLeft : 0);
+    avatar.expressionManager?.setValue('blinkRight', faceTest ? pose.blinkRight : 0);
     mouth = phase === 'speaking' ? THREE.MathUtils.damp(mouth, face.mouth, 28, delta) : 0;
-    avatar.expressionManager?.setValue('aa', mouth);
+    avatar.expressionManager?.setValue('aa', phase === 'speaking' ? mouth : faceTest ? pose.mouthAA : 0);
+    for (const [name, key] of [['ih','mouthIH'],['ou','mouthOU'],['ee','mouthEE'],['oh','mouthOH']]) {
+      avatar.expressionManager?.setValue(name, faceTest && phase !== 'speaking' ? pose[key] : 0);
+    }
     avatar.expressionManager?.setValue('happy', pose.smile);
     for (const [channel, name] of expressiveChannels) if (name) avatar.expressionManager?.setValue(name, pose[channel]);
     avatar.update(delta);
