@@ -5,9 +5,15 @@ Published URL: https://mira-motion-lab.fungait8.chatgpt.site
 Owner-only Sites access; sign in with the owner's ChatGPT account. Site project:
 `appgprj_6afc1d7a03a48191ac670113db951f36`. Its source checkout is
 `/workspace/sites/mira-motion-lab`, with a separate Sites Git repository.
-Published source: `4deb6b6212d725b76d1545523cf8ed3c51cf2ab8` (Site version 1).
-The renderer snapshot comes from native commit `6560de5` and contains 52 gesture
+Published source: `84612459356a136d112d44b8f86e2761b6753ae6`.
+The renderer snapshot comes from native commit `181f9a1` and contains 52 gesture
 tracks / 29,952 combinations. Later native changes do not update the Site automatically.
+
+Full-body publication: `appgdep_6afc2815ef5081919ca0a0815403b173`,
+reported succeeded on 2026-11-17. The **Тело и физика** panel has 93 control
+channels including 30 independent finger joints, shoulder/neck/pelvis controls,
+active leg IK, eye/mouth tests, spring tuning and optional denser hair geometry.
+The full body implementation and asset limits are in [FULL-BODY.md](FULL-BODY.md).
 
 The Site provides real animation controls, wrist close-ups, themes, VRM import,
 browser speech, automatic conversation, audio-file amplitude synchronization,
@@ -21,7 +27,8 @@ Duo fold regions, background audio and IPA installation remain iPhone checks.
 The coverage page distinguishes those limits. System Web Speech does not expose
 PCM, so the Site never fabricates mouth amplitudes for browser-synthesized speech.
 
-13 Site unit/controller/DOM-contract tests passed. The managed Sites browser tool
+13 Site unit/controller/DOM-contract tests passed, including full-body slider
+generation, individual phalanx commands, wind/detail settings and reset. The managed Sites browser tool
 was unavailable, so no substitute browser driver was used and Site visual QA,
 microphone/TTS, full local inference and real credentialed providers remain
 unverified. Native Sites deployment reported success on 2026-11-17. This is a
