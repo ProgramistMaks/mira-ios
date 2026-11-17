@@ -30,20 +30,22 @@ struct VoiceHomeControls: View {
         store.automatic.active ? "Завершить" : (voice.busy ? "Остановить" : (ready ? "Начать разговор" : "Подготовить Миру"))
     }
     var body: some View {
-        VStack(spacing: 18) {
-            VStack(spacing: 8) {
-                Text(title).font(.system(.title, design: .rounded, weight: .medium))
+        VStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.system(.callout, design: .rounded, weight: .semibold))
                     .foregroundStyle(Palette.ink).accessibilityIdentifier("home.status")
                 Text(voice.recording && !store.liveTranscript.isEmpty ? store.liveTranscript : detail)
-                    .font(.subheadline).foregroundStyle(Palette.muted)
-                    .multilineTextAlignment(.center).lineLimit(3)
+                    .font(.footnote).foregroundStyle(Palette.muted)
+                    .multilineTextAlignment(.leading).lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-            }.frame(maxWidth: .infinity)
+            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                .background(.white.opacity(0.48), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.8), lineWidth: 0.7))
             MiraGlassGroup {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     Button(action: openChat) {
-                        Image(systemName: "text.bubble").font(.system(size: 20, weight: .regular))
-                            .frame(width: 48, height: 56)
+                        Image(systemName: "text.bubble").font(.system(size: 18, weight: .regular))
+                            .frame(width: 44, height: 48)
                     }.buttonStyle(.plain).foregroundStyle(Palette.ink)
                         .accessibilityLabel("Открыть чат").accessibilityIdentifier("home.chat")
                     Button {
@@ -53,13 +55,13 @@ struct VoiceHomeControls: View {
                     } label: {
                         Label(store.automatic.active || voice.busy ? "Закончить" : (ready ? "Поговорим" : "Начнём?"),
                               systemImage: store.automatic.active || voice.busy ? "stop.fill" : "mic.fill")
-                            .font(.system(.headline, design: .rounded)).lineLimit(1).minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity, minHeight: 48)
+                            .font(.system(.subheadline, design: .rounded, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.8)
+                            .frame(maxWidth: .infinity, minHeight: 32)
                     }.miraVoiceButton().tint(Palette.honey).foregroundStyle(Palette.ink)
                         .accessibilityLabel(actionLabel).accessibilityIdentifier("home.conversation").layoutPriority(-1)
                     if canInterrupt {
                         Button { Task { await store.interruptAutomaticConversation() } } label: {
-                            Image(systemName: "hand.raised").font(.system(size: 20)).frame(width: 48, height: 56)
+                            Image(systemName: "hand.raised").font(.system(size: 18)).frame(width: 44, height: 48)
                         }.buttonStyle(.plain).accessibilityLabel("Перебить и говорить")
                             .accessibilityIdentifier("home.interrupt")
                     } else {
@@ -67,15 +69,28 @@ struct VoiceHomeControls: View {
                             if voice.busy { store.cancel() } else { store.previewVoice() }
                         } label: {
                             Image(systemName: voice.busy ? "speaker.slash" : "speaker.wave.2")
-                                .font(.system(size: 20)).frame(width: 48, height: 56)
+                                .font(.system(size: 18)).frame(width: 44, height: 48)
                         }.buttonStyle(.plain).disabled(store.automatic.active)
                             .accessibilityLabel(voice.busy ? "Остановить голос" : "Послушать Миру")
                             .accessibilityIdentifier("home.previewVoice")
                     }
-                }.padding(10)
-                    .miraGlass(in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-                    .shadow(color: Palette.accent.opacity(0.09), radius: 20, x: 0, y: 8)
+                }.padding(8)
+                    .miraGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .shadow(color: Palette.accent.opacity(0.06), radius: 12, x: 0, y: 4)
             }
+            HStack(spacing: 6) {
+                statusChip(ready ? "ИИ выбран" : "ИИ не выбран", symbol: "sparkle")
+                statusChip(voice.recording ? "Микрофон вкл." : "Микрофон выкл.", symbol: "mic")
+                statusChip("Голос iOS", symbol: "waveform")
+            }.frame(maxWidth: .infinity, alignment: .trailing)
         }.foregroundStyle(Palette.ink).accessibilityIdentifier("home.controls")
     }
+    private func statusChip(_ text: String, symbol: String) -> some View {
+        Label(text, systemImage: symbol)
+            .font(.system(size: 9, weight: .medium)).foregroundStyle(Palette.muted)
+            .padding(.horizontal, 6).padding(.vertical, 4)
+            .background(.white.opacity(0.4), in: Capsule())
+            .accessibilityElement(children: .combine)
+    }
+
 }

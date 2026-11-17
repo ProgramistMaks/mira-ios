@@ -4,15 +4,18 @@ The user chose the light cream interface in the first Astra reference video.
 The current direction uses warm paper, dark olive text, honey accents and thin
 translucent controls. The character shares the background with the interface;
 the large boxed conversation panel is replaced by a compact three-action dock.
-A short title and caption replace the previous introductory block. Wide screens
+A compact left-aligned reply card replaces the oversized centered heading. The
+header groups Home, Commands and Settings in a thin rounded navigation surface.
+A small footer shows actual AI-selection and microphone state, plus the iOS voice
+provider; it never claims a connection or model is ready merely because a key exists. Wide screens
 place the character beside the controls. Settings and chat remain separate sheets.
 
 Implemented in `CompanionApp.swift`, `CompanionBackdrop.swift`,
 `VoiceHomeControls.swift` and the shared glass styles. Renderer lighting is warm
 and the camera fits the character more closely. Existing VRM, actions, speech,
-model download and search behavior are retained. The character is still Vita:
-its short hair and futuristic outfit do not match Astra's character. This is a
-UI redesign, not a claim of final character or voice parity.
+model download and search behavior are retained. The user explicitly approved Vita after reviewing the cream design. Keep its model,
+animation, lighting and camera; do not replace it just to copy Astra. This approval
+does not establish device performance or voice quality.
 
 `cream.html` is an explicitly labelled **browser design preview**, using the actual
 bundled Three/VRM renderer. Its controls only demonstrate layout/states. No microphone,

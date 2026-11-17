@@ -190,18 +190,27 @@ struct CompanionView: View {
         frameRate = min(max(1, screenMaximumFPS), constrained ? 30 : requested)
     }
     private var header: some View {
-        HStack(spacing: 8) {
-            Text("мира").font(.system(size: 28, weight: .bold, design: .rounded)).tracking(-1)
-            Image(systemName: "sparkle").font(.system(size: 20, weight: .light)).foregroundStyle(Palette.accent)
-            Spacer()
-            HStack(spacing: 6) {
-                Circle().fill(Palette.accent).frame(width: 5, height: 5)
-                Text("Твой компаньон").font(.system(size: 11, weight: .medium))
-            }.foregroundStyle(Palette.muted).padding(.trailing, 4)
-            Button(action: openSettings) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 18))
-                    .frame(width: 44, height: 44)
-            }.buttonStyle(.plain).miraGlass(in: Circle()).accessibilityLabel("Настройки")
+        HStack(spacing: 12) {
+            HStack(spacing: 4) {
+                Text("мира").font(.system(size: 22, weight: .bold, design: .rounded)).tracking(-0.8)
+                Image(systemName: "sparkle").font(.system(size: 14, weight: .light)).foregroundStyle(Palette.accent)
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 2) {
+                Label("Главная", systemImage: "house")
+                    .font(.system(size: 12, weight: .medium)).padding(.horizontal, 10).frame(height: 36)
+                    .background(.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityAddTraits(.isSelected)
+                Button {
+                    store.cancel(); composerFocused = false; showCommands = true
+                } label: {
+                    Image(systemName: "square.stack.3d.up").frame(width: 44, height: 44)
+                }.accessibilityLabel("Команды").accessibilityIdentifier("home.commands")
+                Button(action: openSettings) {
+                    Image(systemName: "slider.horizontal.3").frame(width: 44, height: 44)
+                }.accessibilityLabel("Настройки")
+            }.font(.system(size: 16)).buttonStyle(.plain).padding(.horizontal, 4)
+                .miraGlass(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
     private var stage: some View {

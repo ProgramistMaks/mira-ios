@@ -36,7 +36,18 @@ accents and a character sharing the workspace. The mobile adaptation now uses th
 colors/material roles, a larger character and a compact conversation dock; optional
 forms open separately. This follows the user's request to prioritize automatic
 conversation, rather than copying the desktop block-editor layout onto a phone.
-The existing Vita candidate is unchanged; matching character styling remains open.
+The user subsequently confirmed that they really like Vita. Character appearance is now selected; retain the current model and renderer presentation while refining the interface.
+
+## Interface refinement after character approval — 2026-11-17
+
+The user approved the character and said the interface is much better but still
+unlike the video. Refinement therefore preserves the entire renderer and model:
+compact grouped navigation replaces the large header treatment; small rectangular
+paper cards replace centered display headings; the conversation controls use softer
+rounded rectangles and a subtle footer, following the reference's panel hierarchy.
+Commands and Settings are functional native destinations. Status labels reflect
+selection/capture state, not fictitious connections. The browser preview remains
+an approximation; no native result or complete reference parity is claimed.
 
 ## Remaining quality gap
 

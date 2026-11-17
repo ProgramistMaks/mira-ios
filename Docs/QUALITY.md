@@ -9,7 +9,8 @@ Videos sampled visually on 2026-11-15; full audio was machine-transcribed locall
 
 ## Required before delivery
 
-- [ ] Final high-quality anime model with hair/clothing dynamics, accurate material rendering and documented asset terms. Vita (CC0) is the current candidate; visual parity still unapproved.
+- [x] Character appearance selected by the user: on 2026-11-17 the user said they really like the current Vita character. Keep it; no replacement is needed to match Astra.
+- [ ] Device-verified hair/clothing dynamics and accurate material rendering for the selected character. Asset terms are documented; appearance approval alone does not validate runtime quality.
 - [ ] Authored idle, listening, thinking, speaking, greeting and touch-reaction animation clips with smooth blending. Original torso/arm/hand/gaze clips now include pelvis weight shifts and dips with planted-foot leg IK and interruption-safe blending. Wider motion variety, native performance and recorded reference comparison remain unfinished.
 - [ ] Phoneme-aware mouth animation and device-verified audiovisual timing. Actual PCM amplitude now drives mouth opening; this is not phoneme lip sync. See SPEECH.md.
 - [ ] Natural Russian voice, interruptible playback, no feedback loop into microphone. Current Apple TTS is a functional baseline, not demonstrated parity.

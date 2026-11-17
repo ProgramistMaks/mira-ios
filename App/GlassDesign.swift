@@ -61,9 +61,9 @@ extension View {
     @ViewBuilder
     func miraVoiceButton() -> some View {
         if #available(iOS 26.0, *) {
-            buttonStyle(.glassProminent).buttonBorderShape(.capsule)
+            buttonStyle(.glassProminent).buttonBorderShape(.roundedRectangle(radius: 12))
         } else {
-            buttonStyle(.borderedProminent).buttonBorderShape(.capsule)
+            buttonStyle(.borderedProminent).buttonBorderShape(.roundedRectangle(radius: 12))
         }
     }
     func miraGlass<S: Shape>(in shape: S) -> some View {

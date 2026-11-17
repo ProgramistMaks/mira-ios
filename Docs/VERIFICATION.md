@@ -1,5 +1,17 @@
 # Verification — 2026-11-17
 
+## Interface refinement; character explicitly retained
+
+The user confirmed that they really like Vita. This revision changes only native
+interface composition/styles and the labelled browser preview: compact Home / Commands
+/ Settings navigation, a left-aligned reply card, smaller rectangular voice controls
+and actual state labels. No renderer, camera, lighting, animation or model file changed.
+Swift syntax parsing passed. Browser review passed at 390×780, 320×568, 844×390 and
+820×1000, including all action hit targets within the frame and no horizontal overflow.
+Images are saved separately from the previous cream version. No macOS build was
+launched and native typography/glass/layout remain pending verification.
+
+
 ## Cream design selected by the user — local visual review
 
 The user explicitly chose the reference's light cream direction on 2026-11-17.

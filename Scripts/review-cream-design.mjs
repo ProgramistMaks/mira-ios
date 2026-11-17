@@ -24,7 +24,7 @@ try{
   await page.waitForTimeout(1400);
   const screen=await page.locator('.screen').boundingBox();const stage=await page.locator('.stage').boundingBox();
   assert.ok(stage.height>=160,'Character stage must keep usable space');
-  for(const selector of ['.settings','.chat','.primary','.voice']){const r=await page.locator(selector).boundingBox();assert.ok(r.width>=44&&r.height>=44);assert.ok(r.x>=screen.x&&r.x+r.width<=screen.x+screen.width+1);assert.ok(r.y+r.height<=screen.y+screen.height+1);}
+  for(const selector of ['.settings','.commands','.chat','.primary','.voice']){const r=await page.locator(selector).boundingBox();assert.ok(r.width>=44&&r.height>=44);assert.ok(r.x>=screen.x&&r.x+r.width<=screen.x+screen.width+1);assert.ok(r.y+r.height<=screen.y+screen.height+1);}
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   await page.locator('.screen').screenshot({path:`${output}/${name}.png`});
   console.log(`${name}: ${width}×${height}, character stage ${Math.round(stage.width)}×${Math.round(stage.height)}, controls inside screen`);
