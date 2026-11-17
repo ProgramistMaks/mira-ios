@@ -1,4 +1,5 @@
 import { REST } from './acting.mjs';
+import { CONVERSATIONAL_GESTURES } from './conversational-gestures.mjs';
 
 // Original small, grounded gestures: no locomotion, imported clips or random joint noise.
 // Track values are offsets from the existing conversational pose, in radians.
@@ -32,7 +33,10 @@ export const GESTURES = [
   gesture('present-left', 'Показывает слева', ['idle','speaking'], { leftLift: .55, leftForward: .50, leftElbow: .80, leftPalm: -.50, chestY: .05, headY: .05 }, { leftLift: .40, leftForward: .25, leftElbow: .65 }),
   gesture('present-right', 'Показывает справа', ['idle','speaking'], { rightLift: .55, rightForward: .50, rightElbow: .80, rightPalm: .50, chestY: -.05, headY: -.05 }, { rightLift: .40, rightForward: .25, rightElbow: .65 }),
   gesture('settle', 'Спокойная смена позы', all, { chestZ: .023, headZ: -.035, leftElbow: .22, rightWrist: .09 }, { chestZ: -.018, headZ: .02, rightElbow: .18 }, 9),
+  ...CONVERSATIONAL_GESTURES,
 ];
+const gestureArms = GESTURES.map(g => ['left','right'].filter(side =>
+  g.frames.some(([, pose]) => Object.keys(pose).some(key => key.startsWith(side)))));
 export const EMOTIONS = [
   { id:'neutral', title:'Нейтральная', smile:.08, angry:0, sad:0, relaxed:.06, surprise:0, headX:0, headZ:0 },
   { id:'warm', title:'Тёплая', smile:.32, angry:0, sad:0, relaxed:.08, surprise:0, headX:.008, headZ:.015 },
@@ -70,6 +74,7 @@ const FACE_KEYS = Object.keys(FACE_REST);
 const EXPRESSION_KEYS = ['smile', ...FACE_KEYS];
 const REST_KEYS = Object.keys(REST);
 const smooth = t => { const x = Math.max(0, Math.min(1, t)); return x*x*(3-2*x); };
+const easeTrack = t => t*t*t*(t*(t*6-15)+10); // Zero endpoint velocity AND acceleration.
 const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
 export function encodeVariant(gesture, emotion, gaze, stance) {
   const inputs = [gesture, emotion, gaze, stance], limits = [GESTURES.length,EMOTIONS.length,GAZES.length,STANCES.length];
@@ -92,7 +97,8 @@ export function boundedPose(pose) {
     else if(key==='hipsForward'){lo=-.02;hi=.02;} else if(key==='hipsYaw'){lo=-.06;hi=.06;}
     else if(key==='hipsRoll'){lo=-.04;hi=.04;}
     else if(key.endsWith('Elbow')){lo=0;hi=2.60;} else if(key.endsWith('Lift')){lo=0;hi=1.38;}
-    else if(key.endsWith('Forward')){lo=-.1;hi=1.12;} else if(key.endsWith('Palm')){lo=-.8;hi=.8;}
+    else if(key.endsWith('Forward')){lo=-.1;hi=1.12;} else if(key.endsWith('Palm')){lo=-1.2;hi=1.2;}
+    else if(key.endsWith('Flex')){lo=-.45;hi=.45;}
     else if(key.endsWith('Wrist')){lo=-.40;hi=.40;} else if(key.endsWith('Curl')){lo=0;hi=.65;}
     else if(EXPRESSION_KEYS.includes(key)){lo=0;hi=.75;}
     out[key]=clamp(Number.isFinite(pose[key])?pose[key]:0,lo,hi);
@@ -108,10 +114,22 @@ export function sampleVariant(id, progress, base=REST, intensity=.7, gestureWeig
   const g=GESTURES[selection.gesture], e=EMOTIONS[selection.emotion], gaze=GAZES[selection.gaze], stance=STANCES[selection.stance];
   const amount=clamp(Number.isFinite(intensity)?intensity:.7,.35,1);
   const p=clamp(Number.isFinite(progress)?progress:0,0,1);
-  let frame=1;while(frame<g.frames.length-1 && p>g.frames[frame][0])frame++;
-  const [at,a]=g.frames[frame-1],[bt,b]=g.frames[frame], weight=smooth((p-at)/(bt-at));
   const result={ ...REST, ...FACE_REST, ...base };
-  for(const key of REST_KEYS)result[key]+=((a[key]??0)+((b[key]??0)-(a[key]??0))*weight)*amount*clamp(gestureWeight,0,1);
+  const ownership=smooth(p/.16)*(1-smooth((p-.76)/.24))*clamp(gestureWeight,0,1);
+  for(const key of REST_KEYS) {
+    // Eyes/head lead the intention; wrists and fingers follow the arm. Endpoint
+    // offsets vanish, so every track still begins/ends at its original pose.
+    const lead=key.startsWith('gaze')?.045:key.startsWith('head')?.025:
+      /^(hips|spine|chest)/.test(key)?.015:/(Wrist|Flex|Palm)$/.test(key)?-.025:key.endsWith('Curl')?-.035:0;
+    const progress=clamp(p+lead*Math.sin(Math.PI*p),0,1);
+    let frame=1;while(frame<g.frames.length-1 && progress>g.frames[frame][0])frame++;
+    const [at,a]=g.frames[frame-1],[bt,b]=g.frames[frame], weight=easeTrack((progress-at)/(bt-at));
+    // One arm has one author at a time: avoid stacking two large explanatory
+    // gestures on the same joints while the base speaking clip is active.
+    if(gestureArms[selection.gesture].some(side=>key.startsWith(side)))
+      result[key]+=(REST[key]-result[key])*ownership;
+    result[key]+=((a[key]??0)+((b[key]??0)-(a[key]??0))*weight)*amount*clamp(gestureWeight,0,1);
+  }
   for(const key of ['hipsSide','hipsDrop','hipsForward','hipsYaw','hipsRoll'])result[key]+=stance[key]*amount;
   result.headX+=e.headX*amount;result.headZ+=e.headZ*amount;
   result.gazeX+=gaze.x*amount;result.gazeY+=gaze.y*amount;

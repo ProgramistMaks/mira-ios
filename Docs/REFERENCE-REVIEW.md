@@ -63,7 +63,7 @@ new navigation entries or preview screenshots.
 
 The reference character has authored full-body acting, varied gestures, expressive
 speech and polished character/voice selection. The current Vita candidate now has original keyframed torso/arm/hand/gaze clips,
-plus pelvis weight shifts and dips with planted-foot leg IK. A new [compositional library](PERFORMANCE-LIBRARY.md) adds 13,824 selectable gesture/emotion/gaze/stance combinations, not independent clips. Native validation of these performances and imported characters remains unfinished;
+plus pelvis weight shifts and dips with planted-foot leg IK. A new [compositional library](PERFORMANCE-LIBRARY.md) adds 29,952 selectable gesture/emotion/gaze/stance combinations, not independent clips. Native validation of these performances and imported characters remains unfinished;
 speech uses an amplitude-driven jaw with system TTS or the new optional Fish Audio path. Do not call
 that comparable solely because CI passes. A recorded comparison on the actual target
 phone is required before user delivery, along with the remaining QUALITY.md gates.

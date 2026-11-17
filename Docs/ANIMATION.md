@@ -1,7 +1,7 @@
 # Character acting and rendering
 
-A compositional layer now adds **13,824 selectable combinations** of 24 gestures,
-12 emotional styles, 8 gaze targets and 6 stances. These are not 13,824 independently
+A compositional layer now adds **29,952 selectable combinations** of 52 gestures,
+12 emotional styles, 8 gaze targets and 6 stances. These are not 29,952 independently
 authored clips. See [performance library](PERFORMANCE-LIBRARY.md) for selection,
 transitions, settings, exhaustive numeric checks and actual-rig evidence.
 

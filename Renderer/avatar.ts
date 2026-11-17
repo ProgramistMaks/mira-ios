@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, SpeechSamples } from './motion.mjs';
 import { PerformanceController } from './performance.mjs';
+import { ArmRig } from './arms.mjs';
 import { VARIANT_COUNT } from './expression-library.mjs';
 import { PlantedStance } from './stance.mjs';
 import { AnimationTimeline } from './animation-timeline.mjs';
@@ -154,8 +155,7 @@ async function main() {
   const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
   const stance = new PlantedStance(avatar.scene, bone, height, avatar.meta.metaVersion === '0' ? -1 : 1);
   const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
-  const leftElbow = bone('leftLowerArm'), rightElbow = bone('rightLowerArm');
-  const leftHand = bone('leftHand'), rightHand = bone('rightHand');
+  const arms = new ArmRig(bone, armSign);
   const fingers = ['Index', 'Middle', 'Ring', 'Little'].flatMap(finger =>
     ['Proximal', 'Intermediate', 'Distal'].map((joint, index) => ({
       left: bone(`left${finger}${joint}` as Parameters<typeof bone>[0]),
@@ -177,21 +177,17 @@ async function main() {
     const delta = timeline.advance(timestamp, cap);
     if (delta === null) return;
     elapsed += delta;
-    const pose = acting.update(delta, reduced);
+    const audioLevel = speechSamples.level();
+    const pose = acting.update(delta, reduced, audioLevel);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
     if (displayedVariant !== acting.variant) {
       displayedVariant = acting.variant;
       document.documentElement.dataset.variation = String(displayedVariant);
     }
-    const face = motion(elapsed, phase, reduced, speechSamples.level());
+    const face = motion(elapsed, phase, reduced, audioLevel);
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
     stance.apply(pose);
-    if (left) left.rotation.set(pose.leftRoll, armSign * pose.leftForward, armSign * (1.2 - pose.leftLift));
-    if (right) right.rotation.set(pose.rightRoll, -armSign * pose.rightForward, -armSign * (1.2 - pose.rightLift));
-    if (leftElbow) leftElbow.rotation.z = -armSign * pose.leftElbow;
-    if (rightElbow) rightElbow.rotation.z = armSign * pose.rightElbow;
-    if (leftHand) leftHand.rotation.set(0, pose.leftPalm, armSign * pose.leftWrist);
-    if (rightHand) rightHand.rotation.set(0, pose.rightPalm, -armSign * pose.rightWrist);
+    arms.apply(pose);
     for (const finger of fingers) {
       if (finger.left) finger.left.rotation.z = -armSign * pose.leftCurl * finger.scale;
       if (finger.right) finger.right.rotation.z = armSign * pose.rightCurl * finger.scale;

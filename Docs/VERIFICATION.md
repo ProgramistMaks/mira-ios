@@ -1,5 +1,40 @@
 # Verification — 2026-11-17
 
+## Natural phrasing and 52 gesture tracks
+
+The catalogue expands to 29,952 combinations by appending 28 new gesture tracks.
+Existing saved selections retain their IDs. New tracks use preparation/stroke/hold/
+release, staggered body/hand timing, arm ownership, quiet secondary motion and
+PCM-driven body emphasis. Automatic selection avoids the last four gesture tracks,
+holds mood across several selections and keeps disagreement/stop/celebration manual.
+See [behavior and limits](PERFORMANCE-LIBRARY.md).
+
+- All 44 renderer tests pass. The exhaustive numerical checks now cover 29,952
+  distinct trajectories and bounds. New checks cover stable old IDs, gesture-level
+  non-repetition, mood persistence, phrase endpoints, arm ownership, actual-audio
+  onset/refractory behavior and continuous release from greeting/touch.
+- TypeScript check, renderer build and changed Swift syntax parsing pass.
+- Browser QA extends speech checks to the actual body-energy bridge, silence and
+  Reduced Motion. The choreography pass sampled twelve composed performances plus comparison-gesture
+  hand-off/release on the bundled Vita. The real-rig stance probe now checks
+  3,684 poses. These remain browser checks, not WKWebView/device evidence.
+- Independent wrist controls move palm pronation to the forearm and add separate
+  wrist flexion. Three additional arm tests verify orientation changes, fixed wrist
+  centres during isolated controls, reset/no drift and incomplete-rig handling in
+  both facing conventions, including angled forearm rest axes. A real-Vita probe
+  initially found 17.7 mm wrist drift with a fixed X-axis twist; measuring the actual
+  elbow-to-wrist axis corrects that fault. Browser review includes four wrist tracks in close-up
+  and a separate measurement of raw/normalized Vita hand rotations: palm turn
+  1.05 rad, flexion 0.32 rad, maximum isolated wrist-centre drift 5.56e-17 model units.
+  The final wrist follow-up also passed all browser speech, three-size, touch,
+  pause/resume, context-recovery, morph and stance regressions.
+- New code and catalogue add about 16 KB over the previous animation revision
+  before IPA compression. The character asset, camera and lighting are unchanged.
+
+Human-quality motion is not established by numeric uniqueness. Full visual
+self-intersection coverage, physical-device performance and reference comparison
+remain open. No paid macOS workflow or new IPA was produced for this change.
+
 ## 13,824 compositional character performances
 
 The character now has 24 additive gestures × 12 emotional styles × 8 gaze targets

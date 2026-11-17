@@ -35,8 +35,8 @@ struct MotionSettingsView: View {
         Form {
             if let catalogue = MotionCatalogue.bundled {
                 Section {
-                    MiraScreenIntro(title: "Живая Мира", detail: "\(catalogue.count.formatted()) сочетания жестов, эмоций, взгляда и опоры. Переходы плавные, а недавние варианты не повторяются в автоматическом режиме.", symbol: "sparkles")
-                    Text("Это сочетания движений, а не \(catalogue.count.formatted()) отдельных записанных клипов.").font(.footnote).foregroundStyle(.secondary)
+                    MiraScreenIntro(title: "Живая Мира", detail: "Сочетаний в каталоге: \(catalogue.count.formatted()). Движения плавно сменяют друг друга, с паузами и без близких повторов жеста.", symbol: "sparkles")
+                    Text("Каждый вариант сочетает жест, выражение лица, направление взгляда и опору тела.").font(.footnote).foregroundStyle(.secondary)
                     Toggle("Разнообразные движения и эмоции", isOn: $enabled)
                 }
                 if enabled {
@@ -49,7 +49,7 @@ struct MotionSettingsView: View {
                                 Text("По состоянию разговора").tag("auto")
                                 ForEach(catalogue.emotions) { Text($0.title).tag($0.id) }
                             }
-                            Text("При слушании — спокойные реакции, при ответе — объясняющие жесты. Можно выбрать настроение вручную.").font(.footnote).foregroundStyle(.secondary)
+                            Text("При слушании — спокойные реакции, при ответе — объясняющие жесты. В паузах речи движения рук становятся сдержаннее. Настроение можно выбрать вручную.").font(.footnote).foregroundStyle(.secondary)
                         }
                     }
                     if variant >= 0 {

@@ -11,6 +11,8 @@ export async function speechProbeBundle() {
     contents: source.replace(marker, `${marker}
       Object.defineProperty(window, 'speechProbe', { get: () => ({
         input: speechSamples.level(), mouth: avatar.expressionManager?.getValue('aa') ?? 0, elapsed,
+        bodyEnergy: acting.emphasis.energy,
+        performanceProgress: acting.age / acting.duration,
       }) });`),
     resolveDir: new URL('../Renderer/', import.meta.url).pathname, loader: 'ts',
   }, bundle: true, write: false, format: 'iife', target: ['chrome120'] });
@@ -58,6 +60,15 @@ export async function checkSpeech(browser, address, bundle) {
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => window.speechProbe.input), 0);
     assert.ok(await page.evaluate(() => window.speechProbe.mouth < 0.001));
+    // Production PCM bridge also drives restrained body emphasis, independently
+    // of phoneme/mouth feedback. Reduced Motion must still disable that layer.
+    await page.evaluate(() => { window.companion.setState('speaking',false); window.feedSpeech(.9); });
+    await page.waitForFunction(() => window.speechProbe.bodyEnergy>.7);
+    await page.evaluate(() => window.feedSpeech(0));
+    await page.waitForFunction(() => window.speechProbe.bodyEnergy<.04 && window.speechProbe.mouth<.001);
+    await page.evaluate(() => { window.companion.setState('speaking',true); window.feedSpeech(.9); });
+    await page.waitForFunction(() => window.speechProbe.mouth>.6);
+    assert.equal(await page.evaluate(() => window.speechProbe.bodyEnergy),0);
     await page.evaluate(() => window.feedSpeech(0.9));
     await page.waitForFunction(() => window.speechProbe.mouth > 0.6);
     await page.evaluate(() => window.companion.setState('idle', true));
