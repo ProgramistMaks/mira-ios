@@ -22,9 +22,10 @@ function ready() {
 async function update() {
   state = await call('state');
   seated = state.seated;
-  if ((last || 'vita') !== state.settings.avatar)
-    $('#avatar').src = '/renderer/index.html?avatar=' + encodeURIComponent(state.settings.avatar);
-  last = state.settings.avatar;
+  const appearance = state.settings.avatar + '/' + (state.settings.outfit || 'original');
+  if ((last || 'vita/original') !== appearance)
+    $('#avatar').src = '/renderer/index.html?avatar=' + encodeURIComponent(appearance);
+  last = appearance;
   ready();
 }
 $('#avatar').onload = ready;

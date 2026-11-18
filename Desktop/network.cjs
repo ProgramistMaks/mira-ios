@@ -136,9 +136,8 @@ async function community(url) {
     (p) =>
       p &&
       typeof p.name === 'string' &&
-      Array.isArray(p.routines) &&
-      p.routines.length &&
-      p.routines.length <= 30,
+      ((Array.isArray(p.routines) && p.routines.length && p.routines.length <= 30) ||
+        (p.contributions && typeof p.contributions === 'object')),
   );
 }
 function plain(s) {
@@ -295,7 +294,7 @@ async function mcp(config, method, params, signal) {
   const init = await rpc('initialize', {
     protocolVersion: '2025-03-26',
     capabilities: {},
-    clientInfo: { name: 'mira-desktop', version: '0.3.0' },
+    clientInfo: { name: 'mira-desktop', version: require('./package.json').version },
   });
   headers['MCP-Protocol-Version'] = init.protocolVersion;
   try {

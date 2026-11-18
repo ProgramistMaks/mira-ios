@@ -1,0 +1,267 @@
+// Tests real file parsing, wardrobe rendering, app panels and persistence. Only the
+// file picker is substituted, so CI can select the test documents without a desktop operator.
+import { _electron } from 'playwright';
+import { expect } from '@playwright/test';
+import assert from 'node:assert/strict';
+import { PNG } from 'playwright-core/lib/utilsBundle';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { zipSync, strToU8 } from 'fflate';
+const root = fileURLToPath(new URL('../../', import.meta.url)),
+  dir = await mkdtemp(path.join(os.tmpdir(), 'mira-features-'));
+const windows = process.platform === 'win32',
+  exe = process.env.MIRA_ELECTRON || path.join(root, 'build/desktop/Mira/Mira.exe'),
+  evidence = process.env.MIRA_EVIDENCE;
+if (evidence) await mkdir(evidence, { recursive: true });
+function makePDF() {
+  const stream = 'BT /F1 14 Tf 45 700 Td (MIRA PDF fixture) Tj ET';
+  const parts = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Count 1 /Kids [3 0 R] >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Length ' + stream.length + ' >>\nstream\n' + stream + '\nendstream',
+  ];
+  let s = '%PDF-1.4\n',
+    offsets = [0];
+  parts.forEach((part, i) => {
+    offsets.push(s.length);
+    s += i + 1 + ' 0 obj\n' + part + '\nendobj\n';
+  });
+  const start = s.length;
+  s +=
+    'xref\n0 6\n0000000000 65535 f \n' +
+    offsets
+      .slice(1)
+      .map((x) => String(x).padStart(10, '0') + ' 00000 n \n')
+      .join('') +
+    'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' +
+    start +
+    '\n%%EOF';
+  return s;
+}
+let app;
+try {
+  const args = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
+  if (!windows)
+    args.push(
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      process.env.MIRA_APP_DIR || path.join(root, 'Desktop'),
+    );
+  app = await _electron.launch({
+    executablePath: exe,
+    args,
+    env: { ...process.env, MIRA_TEST_PROFILE: path.join(dir, 'profile') },
+  });
+  const p = await app.firstWindow();
+  const errors = [];
+  p.on('pageerror', (e) => {
+    errors.push(e.message);
+    console.error('UI:', e.message);
+  });
+  p.on('console', (s) => {
+    if (s.type() === 'error') console.error(s.text().slice(0, 260));
+  });
+  await p.waitForFunction(() => document.querySelector('#avatar')?.contentWindow.companion?.ready, null, {
+    timeout: 90000,
+  });
+  const go = async (dest) =>
+    p
+      .locator('[data-go="' + dest + '"]')
+      .first()
+      .click();
+  const state = () => p.evaluate(() => window.desk.call('state'));
+  const close = () => p.evaluate(() => document.querySelector('#modal').close());
+  for (const [ext, bytes, expected] of [
+    ['pdf', makePDF(), 'MIRA PDF fixture'],
+    [
+      'docx',
+      zipSync({
+        'word/document.xml': strToU8(
+          '<w:document xmlns:w="urn:test"><w:p><w:r><w:t>Документ Миры</w:t></w:r></w:p></w:document>',
+        ),
+      }),
+      'Документ Миры',
+    ],
+  ]) {
+    const file = path.join(dir, 'demo.' + ext);
+    await writeFile(file, bytes);
+    await app.evaluate(({ dialog }, f) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] });
+    }, file);
+    await p.locator('#attach').click();
+    await expect(p.locator('#attachment')).toContainText('demo.' + ext);
+    await p.locator('#prompt').fill('Запиши заметку:');
+    await p.locator('#send').click();
+    await expect.poll(async () => (await state()).notes.some((n) => n.text.includes(expected))).toBe(true);
+  }
+  console.log('PDF and DOCX read through the file picker');
+  await go('model');
+  await p.locator('#outfit').selectOption('iris');
+  await expect.poll(async () => (await state()).settings.outfit).toBe('iris');
+  await p.waitForFunction(
+    () =>
+      document.querySelector('#avatar').contentWindow.location.search.includes('iris') &&
+      document.querySelector('#avatar').contentWindow.companion?.ready,
+    null,
+    { timeout: 60000 },
+  );
+  await expect
+    .poll(
+      async () => {
+        const { width, height, data } = PNG.sync.read(await p.locator('#avatar').screenshot());
+        let pixels = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i + 2] > data[i] + 16 && data[i + 2] > data[i + 1] + 6) pixels++;
+        }
+        return pixels / (width * height);
+      },
+      { timeout: 45000, message: 'The dressed avatar must be visible on screen' },
+    )
+    .toBeGreaterThan(0.012);
+  if (evidence) await p.screenshot({ path: path.join(evidence, 'wardrobe.png') });
+  await go('commands');
+  await p.locator('[data-act=describeCommand]').click();
+  await p.locator('#commandPrompt').fill('Утро: поставь таймер на 25 минут и запиши планы');
+  await p.locator('[data-act=generateCommand]').click();
+  await expect(p.locator('#rName')).toHaveValue('Утро');
+  await p.locator('#rGroup').fill('Работа');
+  await p.locator('[data-act=saveRoutine]').click();
+  await expect
+    .poll(async () => (await state()).routines.some((r) => r.group === 'Работа' && r.blocks.length === 2))
+    .toBe(true);
+  console.log('Wardrobe and command generation passed');
+  await go('desk');
+  await p.locator('[data-act=widgets]').click();
+  await p.locator('[data-widget=weather]').uncheck();
+  await p.locator('[data-act=widgetUp][data-id=tasks]').click();
+  await p.locator('[data-act=saveWidgets]').click();
+  await expect(p.locator('#content .box h3').first()).toHaveText('Задачи');
+  await expect(p.locator('#content .box h3', { hasText: 'Погода' })).toHaveCount(0);
+  await p.locator('[data-act=add-notes]').click();
+  await p.locator('#itemText').fill('Черновик');
+  await p.locator('[data-act=commitItem]').click();
+  await expect(p.locator('[data-act=edit-notes]').first()).toBeVisible();
+  await p.locator('[data-act=edit-notes]').first().click();
+  await p.locator('#itemText').fill('Готовая запись');
+  await p.locator('[data-act=commitItem]').click();
+  await expect.poll(async () => (await state()).notes[0].text).toBe('Готовая запись');
+  await p.locator('[data-act=add-events]').click();
+  await p.locator('#itemText').fill('Рабочая сессия');
+  await p.locator('#itemTime').fill(new Date().getFullYear() + 1 + '-09-16T10:00');
+  await p.locator('#itemRepeat').selectOption('week');
+  await p.locator('#itemRoutine').selectOption('study-session');
+  await p.locator('[data-act=commitItem]').click();
+  await expect.poll(async () => (await state()).events[0]?.routineId).toBe('study-session');
+  const packfile = path.join(dir, 'work.json');
+  await writeFile(
+    packfile,
+    JSON.stringify({
+      id: 'demo-pack',
+      name: 'Тест мастерской',
+      routines: [{ name: 'Запись с панели', blocks: [{ kind: 'note', value: 'Из панели' }] }],
+      contributions: {
+        theme: { theme: 'sage', accent: '#506744', glass: true },
+        blocks: [{ name: 'Записать с панели', command: 0 }],
+        triggers: [{ event: 'reminder', command: 0 }],
+        panel: { name: 'Моя панель', body: 'Локальные действия', commands: [0] },
+      },
+    }),
+  );
+  await app.evaluate(({ dialog }, f) => {
+    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] });
+  }, packfile);
+  await go('plugins');
+  await p.locator('[data-act=importPack]').click();
+  await p.locator('[data-act=extensionPanel][data-id=demo-pack]').click();
+  await p.locator('[data-act=extensionTheme]').click();
+  await expect.poll(async () => (await state()).settings.theme).toBe('sage');
+  await p.locator('[data-act=extensionRun]').click();
+  await expect.poll(async () => (await state()).notes[0]?.text).toBe('Из панели');
+  await p.locator('[data-act=extensionTriggers]').click();
+  await expect(p.locator('[data-act=extensionTriggers]')).toHaveText('Остановить триггеры');
+  const dest = path.join(dir, 'export.json');
+  await app.evaluate(({ dialog }, dest) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath: dest });
+  }, dest);
+  await p.locator('[data-act=exportPack]').click();
+  await expect
+    .poll(
+      async () =>
+        JSON.parse(await readFile(dest, 'utf8').catch(() => '{}')).contributions?.triggers[0].event,
+    )
+    .toBe('reminder');
+  const count = (await state()).notes.length;
+  await p.evaluate(() =>
+    window.desk.call('add', { kind: 'events', text: 'Проверка триггера', time: Date.now() + 900 }),
+  );
+  await expect.poll(async () => (await state()).notes.length, { timeout: 9000 }).toBe(count + 1);
+  await close();
+  await go('commands');
+  const option = await p
+    .locator('#kind option')
+    .filter({ hasText: 'Записать с панели' })
+    .getAttribute('value');
+  await p.locator('#kind').selectOption(option);
+  await p.locator('[data-act=addBlock]').click();
+  await expect(p.locator('#nodeValue')).toHaveValue('Из панели');
+  await go('plugins');
+  await p.locator('[data-act=removePack][data-id=demo-pack]').click();
+  await expect.poll(async () => (await state()).extensions.some((x) => x.id === 'demo-pack')).toBe(false);
+  console.log(
+    'Configured widgets, edited note, recurring scheduled action, installed and used an external panel and theme',
+  );
+  await go('plugins');
+  for (const id of ['cat', 'chess', 'shadow', 'freedoom']) {
+    await p.locator('[data-act=pluginOn][data-id=' + id + ']').click();
+    await expect(p.locator('[data-act=pluginOff][data-id=' + id + ']')).toBeVisible();
+    if (id === 'cat') {
+      await expect(p.locator('#deskCat')).toBeVisible();
+      continue;
+    }
+    await p.locator('[data-act=panel][data-id=' + id + ']').click();
+    const f = p.frameLocator('.gamePanel');
+    if (id === 'chess') {
+      await f.locator('[data-square=e2]').click();
+      await f.locator('[data-square=e4]').click();
+      await expect(f.locator('#state')).toHaveText('Твой ход', { timeout: 10000 });
+      await expect(f.locator('[data-square=e4]')).toHaveText('♟');
+    }
+    if (id === 'shadow') {
+      await f.locator('#dance').click();
+      await expect(f.locator('#stage')).toBeVisible();
+    }
+    if (id === 'freedoom') {
+      await expect
+        .poll(async () => Number(await f.locator('canvas').getAttribute('data-frames')), { timeout: 30000 })
+        .toBeGreaterThan(10);
+      const canvas = f.locator('canvas');
+      const waitFrames = async (count) => {
+        const n = +(await canvas.getAttribute('data-frames'));
+        await expect
+          .poll(async () => +(await canvas.getAttribute('data-frames')), { timeout: 15000 })
+          .toBeGreaterThan(n + count);
+      };
+      for (let k = 0; k < 3; k++) {
+        await canvas.press('Enter', { delay: 90 });
+        await waitFrames(6);
+      }
+      await waitFrames(25);
+      await expect(f.locator('#state')).toContainText('Phase 2');
+      const before = await canvas.evaluate((c) => c.toDataURL());
+      await canvas.press('ArrowRight', { delay: 400 });
+      await waitFrames(5);
+      assert.notEqual(await canvas.evaluate((c) => c.toDataURL()), before);
+    }
+    if (evidence) await p.screenshot({ path: path.join(evidence, id + '.png') });
+    await close();
+  }
+  assert.deepEqual(errors, []);
+  console.log('Chess reply, cat, silhouette stage and playable Freedoom passed');
+} finally {
+  await app?.close();
+  await rm(dir, { recursive: true, force: true, maxRetries: 4 });
+}

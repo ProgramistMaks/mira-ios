@@ -60,6 +60,17 @@ const catalog = [
     8,
   ],
   [
+    'kimi-linear',
+    'Kimi Linear 48B A3B Instruct',
+    'Q4_K_M',
+    'moonshotai_Kimi-Linear-48B-A3B-Instruct',
+    '228dbe476e5a02091624a19068f4c962caa8a1c5',
+    30061058720,
+    'a1a7d865370652221f937163f7e94c99e1f114861335ba4f8666606843f1620f',
+    48,
+    'bartowski/moonshotai_Kimi-Linear-48B-A3B-Instruct-GGUF',
+  ],
+  [
     'qwen2',
     'Qwen3.5 2B',
     'Q4_K_M',
@@ -69,7 +80,7 @@ const catalog = [
     'aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223',
     6,
   ],
-].map(([id, name, quant, base, revision, bytes, hash, ram]) => ({
+].map(([id, name, quant, base, revision, bytes, hash, ram, repository]) => ({
   id,
   name,
   quant,
@@ -77,9 +88,9 @@ const catalog = [
   hash,
   ram,
   url:
-    'https://huggingface.co/unsloth/' +
-    base +
-    '-GGUF/resolve/' +
+    'https://huggingface.co/' +
+    (repository || 'unsloth/' + base + '-GGUF') +
+    '/resolve/' +
     revision +
     '/' +
     base +

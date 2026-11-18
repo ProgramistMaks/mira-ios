@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; frame-src 'self' https://embed.nicovideo.jp; media-src blob: 'self'; worker-src 'self'; object-src 'none'"
+    />
+    <title>Мастерская Миры</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <main id="panel"></main>
+    <p id="problem" role="alert"></p>
+    <script src="panel.js" type="module"></script>
+  </body>
+</html>

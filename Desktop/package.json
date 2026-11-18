@@ -1,11 +1,19 @@
 {
   "name": "mira-desktop",
   "productName": "Мира",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "main": "main.cjs",
   "description": "Голосовой компаньон для рабочего стола",
   "devDependencies": {
     "resedit": "3.0.2"
+  },
+  "dependencies": {
+    "chess.js": "1.4.0",
+    "fflate": "0.8.3",
+    "pdfjs-dist": "5.4.624"
+  },
+  "scripts": {
+    "postinstall": "node scripts/vendor.mjs"
   }
 }

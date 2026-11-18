@@ -1324,3 +1324,61 @@ body[data-character='false'] #area[data-page='home'] #welcome {
 body[data-character='false'] #area[data-page='home'] .quick {
   justify-content: center;
 }
+.gamePanel {
+  display: block;
+  width: 100%;
+  height: min(580px, 66vh);
+  border: 0;
+  border-radius: 14px;
+  background: var(--panel);
+}
+dialog:has(.gamePanel) {
+  width: min(780px, 90vw);
+  max-width: 90vw;
+}
+#deskCat {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 67px;
+  height: 58px;
+  padding: 0;
+  z-index: 12;
+  background: transparent;
+}
+#deskCat svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(var(--dir, 1));
+}
+#deskCat span {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  font-size: 20px;
+  color: #b95e78;
+  opacity: 0;
+}
+#deskCat.walking .paw {
+  animation: catStep 0.35s ease-in-out infinite alternate;
+}
+.catTail {
+  transform-origin: 48px 36px;
+  animation: catTail 1.6s ease-in-out infinite alternate;
+}
+@keyframes catStep {
+  to {
+    transform: translate(-2px, -1px);
+  }
+}
+@keyframes catTail {
+  to {
+    transform: rotate(-13deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #deskCat * {
+    animation: none !important;
+  }
+}

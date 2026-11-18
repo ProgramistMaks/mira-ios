@@ -32,7 +32,18 @@ export const themeList = [
   ['mist', 'Дымка'],
   ['system', 'Как в системе'],
 ];
+export const triggerNames = {
+  ready: 'При запуске Миры',
+  focusEnd: 'По окончании фокуса',
+  reminder: 'При напоминании',
+};
 export const kinds = {
+  clipboardAI: 'Обработать текст буфера с ИИ',
+  meeting: 'Открыть ближайшую встречу',
+  quiet: 'Уведомления Миры',
+  closeWindow: 'Закрыть окно программы',
+  shutdownTimer: 'Таймер выключения ПК, мин',
+  cancelShutdown: 'Отменить выключение ПК',
   say: 'Произнести текст',
   note: 'Записать заметку',
   task: 'Добавить задачу',
@@ -45,6 +56,7 @@ export const kinds = {
   notify: 'Уведомление',
   theme: 'Сменить тему',
   ifTime: 'Условие по времени',
+  processRunning: 'Программа запущена',
   switchTheme: 'Условие по теме',
   repeat: 'Повторить блоки',
   paste: 'Вставить текст в активное окно',
@@ -91,9 +103,15 @@ const entry = (s, kind) =>
   '<span>' +
   esc(s.text) +
   (kind === 'events'
-    ? '<br><small>' + esc(timeLabel(s.time)) + (s.fired ? ' · завершено' : '') + '</small>'
+    ? '<br><small>' +
+      esc(timeLabel(s.time)) +
+      (s.routineId ? ' · запуск команды' : '') +
+      (s.repeat === 'day' ? ' · ежедневно' : s.repeat === 'week' ? ' · еженедельно' : '') +
+      (s.fired ? ' · завершено' : '') +
+      '</small>'
     : '') +
   '</span>' +
+  rowAction('edit-' + kind, s.id, 'pencil', 'Редактировать') +
   rowAction('remove-' + kind, s.id, 'x', 'Удалить') +
   '</div>';
 const listBox = (s, kind, label, icon, placeholder) =>
@@ -110,10 +128,8 @@ export function desk(s, c) {
   const music =
     '<div id="musicSlot"></div>' +
     acts(btn(s.music ? 'Сменить дорожку' : 'Выбрать дорожку', 'music', 'folder-open'));
-  return (
-    heading('Рабочий стол', btn('Найти файл', 'find', 'search')) +
-    '<div class="grid">' +
-    box(
+  const cards = {
+    focus: box(
       'Фокус',
       'timer',
       '<div class="clock" data-clock>' +
@@ -133,11 +149,11 @@ export function desk(s, c) {
           btn('Сбросить', 'focusReset', 'rotate-ccw'),
           btn('Свой интервал', 'focusCustom', 'clock-3'),
         ),
-    ) +
-    listBox(s, 'tasks', 'Задачи', 'list-checks', 'Здесь появятся твои задачи.') +
-    listBox(s, 'notes', 'Заметки', 'notebook-pen', 'Заметку можно надиктовать или записать здесь.') +
-    listBox(s, 'events', 'Календарь', 'calendar-days', 'Напоминаний пока нет.') +
-    box(
+    ),
+    tasks: listBox(s, 'tasks', 'Задачи', 'list-checks', 'Здесь появятся твои задачи.'),
+    notes: listBox(s, 'notes', 'Заметки', 'notebook-pen', 'Заметку можно надиктовать или записать здесь.'),
+    events: listBox(s, 'events', 'Календарь', 'calendar-days', 'Напоминаний пока нет.'),
+    weather: box(
       'Погода',
       'cloud-sun',
       w
@@ -150,8 +166,8 @@ export function desk(s, c) {
             '</p>' +
             acts(btn('Обновить', 'weather', 'refresh-cw'))
         : '<p>' + esc(s.settings.city) + '</p>' + acts(btn('Узнать погоду', 'weather', 'cloud-sun')),
-    ) +
-    box(
+    ),
+    rates: box(
       'Курсы валют',
       'banknote',
       (r
@@ -163,9 +179,9 @@ export function desk(s, c) {
           esc(timeLabel(r.date)) +
           ' · ЦБ РФ</p>'
         : '') + acts(btn('Получить курсы', 'rates', 'refresh-cw')),
-    ) +
-    box('Плеер', 'music-2', music) +
-    box(
+    ),
+    music: box('Плеер', 'music-2', music),
+    system: box(
       'Система',
       'cpu',
       sys
@@ -179,7 +195,18 @@ export function desk(s, c) {
             (sys.gpu == null ? '' : ' · GPU 3D ' + sys.gpu + '%') +
             '</p>'
         : '<p class="muted">Получаю показания…</p>',
+    ),
+  };
+  const active = s.settings.widgets.filter((w) => w.visible);
+  return (
+    heading(
+      'Рабочий стол',
+      acts(btn('Виджеты', 'widgets', 'sliders-horizontal'), btn('Найти файл', 'find', 'search')),
     ) +
+    '<div class="grid">' +
+    (active.length
+      ? active.map((w) => cards[w.id]).join('')
+      : empty('Выбери виджеты для рабочего стола.')) +
     '</div>'
   );
 }
@@ -191,17 +218,27 @@ export function commands(s, c) {
     list = s.routines;
   const side =
     '<div class="box flowSide"><h3>Мои команды</h3>' +
-    list
-      .map((x) =>
-        btn(
-          x.name,
-          'edit',
-          d?.id === x.id ? 'circle-dot' : 'workflow',
-          d?.id === x.id ? 'selected' : '',
-          x.id,
-        ),
+    [...new Set(list.map((x) => x.group || 'Без группы'))]
+      .map(
+        (group) =>
+          '<h4>' +
+          esc(group) +
+          '</h4>' +
+          list
+            .filter((x) => (x.group || 'Без группы') === group)
+            .map((x) =>
+              btn(
+                x.name,
+                'edit',
+                d?.id === x.id ? 'circle-dot' : 'workflow',
+                d?.id === x.id ? 'selected' : '',
+                x.id,
+              ),
+            )
+            .join(''),
       )
       .join('') +
+    btn('Из описания', 'describeCommand', 'workflow') +
     btn('Новая команда', 'newRoutine', 'plus') +
     btn('Импорт JSON', 'importPack', 'upload') +
     '</div>';
@@ -261,7 +298,7 @@ export function commands(s, c) {
   edge(204, 72, pos[0]);
   for (const [i, n] of d.blocks.entries()) {
     const p = pos[i],
-      branch = ['ifTime', 'switchTheme', 'repeat'].includes(n.kind);
+      branch = ['ifTime', 'switchTheme', 'processRunning', 'repeat'].includes(n.kind);
     edge(p.x + 172, p.y + 32, pos[n.next ?? i + 1]);
     if (branch) edge(p.x + 172, p.y + 47, pos[n.alternate ?? i + 1], true);
     const preview =
@@ -296,12 +333,25 @@ export function commands(s, c) {
         b.value,
       );
     if (b.kind === 'keys') value = select('Сочетание', 'nodeValue', keyList, b.value);
-    if (['dance', 'music'].includes(b.kind)) value = '';
+    if (b.kind === 'quiet')
+      value = select(
+        'Режим',
+        'nodeValue',
+        [
+          ['on', 'Только в окне Миры'],
+          ['off', 'Показывать в Windows'],
+        ],
+        b.value,
+      );
+    if (b.kind === 'clipboardAI') value = field('Задание для ИИ', 'nodeValue', b.value);
+    if (['dance', 'music', 'meeting', 'cancelShutdown'].includes(b.kind)) value = '';
+    if (['processRunning', 'closeWindow'].includes(b.kind))
+      value = field('Имя процесса · notepad.exe', 'nodeValue', b.value);
     if (b.kind === 'ifTime') value = field('Диапазон часов · 09-18', 'nodeValue', b.value);
     const ends = d.blocks
       .map((n, j) => [j, j + 1 + ' · ' + kinds[n.kind]])
       .concat([[d.blocks.length, 'Завершить']]);
-    const branch = ['repeat', 'ifTime', 'switchTheme'].includes(b.kind);
+    const branch = ['repeat', 'ifTime', 'processRunning', 'switchTheme'].includes(b.kind);
     inspector =
       '<div class="inspector" data-edit-node="' +
       selected +
@@ -353,10 +403,19 @@ export function commands(s, c) {
     '<article class="editPanel">' +
     field('Название', 'rName', d.name) +
     '<div class="grid">' +
+    field('Группа', 'rGroup', d.group || '') +
     field('Голосовая фраза', 'rPhrase', d.phrase) +
     field('Горячая клавиша', 'rHotkey', d.hotkey) +
     '</div><div class="flowTools"><select class="control" id="kind">' +
     Object.entries(kinds)
+      .concat(
+        s.extensions.flatMap((p) =>
+          (p.contributions?.blocks || []).map((b) => [
+            'snippet:' + p.routines[b.command],
+            p.name + ' · ' + b.name,
+          ]),
+        ),
+      )
       .map(([k, v]) => opt(k, v, ''))
       .join('') +
     '</select>' +
@@ -378,6 +437,7 @@ export function commands(s, c) {
 export function captureDraft(d) {
   if (!d || !$('#rName')) return;
   d.name = $('#rName').value;
+  d.group = $('#rGroup').value;
   d.phrase = $('#rPhrase').value;
   d.hotkey = $('#rHotkey').value;
   const e = $('[data-edit-node]'),
@@ -414,6 +474,14 @@ export function model(s, c) {
         [['vita', 'Вита'], ...s.avatars.map((x) => [x.id, x.name])],
         a.avatar,
       ) +
+        (a.avatar === 'vita'
+          ? select(
+              'Наряд Виты',
+              'outfit',
+              s.outfits.map((o) => [o.id, o.name]),
+              a.outfit,
+            )
+          : '') +
         acts(
           btn('Импорт VRM', 'avatar', 'upload'),
           btn(a.showAvatar ? 'Скрыть на главной' : 'Показать на главной', 'showAvatar', 'user-round'),
@@ -472,10 +540,25 @@ export function voice(s, c) {
     heading('Голос') +
     '<div class="grid">' +
     box(
+      'Локальные голоса',
+      'volume-2',
+      '<p>Ирина · русский женский голос · 63,2 МБ</p>' +
+        acts(
+          s.voices.some((v) => v.id === 'piper-irina')
+            ? btn('Выбрать Ирину', 'pickIrina', 'check')
+            : c.voiceLoading
+              ? btn('Остановить загрузку', 'pauseVoice', 'pause')
+              : btn('Скачать голос', 'installVoice', 'download'),
+        ),
+    ) +
+    box(
       'Разговор',
       'mic',
-      '<p class="muted">Мира слушает до паузы, отвечает вслух и снова включает микрофон. Русская речь распознаётся на этом компьютере.</p>' +
-        acts(btn('Начать разговор', 'voice', 'mic', 'primary')),
+      '<p class="muted">Мира слушает до паузы, отвечает вслух и снова включает микрофон. В ожидании имени речь распознаётся на этом компьютере.</p>' +
+        acts(
+          btn('Начать разговор', 'voice', 'mic', 'primary'),
+          btn('Ждать обращения «' + a.name + '»', 'standby', 'audio-lines'),
+        ),
     ) +
     box(
       'Озвучивание',
@@ -486,6 +569,7 @@ export function voice(s, c) {
         [
           ['builtin', 'Руслан · локальный'],
           ['system', 'Голос Windows'],
+          ['speechAPI', 'Совместимый голосовой сервис'],
           ['fish', 'Fish Audio · облако'],
           ...s.voices.map((v) => [v.id, v.name]),
         ],
@@ -502,6 +586,30 @@ export function voice(s, c) {
         acts(btn('Послушать пример', 'audition', 'play'), btn('Импорт .onnx', 'voiceFile', 'upload')),
     ) +
     box(
+      'Голосовой сервис',
+      'cable',
+      select(
+        'Распознавание речи',
+        'stt',
+        [
+          ['local', 'Whisper · на этом ПК'],
+          ['speechAPI', 'Голосовой сервис'],
+        ],
+        a.stt,
+      ) +
+        field('Адрес API', 'speechBase', a.speechService.base) +
+        field('Модель распознавания', 'sttModel', a.speechService.sttModel) +
+        field('Модель озвучивания', 'ttsModel', a.speechService.ttsModel) +
+        field('Имя голоса', 'apiVoice', a.speechService.voice) +
+        field(
+          s.keys.includes('speechAPI') ? 'Ключ сохранён · заменить' : 'Ключ, если требуется',
+          'speechKey',
+          '',
+          'password',
+        ) +
+        acts(btn('Сохранить сервис', 'saveSpeechService', 'save')),
+    ) +
+    box(
       'Fish Audio',
       'cloud-sun',
       field(
@@ -511,6 +619,21 @@ export function voice(s, c) {
         'password',
       ) +
         acts(btn('Сохранить ключ', 'keyFish', 'save')) +
+        ((s.fishFavorites || []).length
+          ? '<h3>Избранное</h3>' +
+            s.fishFavorites
+              .map(
+                (v) =>
+                  '<div class="entry"><span>' +
+                  esc(v.title) +
+                  '</span>' +
+                  btn('Послушать', 'fishPreview', 'play', '', v.id) +
+                  btn('Выбрать', 'fishPick', '', '', v.id) +
+                  btn('Убрать', 'fishStar', 'x', '', v.id) +
+                  '</div>',
+              )
+              .join('')
+          : '') +
         field('Поиск по библиотеке', 'fishQuery', c.fishQuery || '') +
         acts(btn('Найти голоса', 'fishSearch', 'search')) +
         (c.fishList || [])
@@ -519,6 +642,14 @@ export function voice(s, c) {
               '<div class="entry"><span>' +
               esc(v.title) +
               '</span>' +
+              btn('Послушать', 'fishPreview', 'play', '', v.id) +
+              btn(
+                (s.fishFavorites || []).some((x) => x.id === v.id) ? 'Из избранного' : 'В избранное',
+                'fishStar',
+                'library',
+                '',
+                v.id,
+              ) +
               btn(a.fishVoice === v.id ? 'Выбран' : 'Выбрать', 'fishPick', '', '', v.id) +
               '</div>',
           )
@@ -628,6 +759,33 @@ export function plugins(s, c) {
     heading('Мастерская', btn('Импорт набора', 'importPack', 'upload')) +
     '<div class="grid">' +
     box(
+      'Дополнения',
+      'blocks',
+      [
+        ['chess', 'Шахматы', 'Игра с Мирой · три уровня'],
+        ['cat', 'Кот-компаньон', 'Гуляет по окну и реагирует на нажатия'],
+        ['shadow', 'Театр теней', 'Танец Виты, видео и Bad Apple!!'],
+        ['freedoom', 'Freedoom', 'Классический Doom с уровнями Freedoom'],
+      ]
+        .map(
+          ([id, name, detail]) =>
+            '<div class="modelCard"><div><b>' +
+            name +
+            '</b><p>' +
+            detail +
+            '</p></div><div class="actions">' +
+            ((s.pluginIds || []).includes(id)
+              ? (id === 'cat' ? '' : btn('Открыть', 'panel', 'play', '', id)) +
+                (id === 'freedoom' && s.platform === 'win32'
+                  ? btn('Окно со звуком', 'nativeGame', 'volume-2')
+                  : '') +
+                btn('Убрать', 'pluginOff', 'x', '', id)
+              : btn('Включить', 'pluginOn', 'plus', '', id)) +
+            '</div></div>',
+        )
+        .join(''),
+    ) +
+    box(
       'Готовые сценарии',
       'library',
       s.extensionPresets
@@ -651,6 +809,9 @@ export function plugins(s, c) {
               '<div class="entry"><span>' +
               esc(p.name) +
               '</span>' +
+              (Object.keys(p.contributions || {}).length
+                ? btn('Открыть', 'extensionPanel', 'blocks', '', p.id)
+                : '') +
               btn('Удалить', 'removePack', 'x', '', p.id) +
               '</div>',
           )
@@ -675,6 +836,55 @@ export function plugins(s, c) {
               '</div>',
           )
           .join(''),
+    ) +
+    box(
+      'Мои работы и сообщество',
+      'library',
+      field('Репозиторий GitHub', 'workRepo', s.workshopRepo || '') +
+        field(
+          s.keys.includes('workshop')
+            ? 'Токен сохранён · заменить'
+            : 'Токен для приватного каталога или публикации',
+          'workToken',
+          '',
+          'password',
+        ) +
+        acts(btn('Подключить', 'workConnect', 'link'), btn('Открыть каталог', 'workBrowse', 'library')) +
+        (c.workRows || [])
+          .map(
+            (w) =>
+              '<div class="entry"><span>' +
+              esc(w.name) +
+              '</span>' +
+              btn('Посмотреть', 'workInspect', 'search', '', w.key) +
+              '</div>',
+          )
+          .join('') +
+        (s.workshopRepo
+          ? select(
+              'Команда или набор',
+              'workChoice',
+              [
+                ...s.routines.map((r) => [r.id, r.name]),
+                ...s.extensions.map((p) => ['ext:' + p.id, 'Набор · ' + p.name]),
+              ],
+              '',
+            ) +
+            acts(btn('Подготовить публикацию', 'workPrepare', 'upload')) +
+            Object.keys(s.published || {})
+              .filter((k) => k.startsWith(s.workshopRepo + '#'))
+              .map((k) => {
+                const id = k.split('#').at(-1);
+                return (
+                  '<div class="entry"><span>' +
+                  esc(s.routines.find((r) => r.id === id)?.name || 'Опубликованная работа') +
+                  '</span>' +
+                  btn('Снять с публикации', 'workRemove', 'x', '', id) +
+                  '</div>'
+                );
+              })
+              .join('')
+          : ''),
     ) +
     box(
       'MCP-серверы',
@@ -718,6 +928,35 @@ export function settings(s, c) {
   return (
     heading('Настройки') +
     '<div class="grid">' +
+    box(
+      'Уведомления',
+      'bell',
+      select(
+        'Напоминания и команды',
+        'quiet',
+        [
+          ['off', 'Показывать в Windows и в Мире'],
+          ['on', 'Только в окне Миры'],
+        ],
+        a.quiet ? 'on' : 'off',
+      ),
+    ) +
+    box(
+      'Память Миры',
+      'notebook-pen',
+      s.notes
+        .filter((n) => n.remember)
+        .map(
+          (n) =>
+            '<div class="entry"><span>' +
+            esc(n.text) +
+            '</span>' +
+            rowAction('remove-notes', n.id, 'x', 'Забыть') +
+            '</div>',
+        )
+        .join('') ||
+        '<p class="muted">Скажи «Запомни …», чтобы Мира учитывала это в будущих разговорах.</p>',
+    ) +
     box(
       'Оформление',
       'palette',

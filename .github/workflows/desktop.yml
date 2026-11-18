@@ -28,7 +28,7 @@ jobs:
       - run: npm ci --prefix Desktop
       - run: npm run check
       - run: npm test
-      - run: node --test Desktop/tests/desktop.test.cjs
+      - run: node --test "Desktop/tests/*.test.cjs"
       - run: npm run build
       - uses: actions/cache@v4
         with:
@@ -40,6 +40,10 @@ jobs:
         env:
           MIRA_EVIDENCE: build/desktop-evidence
         run: node Desktop/scripts/smoke.mjs
+      - name: Test wardrobe, documents, widgets and workshop panels
+        env:
+          MIRA_EVIDENCE: build/desktop-evidence
+        run: node Desktop/scripts/features-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: Mira-Windows-x64

@@ -36,8 +36,8 @@ function join(frames) {
   return data;
 }
 export class Voice {
-  constructor(onTurn, onStatus, onError) {
-    Object.assign(this, { onTurn, onStatus, onError });
+  constructor(onTurn, onStatus, onError, localOnly = () => false) {
+    Object.assign(this, { onTurn, onStatus, onError, localOnly });
     this.epoch = 0;
     this.audioEpoch = 0;
     this.enabled = false;
@@ -117,7 +117,7 @@ export class Voice {
     this.busy = true;
     this.onStatus('Распознаю фразу…', 'thinking');
     try {
-      const text = await call('transcribe', { bytes });
+      const text = await call('transcribe', { bytes, localOnly: this.localOnly() });
       if (e !== this.epoch || !text.trim()) return;
       this.onStatus('Думаю…', 'thinking');
       let result;
@@ -141,14 +141,14 @@ export class Voice {
       }
     }
   }
-  async speak(text) {
+  async speak(text, fishPreview) {
     this.hush();
     const id = this.audioEpoch;
     this.playing = true;
     this.onStatus('Отвечаю…', 'speaking');
     try {
       const ctx = await this.context();
-      const data = await call('speech', { text, continuous: this.enabled });
+      const data = await call('speech', { text, continuous: this.enabled, fishPreview });
       if (id !== this.audioEpoch) return;
       const b = await ctx.decodeAudioData(new Uint8Array(data).buffer);
       if (id !== this.audioEpoch) return;

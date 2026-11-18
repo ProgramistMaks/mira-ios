@@ -21,12 +21,34 @@ const normal = (s) =>
     .replace(/[.!?,]+$/u, '')
     .trim();
 const uid = () => randomUUID();
+const widgetNames = {
+  focus: 'Фокус',
+  tasks: 'Задачи',
+  notes: 'Заметки',
+  events: 'Календарь',
+  weather: 'Погода',
+  rates: 'Курсы валют',
+  music: 'Плеер',
+  system: 'Система',
+};
+function widgetLayout(input) {
+  const seen = new Set(),
+    rows = [];
+  for (const row of Array.isArray(input) ? input : []) {
+    if (!Object.hasOwn(widgetNames, row?.id) || seen.has(row.id)) continue;
+    seen.add(row.id);
+    rows.push({ id: row.id, visible: row.visible !== false });
+  }
+  for (const id of Object.keys(widgetNames)) if (!seen.has(id)) rows.push({ id, visible: true });
+  return rows;
+}
 const defaults = () => ({
   settings: {
     name: 'Мира',
     user: '',
     role: 'Дружелюбный личный компаньон. Отвечай по-русски.',
     theme: 'cream',
+    widgets: widgetLayout(),
     accent: '',
     glow: 55,
     glass: false,
@@ -36,9 +58,17 @@ const defaults = () => ({
     base: 'https://api.openai.com/v1',
     cloudModel: 'gpt-4o-mini',
     voice: 'builtin',
+    stt: 'local',
+    speechService: {
+      base: 'https://api.openai.com/v1',
+      ttsModel: 'tts-1',
+      sttModel: 'whisper-1',
+      voice: 'alloy',
+    },
     systemVoice: '',
     fishVoice: '',
     avatar: 'vita',
+    outfit: 'original',
     showAvatar: true,
     city: 'Москва',
     reduced: false,
@@ -79,7 +109,11 @@ class Store {
     this.file = path.join(dir, 'desk.json');
     const initial = defaults();
     const disk = fs.existsSync(this.file) ? JSON.parse(fs.readFileSync(this.file, 'utf8')) : {};
-    this.data = { ...initial, ...disk, settings: { ...initial.settings, ...disk.settings } };
+    this.data = {
+      ...initial,
+      ...disk,
+      settings: { ...initial.settings, ...disk.settings, widgets: widgetLayout(disk.settings?.widgets) },
+    };
   }
   save() {
     const temp = this.file + '.tmp';
@@ -112,8 +146,15 @@ const blockTypes = [
   'notify',
   'theme',
   'ifTime',
+  'processRunning',
   'repeat',
   'switchTheme',
+  'clipboardAI',
+  'meeting',
+  'quiet',
+  'closeWindow',
+  'shutdownTimer',
+  'cancelShutdown',
   'paste',
   'keys',
   'music',
@@ -128,10 +169,19 @@ function routine(input) {
     const value = String(b.value ?? '').slice(0, 4000);
     if (b.kind === 'url') webURL(value);
     if (
+      ['processRunning', 'closeWindow'].includes(b.kind) &&
+      !require('./process-running.cjs').validName(value)
+    )
+      throw Error('Укажи имя процесса');
+    if (
       ['wait', 'focus', 'repeat'].includes(b.kind) &&
       (!Number.isInteger(+value) || +value < 1 || +value > { wait: 120, focus: 240, repeat: 10 }[b.kind])
     )
       throw Error('Проверьте длительность или число повторов');
+    if (b.kind === 'shutdownTimer' && (!Number.isInteger(+value) || +value < 1 || +value > 480))
+      throw Error('Для таймера укажи от 1 до 480 минут');
+    if (b.kind === 'quiet' && !['on', 'off'].includes(value)) throw Error('Выбери режим уведомлений');
+    if (b.kind === 'clipboardAI' && !value.trim()) throw Error('Опиши, как изменить текст');
     const index = (key, fallback) => {
       if (b[key] === undefined || b[key] === '') return fallback;
       const n = Number(b[key]);
@@ -158,6 +208,9 @@ function routine(input) {
   return {
     id: String(input.id || uid()).slice(0, 90),
     name: String(input.name).trim().slice(0, 90),
+    group: String(input.group || '')
+      .trim()
+      .slice(0, 60),
     phrase: String(input.phrase || '')
       .trim()
       .slice(0, 160),
@@ -188,7 +241,7 @@ async function runRoutine(input, perform, signal) {
         h = new Date().getHours();
       index = (a <= z ? h >= a && h < z : h >= a || h < z) ? b.next : b.alternate;
       continue;
-    } else if (b.kind === 'switchTheme') {
+    } else if (b.kind === 'switchTheme' || b.kind === 'processRunning') {
       index = (await perform(b, signal)) ? b.next : b.alternate;
       continue;
     } else await perform(b, signal);
@@ -229,6 +282,55 @@ const templates = [
     phrase: 'музыка для работы',
     blocks: [{ kind: 'url', value: 'https://www.youtube.com/results?search_query=lofi+radio' }],
   },
+  {
+    id: 'translate',
+    name: 'Перевод буфера обмена',
+    phrase: 'переведи буфер',
+    blocks: [{ kind: 'clipboardAI', value: 'Переведи на русский, сохрани абзацы.' }],
+  },
+  {
+    id: 'rewrite',
+    name: 'Редактор текста',
+    phrase: 'отредактируй буфер',
+    blocks: [{ kind: 'clipboardAI', value: 'Исправь ошибки и сделай текст яснее, сохрани смысл.' }],
+  },
+  {
+    id: 'join-meeting',
+    name: 'Ближайшая встреча',
+    phrase: 'открой ближайшую встречу',
+    blocks: [{ kind: 'meeting', value: '' }],
+  },
+  {
+    id: 'cozy',
+    name: 'Уютный режим',
+    phrase: 'уютный режим',
+    blocks: [
+      { kind: 'theme', value: 'sage' },
+      { kind: 'quiet', value: 'on' },
+      { kind: 'music', value: '' },
+    ],
+  },
+  {
+    id: 'hydration',
+    name: 'Перерыв на воду',
+    phrase: 'пора попить воды',
+    blocks: [
+      { kind: 'notify', value: 'Стакан воды и минута отдыха' },
+      { kind: 'dance', value: '' },
+    ],
+  },
+  {
+    id: 'power',
+    name: 'Таймер выключения',
+    phrase: 'таймер выключения',
+    blocks: [{ kind: 'shutdownTimer', value: '30' }],
+  },
+  {
+    id: 'power-cancel',
+    name: 'Отмена выключения',
+    phrase: 'отмени выключение',
+    blocks: [{ kind: 'cancelShutdown', value: '' }],
+  },
 ];
 function checkVRM(bytes) {
   if (
@@ -257,4 +359,6 @@ module.exports = {
   templates,
   checkVRM,
   blockTypes,
+  widgetNames,
+  widgetLayout,
 };

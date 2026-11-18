@@ -1,3 +1,5 @@
+import { address } from './wake.mjs';
+import { syncCat } from './cat.js';
 import {
   $,
   esc,
@@ -6,6 +8,7 @@ import {
   icons,
   btn,
   field,
+  select,
   toast,
   timeLabel,
   timerTime,
@@ -29,9 +32,22 @@ const cache = { gesture: 'auto', emotion: '', draft: null, progress: null },
   music = new Audio();
 music.controls = true;
 music.preload = 'metadata';
+let waitingForName = false,
+  lastMicMode = 'off';
 const voice = new Voice(
-  (text) => send(text, true),
+  async (text) => {
+    const next = address(text, state.settings.name, waitingForName);
+    waitingForName = next.waiting;
+    if (next.text) return send(next.text, true);
+    return next.reply;
+  },
   (msg, p) => {
+    const mode = voice.enabled ? (waitingForName ? 'waiting' : 'talking') : 'off';
+    if (mode !== lastMicMode) {
+      lastMicMode = mode;
+      call('micMode', { mode }).catch(err);
+    }
+    if (mode === 'waiting' && msg && p !== 'speaking') msg = 'Жду обращения «' + state.settings.name + '»';
     liveStatus = msg;
     $('#voiceStatus').textContent = msg;
     $('#voiceBar').hidden = !msg;
@@ -40,6 +56,7 @@ const voice = new Voice(
     phase(p, state?.settings.reduced || false);
   },
   (e) => toast(e.message),
+  () => waitingForName,
 );
 const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const tabs = $('#tabs');
@@ -70,10 +87,10 @@ function renderFrame() {
   const visible = page === 'model' || (page === 'home' && state.settings.showAvatar);
   $('#scene').hidden = !visible;
   const a = avatar();
-  if (lastAvatar !== state.settings.avatar) {
-    if (lastAvatar)
-      avatarFrame.src = '/renderer/index.html?character=' + encodeURIComponent(state.settings.avatar);
-    lastAvatar = state.settings.avatar;
+  const appearance = state.settings.avatar + '/' + (state.settings.outfit || 'original');
+  if (lastAvatar !== appearance) {
+    if (lastAvatar) avatarFrame.src = '/renderer/index.html?character=' + encodeURIComponent(appearance);
+    lastAvatar = appearance;
   }
   a?.setMotionOutput(!!state.motionPort);
   a?.setActive(visible);
@@ -103,7 +120,7 @@ function renderPage() {
   const previous = $('#content').scrollTop;
   $('#content').classList.toggle('expandedGraph', page === 'commands' && !!cache.expanded);
   $('#content').innerHTML = pages[page](state, cache);
-  if (page === 'desk' && state.music) {
+  if (page === 'desk' && state.music && $('#musicSlot')) {
     setMusic();
     $('#musicSlot').append(music);
   }
@@ -166,7 +183,7 @@ function renderChat() {
     $('#messages').innerHTML =
       (chat?.messages || [])
         .map(
-          (m) =>
+          (m, index) =>
             '<div class="bubble ' +
             esc(m.role) +
             (m.error ? ' error' : '') +
@@ -184,6 +201,7 @@ function renderChat() {
                   '</button>',
               )
               .join('') +
+            (m.draft ? btn('Открыть сценарий', 'openDraft', 'workflow', '', String(index)) : '') +
             (m.files || []).map((f) => btn(f.name, 'openFile', 'file-text', '', f.id)).join('') +
             '</div>',
         )
@@ -210,6 +228,7 @@ function renderChat() {
       .join('') || '<p class="empty">Разговоры сохраняются здесь.</p>';
 }
 function render() {
+  if (state) syncCat((state.pluginIds || []).includes('cat'), state.settings.reduced);
   syncMotionTimer();
   if (!state) return;
   const look = state.settings;
@@ -317,11 +336,12 @@ async function send(input, voiceMode = false) {
     phase(voice.enabled ? 'listening' : 'idle', state.settings.reduced);
   }
 }
-async function toggleVoice() {
-  if (voice.enabled) {
+async function toggleVoice(standby = false) {
+  if (voice.enabled && !standby) {
     voice.stop();
     return;
   }
+  waitingForName = standby;
   nav('home');
   await voice.start();
 }
@@ -350,25 +370,108 @@ async function saveRoutine() {
   await refresh();
   return id;
 }
+function drawWidgets() {
+  const rows = cache.widgetDraft;
+  modal(
+    'Виджеты рабочего стола',
+    rows
+      .map(
+        (w, i) =>
+          '<div class="entry"><label><input type="checkbox" data-widget="' +
+          esc(w.id) +
+          '" ' +
+          (w.visible ? 'checked' : '') +
+          '>' +
+          esc(state.widgetNames[w.id]) +
+          '</label><span></span>' +
+          (i ? btn('Выше', 'widgetUp', 'move-up', '', w.id) : '') +
+          (i < rows.length - 1 ? btn('Ниже', 'widgetDown', 'move-down', '', w.id) : '') +
+          '</div>',
+      )
+      .join('') +
+      btn('Сохранить', 'saveWidgets', 'check', 'primary') +
+      btn('Сбросить', 'resetWidgets', 'rotate-ccw'),
+  );
+}
 async function handle(action, id) {
   if (action?.startsWith('remove-')) {
     await call('remove', { kind: action.slice(7), id });
     return;
   }
-  if (action?.startsWith('add-')) {
-    const k = action.slice(4);
+  if (/^(add|edit)-(tasks|events|notes)$/.test(action)) {
+    const [op, k] = action.split('-'),
+      row = op === 'edit' ? state[k].find((x) => x.id === id) : null;
+    let when = '';
+    if (row?.time) {
+      const date = new Date(row.time);
+      when = new Date(+date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+    const title = { tasks: 'Задача', events: 'Напоминание', notes: 'Заметка' }[k];
+    const text =
+      k === 'notes'
+        ? '<label class="field">Текст<textarea id="itemText">' +
+          esc(row?.text || '') +
+          '</textarea></label>'
+        : field('Текст', 'itemText', row?.text || '');
     modal(
-      { tasks: 'Новая задача', events: 'Новое напоминание', notes: 'Новая заметка' }[k],
-      field('Текст', 'itemText') +
-        (k === 'events' ? field('Дата и время', 'itemTime', '', 'datetime-local') : '') +
+      title,
+      text +
+        (k === 'events'
+          ? field('Дата и время', 'itemTime', when, 'datetime-local') +
+            select(
+              'Повтор',
+              'itemRepeat',
+              [
+                ['', 'Один раз'],
+                ['day', 'Каждый день'],
+                ['week', 'Каждую неделю'],
+              ],
+              row?.repeat || '',
+            ) +
+            select(
+              'Действие по расписанию',
+              'itemRoutine',
+              [['', 'Только напомнить'], ...state.routines.map((r) => [r.id, r.name])],
+              row?.routineId || '',
+            )
+          : '') +
         btn('Сохранить', 'commitItem', 'check', 'primary', k),
     );
+    $('#itemText').dataset.id = row?.id || '';
     $('#itemText').focus();
     return;
   }
   switch (action) {
+    case 'widgets':
+      cache.widgetDraft = structuredClone(state.settings.widgets);
+      drawWidgets();
+      return;
+    case 'widgetUp':
+    case 'widgetDown': {
+      const rows = cache.widgetDraft,
+        i = rows.findIndex((w) => w.id === id),
+        j = i + (action === 'widgetUp' ? -1 : 1);
+      if (i >= 0 && j >= 0 && j < rows.length) [rows[i], rows[j]] = [rows[j], rows[i]];
+      drawWidgets();
+      return;
+    }
+    case 'saveWidgets':
+      await saveSettings({ widgets: cache.widgetDraft });
+      closeModal();
+      return;
+    case 'resetWidgets':
+      cache.widgetDraft = Object.keys(state.widgetNames).map((id) => ({ id, visible: true }));
+      drawWidgets();
+      return;
     case 'commitItem':
-      await call('add', { kind: id, text: val('itemText'), time: new Date(val('itemTime')).getTime() });
+      await call('add', {
+        kind: id,
+        id: $('#itemText').dataset.id,
+        text: val('itemText'),
+        time: new Date(val('itemTime')).getTime(),
+        repeat: val('itemRepeat'),
+        routineId: val('itemRoutine'),
+      });
       closeModal();
       return;
     case 'day':
@@ -454,6 +557,9 @@ async function handle(action, id) {
           .join('') || '<p class="empty">Совпадений нет.</p>';
       return;
     }
+    case 'standby':
+      await toggleVoice(true);
+      return;
     case 'voice':
       return toggleVoice();
     case 'music':
@@ -511,6 +617,59 @@ async function handle(action, id) {
       toast('Настройка сохранена');
       return;
     }
+    case 'installVoice':
+      cache.voiceLoading = true;
+      renderPage();
+      try {
+        await call('installVoice');
+        toast('Ирина готова говорить');
+      } finally {
+        cache.voiceLoading = false;
+        await refresh();
+      }
+      return;
+    case 'pauseVoice':
+      await call('cancelVoiceInstall');
+      return;
+    case 'saveSpeechService': {
+      const key = val('speechKey');
+      await saveSettings({
+        speechService: {
+          base: val('speechBase'),
+          sttModel: val('sttModel'),
+          ttsModel: val('ttsModel'),
+          voice: val('apiVoice'),
+        },
+      });
+      if (key) await call('key', { name: 'speechAPI', value: key });
+      toast('Голосовой сервис сохранён');
+      return;
+    }
+    case 'nativeGame':
+      await call('nativeGame');
+      return;
+    case 'pickIrina':
+      await call('installVoice');
+      await refresh();
+      return;
+    case 'pluginOn':
+    case 'pluginOff':
+      await call('togglePlugin', { id, enabled: action === 'pluginOn' });
+      await refresh();
+      return;
+    case 'panel':
+      if (!(state.pluginIds || []).includes(id) || !['chess', 'shadow', 'freedoom'].includes(id)) return;
+      modal(
+        { chess: 'Шахматы', shadow: 'Театр теней', freedoom: 'Freedoom' }[id],
+        '<iframe class="gamePanel" title="' + id + '" src="/panel.html?game=' + id + '"></iframe>',
+      );
+      return;
+    case 'fishStar':
+      await call('fishFavorite', { id, title: cache.fishList?.find((v) => v.id === id)?.title });
+      return;
+    case 'fishPreview':
+      await voice.speak('Привет! Вот так звучит мой голос.', id);
+      return;
     case 'fishSearch':
     case 'fishNext':
       cache.fishQuery = val('fishQuery');
@@ -571,6 +730,32 @@ async function handle(action, id) {
     case 'edit':
       loadDraft(id);
       return;
+    case 'describeCommand':
+      modal(
+        'Команда из описания',
+        field('Название и действия', 'commandPrompt', '') +
+          '<p class="muted">Например, «Утро: поставь таймер на 25 минут и запиши планы».</p>' +
+          btn('Составить', 'generateCommand', 'workflow', 'primary'),
+      );
+      return;
+    case 'generateCommand': {
+      const draft = await call('draftCommand', { text: val('commandPrompt') });
+      closeModal();
+      cache.draft = draft;
+      cache.node = 0;
+      renderPage();
+      return;
+    }
+    case 'openDraft': {
+      const item = state.chats.find((c) => c.id === current)?.messages[+id]?.draft;
+      if (item) {
+        nav('commands');
+        cache.draft = structuredClone(item);
+        cache.node = 0;
+        renderPage();
+      }
+      return;
+    }
     case 'newRoutine':
       loadDraft('');
       return;
@@ -593,12 +778,34 @@ async function handle(action, id) {
     case 'addBlock': {
       pages.captureDraft(cache.draft);
       const kind = val('kind');
+      if (kind.startsWith('snippet:')) {
+        const r = state.routines.find((r) => r.id === kind.slice(8));
+        if (!r) throw Error('Команда набора удалена');
+        const offset = cache.draft.blocks.length;
+        if (offset + r.blocks.length > 64) throw Error('Допустимо до 64 блоков');
+        for (const [i, b] of r.blocks.entries()) {
+          cache.draft.blocks.push({
+            kind: b.kind,
+            value: b.value,
+            next: offset + (b.next ?? i + 1),
+            alternate: offset + (b.alternate ?? i + 1),
+          });
+        }
+        cache.node = offset;
+        renderPage();
+        return;
+      }
       const fallback =
         {
           wait: '2',
           focus: '25',
           repeat: '2',
           ifTime: '09-18',
+          processRunning: 'notepad.exe',
+          closeWindow: 'notepad.exe',
+          shutdownTimer: '30',
+          quiet: 'on',
+          clipboardAI: 'Переведи текст на русский',
           switchTheme: 'cream',
           theme: 'cream',
           keys: 'copy',
@@ -647,6 +854,102 @@ async function handle(action, id) {
       cache.draft = null;
       await refresh();
       return;
+    case 'extensionPanel': {
+      const pkg = state.extensions.find((x) => x.id === id);
+      if (!pkg) return;
+      const c = pkg.contributions;
+      const commands = (c.panel?.commands || [])
+        .map((i) => state.routines.find((r) => r.id === pkg.routines[i]))
+        .filter(Boolean);
+      modal(
+        c.panel?.name || pkg.name,
+        '<p>' +
+          esc(c.panel?.body || '') +
+          '</p>' +
+          commands.map((r) => btn(r.name, 'extensionRun', 'play', '', r.id)).join('') +
+          (c.triggers
+            ? '<p>' +
+              c.triggers
+                .map(
+                  (t) =>
+                    esc(pages.triggerNames[t.event]) +
+                    ' → ' +
+                    esc(state.routines.find((r) => r.id === pkg.routines[t.command])?.name),
+                )
+                .join('<br>') +
+              '</p>' +
+              btn(
+                pkg.triggersEnabled ? 'Остановить триггеры' : 'Включить триггеры',
+                'extensionTriggers',
+                'clock-3',
+                '',
+                id,
+              )
+            : '') +
+          btn('Экспорт набора', 'exportPack', 'download', '', id) +
+          (c.theme ? btn('Применить тему', 'extensionTheme', 'palette', '', id) : '') +
+          (c.ai ? btn('ИИ · ' + new URL(c.ai.base).host, 'extensionAI', 'brain-circuit', '', id) : '') +
+          (c.speech
+            ? btn('Голос · ' + new URL(c.speech.base).host, 'extensionSpeech', 'mic', '', id)
+            : '') +
+          (c.tools || [])
+            .map((t, i) =>
+              btn(
+                'Подключить ' + t.name + ' · ' + new URL(t.url).host,
+                'extensionTool',
+                'cable',
+                '',
+                id + '@' + i,
+              ),
+            )
+            .join(''),
+      );
+      return;
+    }
+    case 'exportPack':
+      await call('exportPack', { id });
+      return;
+    case 'extensionTriggers':
+      await call('packTriggers', {
+        id,
+        enabled: !state.extensions.find((p) => p.id === id).triggersEnabled,
+      });
+      await refresh();
+      return handle('extensionPanel', id);
+    case 'extensionRun':
+      toast(await call('run', { id }));
+      return;
+    case 'extensionTheme':
+      await saveSettings(state.extensions.find((x) => x.id === id).contributions.theme);
+      return;
+    case 'extensionAI': {
+      const ai = state.extensions.find((x) => x.id === id).contributions.ai;
+      await saveSettings({ provider: 'endpoint', base: ai.base, cloudModel: ai.model });
+      closeModal();
+      nav('ai');
+      return;
+    }
+    case 'extensionSpeech': {
+      const v = state.extensions.find((x) => x.id === id).contributions.speech;
+      await saveSettings({
+        speechService: v,
+        stt: v.sttModel ? 'speechAPI' : 'local',
+        voice: v.ttsModel ? 'speechAPI' : 'builtin',
+      });
+      closeModal();
+      nav('voice');
+      return;
+    }
+    case 'extensionTool': {
+      const index = id.lastIndexOf('@'),
+        pkg = state.extensions.find((x) => x.id === id.slice(0, index));
+      const t = pkg?.contributions.tools[+id.slice(index + 1)];
+      if (t && !state.tools.some((x) => x.url === t.url)) {
+        await call('addMCP', t);
+        toast('Сервер подключён');
+      }
+      return;
+    }
     case 'pack':
       await call('pack', { id });
       toast('Набор добавлен в команды');
@@ -655,7 +958,7 @@ async function handle(action, id) {
       await call('removePack', { id });
       return;
     case 'importPack':
-      if (await call('importPack')) toast('Команды импортированы');
+      if (await call('importPack')) toast('Набор установлен');
       return;
     case 'pair': {
       const r = await call('pair');
@@ -675,6 +978,89 @@ async function handle(action, id) {
     }
     case 'unpair':
       await call('unpair');
+      return;
+    case 'workConnect':
+      await call('workshopConnect', { repo: val('workRepo'), token: val('workToken') });
+      cache.workRows = null;
+      await refresh();
+      return;
+    case 'workBrowse':
+      cache.workRows = await call('workshopList');
+      renderPage();
+      if (!cache.workRows.length) toast('В каталоге пока нет работ');
+      return;
+    case 'workInspect': {
+      const pack = await call('workshopInspect', { key: id });
+      cache.workPreview = { key: id, sha: pack.sha };
+      modal(
+        pack.name,
+        '<p>' +
+          esc(pack.detail) +
+          '</p><ul>' +
+          pack.routines
+            .map((r) => '<li>' + esc(r.name) + ' · ' + r.blocks.length + ' действий</li>')
+            .join('') +
+          '</ul><details><summary>Действия и расширения</summary><pre>' +
+          esc(JSON.stringify({ routines: pack.routines, contributions: pack.contributions }, null, 2)) +
+          '</pre></details>' +
+          btn('Установить набор', 'workInstall', 'plus', 'primary'),
+      );
+      return;
+    }
+    case 'workInstall':
+      await call('workshopInstall', cache.workPreview);
+      closeModal();
+      await refresh();
+      return;
+    case 'workPrepare': {
+      const spec = await call('workDraft', { id: val('workChoice') });
+      const ref = state.published?.[state.workshopRepo + '#' + spec.id],
+        existing = ref ? await call('workshopInspect', { key: ref.key }) : null;
+      cache.workSha = existing?.sha;
+      modal(
+        'Публикация в ' + state.workshopRepo,
+        '<h3>' +
+          esc(spec.name) +
+          '</h3><pre>' +
+          esc(JSON.stringify({ routines: spec.routines, contributions: spec.contributions }, null, 2)) +
+          '</pre>' +
+          (existing
+            ? '<details><summary>Опубликованная версия</summary><pre>' +
+              esc(
+                JSON.stringify(
+                  { routines: existing.routines, contributions: existing.contributions },
+                  null,
+                  2,
+                ),
+              ) +
+              '</pre></details>'
+            : '') +
+          field('Описание', 'workDetail', existing?.detail || '') +
+          btn('Опубликовать', 'workPublish', 'upload', 'primary', spec.id),
+      );
+      return;
+    }
+    case 'workPublish':
+      await call('workshopPublish', { id, detail: val('workDetail'), sha: cache.workSha });
+      closeModal();
+      cache.workRows = await call('workshopList');
+      await refresh();
+      return;
+    case 'workRemove': {
+      const ref = state.published?.[state.workshopRepo + '#' + id],
+        current = await call('workshopInspect', { key: ref.key });
+      cache.workSha = current.sha;
+      modal(
+        'Снять с публикации «' + current.name + '»?',
+        btn('Снять', 'workUnpublish', 'x', 'primary', id),
+      );
+      return;
+    }
+    case 'workUnpublish':
+      await call('workshopUnpublish', { id, sha: cache.workSha });
+      closeModal();
+      cache.workRows = await call('workshopList');
+      await refresh();
       return;
     case 'community':
       cache.community = await call('community', { url: val('catalogURL') });
@@ -777,14 +1163,21 @@ document.addEventListener('click', (e) => {
   if (b.dataset.act) handle(b.dataset.act, b.dataset.id).catch(err);
 });
 document.addEventListener('change', (e) => {
+  if (e.target.dataset.widget) {
+    cache.widgetDraft.find((w) => w.id === e.target.dataset.widget).visible = e.target.checked;
+    return;
+  }
   const v = e.target.value;
   const settings = {
     accent: { accent: v },
     glow: { glow: +v },
     glass: { glass: v === 'on' },
     avatarPick: { avatar: v },
+    outfit: { outfit: v },
     voicePick: { voice: v },
     sysVoice: { systemVoice: v },
+    stt: { stt: v },
+    quiet: { quiet: v === 'on' },
     theme: { theme: v },
     fps: { fps: +v },
     reduced: { reduced: v === 'on' },
@@ -872,7 +1265,7 @@ $('#attach').onclick = async () => {
   try {
     const a = await call('import', { kind: 'attachment' });
     if (a) {
-      attachment = a;
+      attachment = await (await import('./documents.js')).readAttachment(a);
       $('#attachment').hidden = false;
       $('#attachment').textContent = a.name + ' ×';
     }
@@ -920,6 +1313,10 @@ window.desk.on(async (e) => {
     }
     if (e.type === 'downloadEnd' || e.type === 'notice') {
       toast(e.message);
+      return;
+    }
+    if (e.type === 'standby') {
+      await toggleVoice(true);
       return;
     }
     if (e.type === 'toggleVoice') {
@@ -1004,6 +1401,9 @@ setInterval(() => {
 }, 6500);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if (state?.settings.theme === 'system') render();
+});
+$('#modal').addEventListener('close', () => {
+  $('#modalBody').replaceChildren();
 });
 async function boot() {
   const [s, cat] = await Promise.all([

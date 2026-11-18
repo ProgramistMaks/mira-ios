@@ -11,3 +11,4 @@ Resources/Web/
 .build/
 Packages/LocalLLM/Artifacts/
 __pycache__/
+/Desktop/ui/vendor/
