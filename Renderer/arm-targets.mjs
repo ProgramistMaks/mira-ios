@@ -1,4 +1,5 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
+import { ReferenceFrame } from './reference-poses.mjs';
 
 // Body-relative semantic hand targets. Two-bone IK preserves segment lengths;
 // reach weights blend from the currently authored wrist path, not a fixed T-pose.
@@ -6,6 +7,7 @@ export class ArmTargets {
   constructor(root,bone,height,armSign=1){
     this.root=root;this.height=height;this.forward=-armSign;this.armSign=armSign;
     this.chest=bone('chest');this.neck=bone('neck');this.head=bone('head');this.arms=[];
+    if(bone('leftUpperArm') && bone('rightUpperArm') && bone('hips'))this.referenceFrame=new ReferenceFrame(root,bone,armSign);
     for(const side of ['left','right']){
       const upper=bone(side+'UpperArm'),lower=bone(side+'LowerArm'),hand=bone(side+'Hand');
       if(!upper||!lower||!hand)continue;
@@ -22,6 +24,9 @@ export class ArmTargets {
       this.arms.push({side,upper,lower,hand,localBasis,axis:hand.position.clone().normalize(),goal:new Vector3()});
     }
   }
+  resetTwist(){
+    for(const arm of this.arms)arm.twistUnwrapped=undefined;
+  }
   aim(node,source,destination){
     if(source.lengthSq()<1e-12||destination.lengthSq()<1e-12)return;
     const swing=new Quaternion().setFromUnitVectors(source.normalize(),destination.normalize());
@@ -30,6 +35,7 @@ export class ArmTargets {
   }
   apply(pose, paths = {}){
     if(!this.chest||!this.neck)return;
+    if(paths.left?.projection || paths.right?.projection)this.referenceFrame?.measure();
     for(const arm of this.arms){
       const {side,upper,lower,hand}=arm,s=side==='left'?-this.armSign:this.armSign;
       const safe=key=>Number.isFinite(pose[key])?pose[key]:0;
@@ -46,6 +52,7 @@ export class ArmTargets {
         const [lateral, vertical, forward] = path.position;
         target.set(s*lateral, vertical, this.forward*forward).multiplyScalar(this.height);
         anchor.localToWorld(target);
+        if(path.projection)this.referenceFrame?.place(target,path.projection.x,path.projection.y,path.projection.z,path.projectionWeight);
       }
       const a=upper.getWorldPosition(new Vector3()),b=lower.getWorldPosition(new Vector3()),c=hand.getWorldPosition(new Vector3());
       const l1=a.distanceTo(b),l2=b.distanceTo(c);if(l1<1e-8||l2<1e-8)continue;
@@ -56,7 +63,9 @@ export class ArmTargets {
       const reach=Math.max(minimumReach,Math.min(l1+l2-1e-6,distance));
       destination.copy(a).addScaledVector(direction,reach);
       const along=(l1*l1-l2*l2+reach*reach)/(2*reach),height=Math.sqrt(Math.max(0,l1*l1-along*along));
-      const pole=this.chest.localToWorld(new Vector3(s*(path?.elbow ?? .18)*this.height,-.11*this.height,this.forward*.045*this.height)).sub(a);
+      const pole=this.chest.localToWorld(new Vector3(s*(path?.elbow ?? .18)*this.height,-.11*this.height,this.forward*.045*this.height));
+      if(path?.projection)this.referenceFrame?.place(pole,path.projection.elbowX,path.projection.elbowY,path.projection.elbowZ,path.projectionWeight);
+      pole.sub(a);
       pole.addScaledVector(direction,-pole.dot(direction));if(pole.lengthSq()<1e-10)pole.copy(b).sub(a).addScaledVector(direction,-b.clone().sub(a).dot(direction));
       pole.normalize();
       const knee=a.clone().addScaledVector(direction,along).addScaledVector(pole,height);

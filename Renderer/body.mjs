@@ -1,4 +1,4 @@
-import { Euler, Quaternion } from 'three';
+import { Euler, Quaternion, Vector3 } from 'three';
 import { NaturalBehavior, followJoint, responseRate } from './natural-behavior.mjs';
 import { REST } from './acting.mjs';
 
@@ -118,10 +118,19 @@ export class BodyController {
 
 export class ArticulationRig {
   constructor(bone,armSign=1) {
-    this.bone=bone;this.sign=armSign;this.entries=[];this.q=new Quaternion();this.euler=new Euler();
+    this.bone=bone;this.sign=armSign;this.entries=[];this.q=new Quaternion();this.euler=new Euler();this.across={};
     const add=(name,kind,side,index,joint)=>{const node=bone(name);if(node)this.entries.push({node,kind,side,index,joint,rest:node.quaternion.clone()});};
     add('upperChest','upperChest');
     for(const side of ['left','right']){
+      const hand=bone(side+'Hand'),index=bone(side+'IndexProximal'),little=bone(side+'LittleProximal');
+      // VRM0 and VRM1 face opposite ways. Read the thumb-to-little-finger
+      // direction in the normalized hand's bind space for spread/opposition.
+      this.across[side]=armSign;
+      if(hand && index && little){
+        const iz=hand.worldToLocal(index.getWorldPosition(new Vector3())).z;
+        const lz=hand.worldToLocal(little.getWorldPosition(new Vector3())).z;
+        if(Math.abs(lz-iz)>.0001)this.across[side]=Math.sign(lz-iz);
+      }
       add(side+'Shoulder','shoulder',side);add(side+'Toes','toes',side);
       ['Thumb','Index','Middle','Ring','Little'].forEach((finger,index)=>{
         const joints=finger==='Thumb'?['Metacarpal','Proximal','Distal']:['Proximal','Intermediate','Distal'];
@@ -137,11 +146,13 @@ export class ArticulationRig {
       if(kind==='shoulder'){z=sign*(pose[side+'ShoulderLift']??0);y=(side==='left'?-1:1)*(pose[side+'ShoulderForward']??0);}
       if(kind==='toes')x=this.sign*(pose[side+'Toes']??0);
       if(kind==='finger'){
-        z=sign*(pose[joint]??0);
-        if(joint.endsWith('0'))y=sign*((index-2)*(pose[side+'Spread']??0)*.45);
+        // In the normalized T pose the palm faces down. Curl the tips toward
+        // the pad of the thumb and spread the outer digits away from the middle.
+        z=-sign*(pose[joint]??0);
+        if(joint.endsWith('0'))y=-sign*this.across[side]*((index-2)*(pose[side+'Spread']??0)*.45);
         if(index===0){ // The thumb's first joint also opposes across the palm.
-          x=(pose[joint]??0)*.32;
-          if(joint.endsWith('0'))y=sign*(pose[side+'ThumbOpposition']??0);
+          x=-this.across[side]*(pose[joint]??0)*.32;
+          if(joint.endsWith('0'))y=-sign*this.across[side]*(pose[side+'ThumbOpposition']??0);
         }
       }
       this.q.setFromEuler(this.euler.set(x,y,z,'XYZ')).premultiply(rest);

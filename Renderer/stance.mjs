@@ -37,6 +37,7 @@ class PlantedLeg {
       Math.max(0, bounded(pose, side + 'FootLift', .1)), bounded(pose, side + 'FootForward', .09) * this.forward).multiplyScalar(height);
     this.offset.y += kneeLift;
     this.footTilt.setFromEuler(this.footEuler.set(-this.forward * bounded(pose, side + 'FootPitch', .4), 0, bounded(pose, side + 'FootRoll', .2)));
+    this.kneeIn=(side==='left'?1:-1)*bounded(pose,side+'KneeIn',.65);
   }
   requiredDrop(up) {
     this.measure();
@@ -64,7 +65,7 @@ class PlantedLeg {
       Math.max(Math.abs(this.upperLength - this.lowerLength) + 1e-8, distance));
     const along = (this.upperLength ** 2 - this.lowerLength ** 2 + reach ** 2) / (2 * reach);
     const height = Math.sqrt(Math.max(0, this.upperLength ** 2 - along ** 2));
-    this.bend.set(0, 0, this.forward).applyQuaternion(rootRotation);
+    this.bend.set(this.kneeIn, 0, this.forward).applyQuaternion(rootRotation);
     this.bend.addScaledVector(this.direction, -this.bend.dot(this.direction)).normalize();
     this.knee.copy(this.a).addScaledVector(this.direction, along).addScaledVector(this.bend, height);
     this.aim(this.upper, this.source.subVectors(this.b, this.a), this.desired.subVectors(this.knee, this.a));
@@ -94,7 +95,7 @@ export class PlantedStance {
   apply(pose) {
     // An incomplete rig keeps its original pose; never animate only one leg.
     if (this.legs.length !== 2) return;
-    const side = bounded(pose, 'hipsSide', 0.025), forward = bounded(pose, 'hipsForward', 0.02);
+    const side = bounded(pose, 'hipsSide', 0.09), forward = bounded(pose, 'hipsForward', 0.02);
     const drop = Math.max(0, bounded(pose, 'hipsDrop', 0.06));
     for (const [index, leg] of this.legs.entries()) { leg.reset(); leg.configure(pose, index === 0 ? 'left' : 'right', this.height); }
     this.hips.quaternion.copy(this.restRotation)

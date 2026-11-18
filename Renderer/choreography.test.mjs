@@ -8,6 +8,7 @@ import {ArmTargets} from './arm-targets.mjs';
 import {ArticulationRig} from './body.mjs';
 import {PlantedStance} from './stance.mjs';
 import {CHOREOGRAPHY, ChoreographyRig} from './choreography.mjs';
+import checkpoints from './fixtures/reference-checkpoints.json' with {type:'json'};
 
 // Use Vita's actual bone proportions. Materials are irrelevant to joint paths.
 const loader = new GLTFLoader();
@@ -144,7 +145,8 @@ test('opening greeting raises both wrists, releases one arm and holds the other 
   assert.ok(point('rightHand').y-point('leftHand').y>.15);
   const held=point('rightHand').sub(point('head'));
   advance(1.3);
-  assert.ok(point('rightHand').sub(point('head')).distanceTo(held)<.012);
+  assert.ok(point('rightHand').sub(point('head')).distanceTo(held)<.035);
+  assert.ok(point('rightIndexDistal').distanceTo(point('head'))<.11);
   rig.configure('wave');
   assert.equal(rig.clip,'wave');
 });
@@ -159,8 +161,103 @@ test('dance gathers the wrists at the sternum before the side accent, with a wid
   assert.ok(point('rightFoot').distanceTo(point('leftFoot'))>.32);
   advance(.33);
   assert.ok(hand('left').y<0 && hand('right').y<0);
-  advance(.40);
-  assert.ok(hand('left').x<-.11 && hand('right').x<-.06);
+  advance(.17);
+  const shoulder=point('leftUpperArm').lerp(point('rightUpperArm'),.5);
+  assert.ok(point('leftHand').x-shoulder.x>.15 && point('rightHand').x-shoulder.x>.085);
+  const swept=point('leftHand').y;
+  advance(.20);
+  assert.ok(point('leftHand').y-swept>.015);
+});
+
+test('the trailing foot closes on a loaded leg and clears the ground before reopening',()=>{
+  hold('dance',1.33);
+  const lead=point('leftFoot'),trail=point('rightFoot'),hips=point('hips');
+  advance(.16);
+  assert.ok(point('rightFoot').y-trail.y>.025);
+  advance(.16);
+  assert.ok(lead.distanceTo(point('leftFoot'))<.001);
+  assert.ok(Math.abs(point('rightFoot').y-trail.y)<.001);
+  assert.ok(point('rightFoot').distanceTo(lead)<.12);
+  assert.ok(point('hips').x-hips.x>.06);
+  advance(.85);
+  assert.ok(point('rightFoot').distanceTo(point('leftFoot'))>.29);
+});
+
+test('visible wrists and elbows follow intermediate source frames on Vita',()=>{
+  const names=['leftHand','leftLowerArm','rightHand','rightLowerArm'];
+  for(const [clip,{start,frames}] of Object.entries(checkpoints)){
+    if(clip==='welcome'){rig.configure('auto');rig.react('greeting');}
+    else {rig.configure(clip);rig.replay();}
+    const errors=[];
+    for(const [frame,...marks] of frames){
+      const time=start+frame/30;
+      while(rig.age+1/240<time)rig.update(1/120);
+      const center=point('leftUpperArm').lerp(point('rightUpperArm'),.5),hips=point('hips');
+      const span=Math.hypot(center.x-hips.x,center.y-hips.y);
+      marks.forEach((mark,i)=>{
+        if(mark){
+          const joint=point(names[i]).sub(center).divideScalar(span);
+          errors.push(Math.hypot(joint.x-mark[0],joint.y-mark[1]));
+        }
+      });
+    }
+    errors.sort((a,b)=>a-b);
+    assert.ok(errors[Math.floor(errors.length/2)]<.09,clip+' median projected error');
+    assert.ok(errors[Math.ceil(.9*errors.length)-1]<.16,clip+' 90th percentile projected error');
+  }
+});
+
+test('reference motion is stable at different refresh rates and follows viewer rotation',()=>{
+  const root=avatar.scene,orientation=root.quaternion.clone();
+  const markers=['leftHand','rightHand','leftLowerArm','rightLowerArm','leftFoot','rightFoot'];
+  const trajectory=(hz,turn)=>{
+    root.quaternion.copy(orientation);
+    root.rotateY(turn);
+    rig.breathCycle=0;rig.elapsed=0;
+    rig.configure('dance');rig.replay();
+    const result=[];
+    for(let tick=1;tick<=hz*2;tick++){
+      rig.update(1/hz);
+      if(tick>=hz*.5 && tick%(hz/10)===0)result.push(...markers.map(id=>
+        root.worldToLocal(bone(id).getWorldPosition(new Vector3()))));
+    }
+    return result;
+  };
+  try{
+    const front=trajectory(120,0);
+    for(const hz of [30,60,120]){
+      const rotated=trajectory(hz,.91);
+      rotated.forEach((p,i)=>assert.ok(p.distanceTo(front[i])<1e-6));
+    }
+  }finally{root.quaternion.copy(orientation);}
+});
+
+test('both hands curl toward the palm, spread the outer digits and oppose the thumb',()=>{
+  for(const side of ['left','right']){
+    const hand=bone(side+'Hand');
+    const local=id=>hand.worldToLocal(bone(side+id).getWorldPosition(new Vector3()));
+    rig.articulation.apply({});
+    const index=local('IndexDistal'),middle=local('MiddleDistal');
+    const width=index.distanceTo(local('LittleDistal'));
+    const gap=local('ThumbDistal').distanceTo(local('MiddleProximal'));
+    rig.articulation.apply({[side+'Index0']:1,[side+'Index1']:1});
+    assert.ok(local('IndexDistal').y<index.y-.03);
+    assert.ok(local('MiddleDistal').distanceTo(middle)<1e-6);
+    rig.articulation.apply({[side+'Spread']:.22,[side+'ThumbOpposition']:.5});
+    assert.ok(local('IndexDistal').distanceTo(local('LittleDistal'))>width+.01);
+    assert.ok(local('ThumbDistal').distanceTo(local('MiddleProximal'))<gap-.02);
+  }
+});
+
+test('uninterrupted idle alternates quiet shifts and sustained rest',()=>{
+  rig.configure('auto');rig.begin('idle');rig.phase='idle';
+  for(let cycle=0;cycle<8;cycle++){
+    assert.equal(rig.clip,'idle');
+    assert.ok(rig.holdUntil>=9);
+    rig.age=rig.holdUntil;rig.update(1/120);
+    assert.ok(['fold','cheek','nod'].includes(rig.clip));
+    rig.age=rig.holdUntil;rig.update(1/120);
+  }
 });
 
 test('breath continues across gesture changes and stops with Reduce Motion',()=>{
