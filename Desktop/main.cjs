@@ -40,12 +40,7 @@ const { LocalModels } = require('./models.cjs'),
   network = require('./network.cjs'),
   speech = require('./speech.cjs'),
   { Telegram } = require('./telegram.cjs');
-if (
-  process.env.HTTPS_PROXY ||
-  process.env.https_proxy ||
-  process.env.HTTP_PROXY ||
-  process.env.http_proxy
-) {
+if (process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy) {
   const exclusions = [process.env.NO_PROXY || process.env.no_proxy, 'localhost', '127.0.0.1', '[::1]']
     .filter(Boolean)
     .join(',');
@@ -59,9 +54,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 const bundled = fs.existsSync(path.join(__dirname, 'renderer'));
-const renderer = bundled
-  ? path.join(__dirname, 'renderer')
-  : path.join(__dirname, '..', 'Resources', 'Web');
+const renderer = bundled ? path.join(__dirname, 'renderer') : path.join(__dirname, '..', 'Resources', 'Web');
 const engines = process.env.MIRA_ENGINE_DIR || path.join(process.resourcesPath, 'engines');
 if (process.platform === 'win32')
   process.env.PATH = path.join(engines, 'msvc') + path.delimiter + process.env.PATH;
@@ -278,6 +271,14 @@ function toggleSeat() {
     },
   );
 }
+function overlayBounds(display, settings) {
+  const area = display.workArea;
+  const height = Math.min(settings.overlayHeight, Math.max(1, area.height - 30));
+  const width = Math.min(Math.round((height * 265) / 440), Math.max(1, area.width - 40));
+  const x = settings.overlayAnchor.endsWith('left') ? area.x + 20 : area.x + area.width - width - 20;
+  const y = settings.overlayAnchor.startsWith('top') ? area.y + 15 : area.y + area.height - height - 15;
+  return { width, height, x, y };
+}
 function overlayState(open) {
   if (!open) {
     overlay?.close();
@@ -287,12 +288,8 @@ function overlayState(open) {
     overlay.show();
     return;
   }
-  const a = screen.getDisplayMatching(main.getBounds()).workArea;
   overlay = new BrowserWindow({
-    width: 265,
-    height: 440,
-    x: a.x + a.width - 285,
-    y: a.y + a.height - 455,
+    ...overlayBounds(screen.getDisplayMatching(main.getBounds()), store.data.settings),
     transparent: true,
     frame: false,
     resizable: true,
@@ -668,7 +665,7 @@ async function execute(spec, remote = false) {
             push({ type: 'playMusic' });
             return;
           case 'search': {
-            const results = await network.search(b.value, secret('search'), controller.signal);
+            const results = await searchWeb(b.value, controller.signal);
             push({ type: 'results', results, query: b.value });
             return;
           }
@@ -803,6 +800,9 @@ function getChat(id) {
   return c;
 }
 const { plan, calendarPhrase, nextDue } = require('./planner.cjs');
+function searchWeb(query, signal) {
+  return network.search(query, secret('search'), signal, (url, options) => net.fetch(String(url), options));
+}
 async function chatConnection() {
   const s = store.data.settings;
   if (s.provider === 'local') {
@@ -941,10 +941,8 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
       files: remote ? [] : items,
     };
   }
-  if (
-    (m = text.match(/^(?:найди(?: в интернете| в сети)?|поищи|поиск(?: в интернете)?)\s*[: ]\s*(.+)/isu))
-  ) {
-    const results = await network.search(m[1], secret('search'), signal);
+  if ((m = text.match(/^(?:найди(?: в интернете| в сети)?|поищи|поиск(?: в интернете)?)\s*[: ]\s*(.+)/isu))) {
+    const results = await searchWeb(m[1], signal);
     if (!results.length) return { text: 'По этому запросу источников не нашлось.', sources: [] };
     const excerpts = results
       .slice(0, 5)
@@ -1056,8 +1054,7 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
     },
     ...recent,
   ];
-  const connector =
-    !remote && d.tools.find((t) => normal(text).startsWith('через ' + normal(t.name) + ' '));
+  const connector = !remote && d.tools.find((t) => normal(text).startsWith('через ' + normal(t.name) + ' '));
   if (connector) {
     const config = { ...connector, token: secret('mcp-' + connector.id) };
     const listed = await network.mcp(config, 'tools/list', {}, signal);
@@ -1505,6 +1502,8 @@ const actions = {
       theme: ['cream', 'night', 'sage', 'rose', 'graphite', 'coal', 'mist', 'system'],
       provider: ['local', 'endpoint'],
       fps: [30, 60, 120, 240],
+      overlayHeight: [300, 440, 600, 750],
+      overlayAnchor: ['bottom-right', 'bottom-left', 'top-right', 'top-left'],
       avatar: ['vita', ...store.data.avatars.map((x) => x.id)],
       stt: ['local', 'speechAPI'],
       voice: ['builtin', 'system', 'fish', 'speechAPI', ...store.data.voices.map((x) => x.id)],
@@ -1555,6 +1554,7 @@ const actions = {
     if (s.voice === 'speechAPI' && !s.speechService.ttsModel) throw Error('Укажи модель озвучивания');
     for (const k of [
       'reduced',
+      'introDone',
       'showAvatar',
       'glass',
       'island',
@@ -1576,6 +1576,11 @@ const actions = {
     else {
       store.data.settings = s;
       changed();
+    }
+    if (overlay && ('overlayAnchor' in input || 'overlayHeight' in input)) {
+      const bounds = overlayBounds(screen.getDisplayMatching(overlay.getBounds()), s);
+      if (seated) endSeat(false);
+      overlay.setBounds(bounds);
     }
     if (['island', 'islandPin', 'hideCapture'].some((k) => k in input)) {
       island.configure();
@@ -1714,8 +1719,7 @@ const actions = {
   rates: network.rates,
   add: ({ kind, text, time, repeat, id, routineId }) => {
     if (!['tasks', 'notes', 'events'].includes(kind)) throw Error('Неизвестный список');
-    if (routineId && !store.data.routines.some((r) => r.id === routineId))
-      throw Error('Команда не найдена');
+    if (routineId && !store.data.routines.some((r) => r.id === routineId)) throw Error('Команда не найдена');
     if (!id) return addItem(kind, text, time, { repeat, routineId });
     const row = store.data[kind].find((x) => x.id === id),
       value = String(text || '')
@@ -1981,11 +1985,7 @@ function init() {
   if (store.data.pairedChat && store.data.secrets.telegram) bot.listen();
 }
 ipcMain.handle('desk', async (e, name, data = {}) => {
-  if (
-    !e.senderFrame ||
-    e.senderFrame !== e.sender.mainFrame ||
-    !e.senderFrame.url.startsWith('mira://desk/')
-  )
+  if (!e.senderFrame || e.senderFrame !== e.sender.mainFrame || !e.senderFrame.url.startsWith('mira://desk/'))
     throw Error('Недоступно');
   const widgetId = screenWidgets?.identify(e.sender);
   if (widgetId && name === 'screenAction') return screenWidgets.action(widgetId, data || {});

@@ -22,13 +22,29 @@
       </header>
       <div class="toolbar">
         <nav id="tabs" aria-label="Разделы"></nav>
-        <button
-          id="topOverlay"
-          class="plain"
-          title="Персонаж поверх окон"
-          aria-label="Персонаж поверх окон"
-          data-i="pin"
-        ></button>
+        <div class="surfaceTools">
+          <button
+            id="panelWidgets"
+            title="Панель виджетов"
+            aria-label="Панель виджетов"
+            aria-expanded="false"
+            data-i="layout-dashboard"
+          ></button
+          ><button
+            data-act="showAvatar"
+            id="homeCharacter"
+            title="Вита на главной"
+            aria-label="Вита на главной"
+            data-i="user-round"
+          ></button>
+          <button
+            id="topOverlay"
+            class="plain"
+            title="Персонаж поверх окон"
+            aria-label="Персонаж поверх окон"
+            data-i="pin"
+          ></button>
+        </div>
       </div>
       <div class="rail">
         <button data-go="home" title="Разговор" aria-label="Разговор" data-i="message-circle"></button
@@ -52,8 +68,9 @@
         <section id="home">
           <div id="hero">
             <div id="welcome">
-              <div class="today" id="today"></div>
-              <h1><em id="heroName">Мира</em><span class="shine">✦</span></h1>
+              <h1>
+                <span class="possessive">твоя </span><em id="heroName">Мира</em><span class="shine">✦</span>
+              </h1>
               <p id="hello"></p>
             </div>
             <div id="chatBox" hidden>
@@ -68,17 +85,40 @@
               <form id="messageForm">
                 <button
                   type="button"
+                  data-act="context"
+                  aria-label="Добавить контекст"
+                  title="Добавить контекст"
+                  data-i="plus"
+                ></button>
+                <textarea
+                  id="prompt"
+                  rows="1"
+                  placeholder="Спроси о чём угодно…"
+                  aria-label="Сообщение"
+                ></textarea
+                ><button
+                  type="button"
+                  data-act="abilities"
+                  id="slash"
+                  aria-label="Слэш-команды"
+                  title="Слэш-команды"
+                >
+                  /</button
+                ><button
+                  type="button"
                   id="attach"
                   title="Добавить текстовый файл"
                   aria-label="Добавить файл"
                   data-i="paperclip"
                 ></button
-                ><textarea
-                  id="prompt"
-                  rows="1"
-                  placeholder="Спроси или дай команду…"
-                  aria-label="Сообщение"
-                ></textarea
+                ><button
+                  type="button"
+                  id="composeOptions"
+                  aria-label="Параметры чата"
+                  aria-expanded="true"
+                  title="Параметры чата"
+                  data-i="chevron-down"
+                ></button
                 ><button
                   type="button"
                   id="mic"
@@ -88,10 +128,15 @@
                 ></button
                 ><button id="send" title="Отправить" aria-label="Отправить" data-i="arrow-up"></button>
               </form>
+              <div id="chatOptions">
+                <button data-act="chatModel" aria-label="Выбрать модель">
+                  <i data-i="brain-circuit"></i><span id="chatModelName">Модель</span></button
+                ><button data-act="commandPicker">Запустить <i data-i="play"></i></button>
+              </div>
               <div class="quick">
-                <button id="voiceStart" data-icon="audio-lines">Разговор голосом</button
-                ><button id="focusQuick" data-icon="timer">Режим учёбы</button
-                ><button id="searchQuick" data-icon="globe">Найти в сети</button>
+                <button id="recentChat" data-icon="history">Последний чат</button>
+                <button id="voiceStart" data-icon="mic">Включить микрофон</button>
+                <button data-act="abilities" data-icon="sparkles">Что ты умеешь?</button>
               </div>
               <div id="voiceBar" hidden>
                 <b class="pulse"></b><span id="voiceStatus"></span
@@ -123,6 +168,7 @@
             ><button id="dance" title="Потанцевать" aria-label="Потанцевать" data-i="music-2"></button>
           </div>
         </div>
+        <nav id="sectionNav" aria-label="Разделы страницы" hidden></nav>
         <section id="content" hidden></section>
       </main>
       <footer>
@@ -151,6 +197,20 @@
       </div>
       <div id="widgetBody"></div>
     </aside>
+    <dialog id="intro" aria-labelledby="introTitle">
+      <button id="introSkip" type="button">Пропустить</button>
+      <div class="introPage">
+        <div id="introMark"></div>
+        <h2 id="introTitle"></h2>
+        <p id="introInfo"></p>
+        <div id="introFields"></div>
+        <p id="introError" role="alert"></p>
+      </div>
+      <div class="introFoot">
+        <button id="introBack">Назад</button><span id="introProgress"></span
+        ><button id="introNext">Далее</button>
+      </div>
+    </dialog>
     <dialog id="modal">
       <div class="subhead">
         <h2 id="modalTitle"></h2>

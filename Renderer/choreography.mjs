@@ -91,6 +91,7 @@ export class ChoreographyRig {
     if(this.mode!=='auto' && kind!=='dance') return;
     if(kind==='dance'){this.begin('dance',true);this.holdUntil=12;}
     else if(kind==='greeting')this.begin('welcome',true);
+    else if(kind==='arrival')this.begin('arrival',true);
     else if(kind==='touch')this.begin(this.clip==='temples'?'heart':'temples',true);
   }
   choose(phase) {
@@ -103,9 +104,10 @@ export class ChoreographyRig {
     if(!candidates.length)return this.history.find(id=>pools[phase].includes(id));
     return candidates[Math.floor(this.random()*candidates.length)];
   }
-  update(dt,{phase='idle',audio=0,reduced=false}={}) {
+  update(dt,{phase='idle',audio=0,reduced=false,playbackDelta=NaN}={}) {
     if(!this.enabled)this.begin(this.mode==='auto'?'idle':this.mode);
     dt=Math.max(0, Math.min(.05,dt));
+    const clipStep=Number.isFinite(playbackDelta)?Math.max(0,Math.min(1.5,playbackDelta)):dt;
     if(reduced){
       if(this.clip!=='idle')this.begin('idle');
       this.breathCycle=0;this.inhale=0;
@@ -113,7 +115,7 @@ export class ChoreographyRig {
       this.stance?.beginTransfer(false);this.renderPose(0);return;
     }
     if(this.wasReduced){this.wasReduced=false;this.begin(this.mode==='auto'?'idle':this.mode);}
-    this.elapsed+=dt;this.silence=audio>.025?0:this.silence+dt;
+    this.elapsed+=clipStep;this.silence=audio>.025?0:this.silence+clipStep;
     const state=phase==='speaking'&&this.silence>.8?'listening':phase;
     const changed=state!==this.phase;
     this.phase=state;
@@ -127,7 +129,7 @@ export class ChoreographyRig {
     this.breathCycle=(this.breathCycle+dt/period)%1;
     const b=this.breathCycle;
     this.inhale=b<.38?smooth(b/.38):1-smooth((b-.38)/.62);
-    this.age+=dt;this.fade+=dt;this.renderPose(dt);
+    this.age+=clipStep;this.fade+=clipStep;this.renderPose(dt);
   }
   renderPose(dt) {
     this.previousDt=dt;
@@ -281,6 +283,20 @@ export class ChoreographyRig {
       leftFootForward:.012,rightFootForward:-.014,leftFootLift:foot*.038,leftKnee:foot*.45,leftFootPitch:foot*.15,
       leftShoulderLift:leftLead*(shot?.shoulder??.075),rightShoulderLift:rightLead*(shot?.shoulder??.075),
       leftShoulderForward:leftLead*.09,rightShoulderForward:rightLead*.09};
+    if(shot?.floor){
+      const settle=at(shot.floor,t);
+      pose.floorSeat=settle;
+      pose.hipsDrop+=settle*.42;
+      pose.hipsForward=-.018*settle;
+      // The feet tuck in succession so the ankles pass at different heights.
+      for(const [i,side] of sides.entries()){
+        const fold=smooth((t-.30-i*.16)/.88);
+        pose[side+'FootSide']-=.073*fold;
+        pose[side+'FootForward']+=(i?.159:.103)*fold;
+        pose[side+'FootLift']=(i?.023:.008)*fold+.032*Math.sin(Math.PI*fold)**2;
+        pose[side+'FootRoll']=(i?1:-1)*.19*fold;
+      }
+    }
     if(this.clip==='welcome') welcomeHands(t,hands,pose);
     if(this.clip==='cheek' || this.clip==='fold'){
       const cheek=this.clip==='cheek', enter=smooth((t-.18)/.59);

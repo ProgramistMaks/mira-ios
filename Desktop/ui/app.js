@@ -17,6 +17,7 @@ import {
 } from './shared.js';
 import * as pages from './pages.js';
 import { Voice } from './audio.js';
+import { openSetup } from './setup.js';
 let state,
   page = 'home',
   current = '',
@@ -52,8 +53,7 @@ const voice = new Voice(
     liveStatus = msg;
     $('#voiceStatus').textContent = msg;
     $('#voiceBar').hidden = !msg;
-    $('#voiceStart').innerHTML =
-      ico('audio-lines') + (voice.enabled ? 'Завершить разговор' : 'Разговор голосом');
+    $('#voiceStart').innerHTML = ico('mic') + (voice.enabled ? 'Завершить разговор' : 'Включить микрофон');
     phase(p, state?.settings.reduced || false);
   },
   (e) => toast(e.message),
@@ -69,6 +69,8 @@ const avatarFrame = $('#avatar');
 let avatarReadyTimer;
 function setupAvatar() {
   clearTimeout(avatarReadyTimer);
+  avatarReadyTimer = undefined;
+  if (!state || (!sceneVisible() && !state.motionPort)) return;
   const a = avatar();
   if (!a?.ready) {
     avatarReadyTimer = setTimeout(setupAvatar, 160);
@@ -79,13 +81,17 @@ function setupAvatar() {
   a.setFrameRate(state.settings.fps);
   a.setState(voice.enabled ? 'listening' : 'idle', state.settings.reduced);
   a.setMotionOutput(!!state.motionPort);
-  a.setActive((page === 'home' && state.settings.showAvatar) || page === 'model');
+  a.setActive(sceneVisible());
 }
 avatarFrame.addEventListener('load', () => {
   if (state) setupAvatar();
 });
+function sceneVisible() {
+  return Boolean((page === 'model' && cache.modelPreview) || (page === 'home' && state.settings.showAvatar));
+}
 function renderFrame() {
-  const visible = page === 'model' || (page === 'home' && state.settings.showAvatar);
+  const visible = sceneVisible();
+  $('#area').classList.toggle('previewingModel', page === 'model' && visible);
   $('#scene').hidden = !visible;
   const a = avatar();
   const appearance = state.settings.avatar + '/' + (state.settings.outfit || 'original');
@@ -95,6 +101,7 @@ function renderFrame() {
   }
   a?.setMotionOutput(!!state.motionPort);
   a?.setActive(visible);
+  if ((visible || state.motionPort) && !a?.ready && !avatarReadyTimer) setupAvatar();
   a?.setFrameRate(state.settings.fps);
   $('#nameplate span').textContent =
     state.avatars.find((v) => v.id === state.settings.avatar)?.name || 'Вита';
@@ -104,7 +111,10 @@ function nav(next) {
   pages.captureDraft(cache.draft);
   cache.openWidget = null;
   drawWidget();
+  if (page !== next) $('#content').scrollTop = 0;
   page = next;
+  $('#home').classList.remove('widgets-open');
+  $('#panelWidgets').setAttribute('aria-expanded', 'false');
   if (page === 'commands' && !cache.draft && state.routines.length)
     cache.draft = structuredClone(state.routines[0]);
   $('#drawer').hidden = true;
@@ -131,8 +141,30 @@ function drawWidget() {
     $('#widgetBody #musicSlot')?.append(music);
   }
 }
+function sections() {
+  const nav = $('#sectionNav');
+  nav.hidden = !['voice', 'ai', 'settings'].includes(page);
+  if (nav.hidden) {
+    nav.replaceChildren();
+    return;
+  }
+  const headings = [...document.querySelectorAll('#content article.box:not([hidden]) > h3')];
+  nav.innerHTML = headings
+    .map((h, i) => {
+      h.id = 'setting-heading-' + i;
+      return '<button data-section="' + h.id + '">' + esc(h.textContent) + '</button>';
+    })
+    .join('');
+}
+$('#sectionNav').onclick = (e) => {
+  const id = e.target.closest('button')?.dataset.section;
+  if (id) document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'instant' });
+};
 function renderPage() {
-  if (page === 'home') return;
+  if (page === 'home') {
+    sections();
+    return;
+  }
   const previous = $('#content').scrollTop;
   $('#content').classList.toggle('expandedGraph', page === 'commands' && !!cache.expanded);
   $('#content').innerHTML = pages[page](state, cache);
@@ -140,6 +172,7 @@ function renderPage() {
     setMusic();
     $('#musicSlot').append(music);
   }
+  sections();
   $('#content').scrollTop = previous;
 }
 function setMusic() {
@@ -155,6 +188,7 @@ music.addEventListener('play', () => {
 function cards() {
   const s = state;
   const meta = {
+    clock: ['clock-3', '', clock.format(new Date())],
     focus: ['timer', 'gold', timerTime(s.focus)],
     tasks: ['list-checks', 'green', s.tasks.filter((t) => !t.done).length + ' в списке'],
     events: [
@@ -196,7 +230,7 @@ function cards() {
         '</i><div><small>' +
         esc(k) +
         '</small><strong ' +
-        (id === 'focus' ? 'data-clock' : '') +
+        (id === 'focus' ? 'data-clock' : id === 'clock' ? 'data-wall-time' : '') +
         '>' +
         esc(v) +
         '</strong></div><i>' +
@@ -249,6 +283,8 @@ function renderChat() {
   }
   $('#send').innerHTML = ico(sending ? 'circle-stop' : 'arrow-up');
   $('#send').title = sending ? 'Остановить' : 'Отправить';
+  $('#send').setAttribute('aria-label', $('#send').title);
+  $('#messageForm').dataset.busy = String(sending);
   $('#historyTools').innerHTML =
     select(
       'Проект',
@@ -314,32 +350,38 @@ function render() {
         b.dataset.go === page || (page === 'desk' && b.closest('nav') && b.dataset.go === 'home'),
       ),
     );
-  $('#today').textContent = new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date());
-  $('#heroName').textContent = state.settings.name;
-  const h = new Date().getHours();
-  $('#hello').textContent =
-    (h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер') +
-    (state.settings.user ? ', ' + state.settings.user : '') +
-    '. О чём поговорим?';
+  $('#chatModelName').textContent =
+    look.provider === 'local'
+      ? state.models.find((m) => m.id === look.model)?.name || 'Локальная модель'
+      : look.cloudModel || 'Сервис ИИ';
+  $('#heroName').textContent = look.name;
+  $('#hello').textContent = state.settings.user ? 'Привет, ' + state.settings.user + '!' : 'О чём поговорим?';
+  $('#homeCharacter').setAttribute('aria-pressed', String(look.showAvatar));
+  $('#recentChat').disabled = !state.chats.some((chat) => chat.messages.length);
   $('#initial').textContent = (state.settings.user || 'М')[0].toUpperCase();
   $('#profile').textContent = state.settings.user || 'Мой компьютер';
   $('#time').textContent = clock.format(new Date());
   const ready =
     state.settings.provider === 'local'
       ? state.models.some((m) => m.id === state.settings.model && m.installed)
-      : Boolean(
-          state.keys.includes('ai') || /^http:\/\/(localhost|127\.0\.0\.1)/.test(state.settings.base),
-        );
+      : Boolean(state.keys.includes('ai') || /^http:\/\/(localhost|127\.0\.0\.1)/.test(state.settings.base));
   $('#services').innerHTML = [
     [ready, 'ИИ'],
     [true, 'Речь'],
     [state.settings.voice !== 'fish' || state.keys.includes('fish'), 'Голос'],
   ]
-    .map(([b, t]) => '<span><i class="' + (b ? 'on' : '') + '"></i>' + t + '</span>')
+    .map(
+      ([b, t], i) =>
+        '<button data-go="' +
+        (i ? 'voice' : 'ai') +
+        '" title="' +
+        (b ? 'Настроено' : 'Требуется настройка') +
+        '"><i class="' +
+        (b ? 'on' : '') +
+        '"></i>' +
+        t +
+        '</button>',
+    )
     .join('');
   cards();
   drawWidget();
@@ -471,9 +513,7 @@ async function handle(action, id) {
     const title = { tasks: 'Задача', events: 'Напоминание', notes: 'Заметка' }[k];
     const text =
       k === 'notes'
-        ? '<label class="field">Текст<textarea id="itemText">' +
-          esc(row?.text || '') +
-          '</textarea></label>'
+        ? '<label class="field">Текст<textarea id="itemText">' + esc(row?.text || '') + '</textarea></label>'
         : field('Текст', 'itemText', row?.text || '');
     modal(
       title,
@@ -537,6 +577,8 @@ async function handle(action, id) {
       closeModal();
       return;
     case 'day':
+      $('#home').classList.remove('widgets-open');
+      $('#panelWidgets').setAttribute('aria-expanded', 'false');
       cache.openWidget = id;
       if (id === 'system') cache.sys = await call('system');
       drawWidget();
@@ -544,6 +586,67 @@ async function handle(action, id) {
     case 'dismissWidget':
       cache.openWidget = null;
       drawWidget();
+      return;
+    case 'setup':
+      openSetup(state, refresh);
+      return;
+    case 'context':
+      modal(
+        'Добавить контекст',
+        btn('Прикрепить файл', 'pickContext', 'paperclip') +
+          btn('Разговоры и проекты', 'chooseProject', 'history') +
+          state.notes
+            .slice(0, 8)
+            .map((n) => btn(n.text.slice(0, 65), 'attachNote', 'notebook-pen', '', n.id))
+            .join(''),
+      );
+      return;
+    case 'chooseProject':
+      closeModal();
+      $('#drawer').hidden = false;
+      return;
+    case 'attachNote': {
+      const note = state.notes.find((n) => n.id === id);
+      if (note) {
+        attachment = { name: 'Заметка', text: note.text };
+        closeModal();
+        $('#attachment').textContent = 'Заметка ×';
+        $('#attachment').hidden = false;
+        $('#prompt').focus();
+      }
+      return;
+    }
+    case 'chatModel':
+      nav('ai');
+      return;
+    case 'commandPicker':
+      modal(
+        'Запустить команду',
+        state.routines.map((r) => btn(r.name, 'launchFromChat', 'play', '', r.id)).join('') ||
+          btn('Открыть редактор команд', 'commandEditor', 'workflow'),
+      );
+      return;
+    case 'launchFromChat':
+      closeModal();
+      await call('run', { id });
+      return;
+    case 'commandEditor':
+      closeModal();
+      nav('commands');
+      return;
+    case 'abilities':
+      modal(
+        'Что ты умеешь?',
+        btn('Найти в интернете', 'searchNow', 'globe') +
+          btn('Поставить таймер', 'focusCustom', 'timer') +
+          btn('Добавить заметку', 'add-notes', 'notebook-pen') +
+          btn('Создать задачу', 'add-tasks', 'list-checks') +
+          btn('Прикрепить файл', 'pickContext', 'paperclip'),
+      );
+      return;
+    case 'pickContext':
+      closeModal();
+      $('#attach').click();
       return;
     case 'saveWake':
       await saveSettings({ wakeAlias: val('wakeAlias') });
@@ -810,6 +913,25 @@ async function handle(action, id) {
       }
       return;
     }
+    case 'modelSection':
+      cache.modelTab = id;
+      renderPage();
+      $('#content').scrollTop = 0;
+      return;
+    case 'modelPreview':
+      cache.modelPreview = !cache.modelPreview;
+      render();
+      return;
+    case 'playModelClip':
+      cache.gesture = id;
+      if (!cache.modelPreview && !state.overlay) {
+        cache.modelPreview = true;
+        render();
+      }
+      avatar()?.configureChoreography(id);
+      avatar()?.replayGesture();
+      await call('motion', { id });
+      return;
     case 'showAvatar':
       return saveSettings({ showAvatar: !state.settings.showAvatar });
     case 'seat':
@@ -921,6 +1043,7 @@ async function handle(action, id) {
     case 'saveRole':
       return saveSettings({ role: val('role') });
     case 'searchNow':
+      closeModal();
       nav('home');
       $('#prompt').value = 'Найди в интернете ';
       $('#prompt').focus();
@@ -1118,9 +1241,7 @@ async function handle(action, id) {
           btn('Экспорт набора', 'exportPack', 'download', '', id) +
           (c.theme ? btn('Применить тему', 'extensionTheme', 'palette', '', id) : '') +
           (c.ai ? btn('ИИ · ' + new URL(c.ai.base).host, 'extensionAI', 'brain-circuit', '', id) : '') +
-          (c.speech
-            ? btn('Голос · ' + new URL(c.speech.base).host, 'extensionSpeech', 'mic', '', id)
-            : '') +
+          (c.speech ? btn('Голос · ' + new URL(c.speech.base).host, 'extensionSpeech', 'mic', '', id) : '') +
           (c.tools || [])
             .map((t, i) =>
               btn(
@@ -1279,10 +1400,7 @@ async function handle(action, id) {
       const ref = state.published?.[state.workshopRepo + '#' + id],
         current = await call('workshopInspect', { key: ref.key });
       cache.workSha = current.sha;
-      modal(
-        'Снять с публикации «' + current.name + '»?',
-        btn('Снять', 'workUnpublish', 'x', 'primary', id),
-      );
+      modal('Снять с публикации «' + current.name + '»?', btn('Снять', 'workUnpublish', 'x', 'primary', id));
       return;
     }
     case 'workUnpublish':
@@ -1411,6 +1529,8 @@ document.addEventListener('change', (e) => {
     glow: { glow: +v },
     glass: { glass: v === 'on' },
     avatarPick: { avatar: v },
+    overlayHeight: { overlayHeight: +v },
+    overlayAnchor: { overlayAnchor: v },
     outfit: { outfit: v },
     voicePick: { voice: v },
     sysVoice: { systemVoice: v },
@@ -1528,8 +1648,29 @@ $('#attachment').onclick = () => {
 };
 $('#mic').onclick = $('#voiceStart').onclick = () => toggleVoice().catch(err);
 $('#voiceEnd').onclick = () => voice.stop();
-$('#focusQuick').onclick = () => handle('focusCustom').catch(err);
-$('#searchQuick').onclick = () => handle('searchNow');
+$('#composeOptions').onclick = () => {
+  const panel = $('#chatOptions');
+  panel.hidden = !panel.hidden;
+  $('#composeOptions').setAttribute('aria-expanded', String(!panel.hidden));
+};
+$('#recentChat').onclick = async () => {
+  const chat = state.chats
+    .filter((c) => c.messages.length)
+    .sort((a, b) => b.messages.at(-1).time - a.messages.at(-1).time)[0];
+  if (!chat) return;
+  try {
+    await call('project', { id: chat.project || '' });
+    await refresh();
+    await handle('openChat', chat.id);
+  } catch (e) {
+    err(e);
+  }
+};
+$('#panelWidgets').onclick = () => {
+  if (page !== 'home') nav('home');
+  const visible = $('#home').classList.toggle('widgets-open');
+  $('#panelWidgets').setAttribute('aria-expanded', String(visible));
+};
 $('#topOverlay').onclick = () => handle('overlay').catch(err);
 $('#dance').onclick = () => handle('dance').catch(err);
 $('#historyBtn').onclick = () => {
@@ -1539,6 +1680,10 @@ $('#newChat').onclick = newChat;
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     $('#drawer').hidden = true;
+    $('#home').classList.remove('widgets-open');
+    $('#panelWidgets').setAttribute('aria-expanded', 'false');
+    cache.openWidget = null;
+    drawWidget();
     if (voice.enabled) voice.stop();
   }
 });
@@ -1650,14 +1795,15 @@ setInterval(() => {
     stats = avatar()?.frameStats;
   if (meter)
     meter.textContent = stats
-      ? 'Отрисовка · ' +
-        Math.round(stats.fps) +
-        ' кадр/с · 95% кадров до ' +
-        Math.round(stats.p95ms) +
-        ' мс'
+      ? 'Отрисовка · ' + Math.round(stats.fps) + ' кадр/с · 95% кадров до ' + Math.round(stats.p95ms) + ' мс'
       : '';
 
-  $('#time').textContent = clock.format(new Date());
+  const now = new Date();
+  $('#time').textContent = clock.format(now);
+  document.querySelectorAll('[data-wall-time]').forEach((el) => (el.textContent = clock.format(now)));
+  document
+    .querySelectorAll('[data-wall-date]')
+    .forEach((el) => (el.textContent = pages.wallDate.format(now)));
   document.querySelectorAll('[data-clock]').forEach((el) => (el.textContent = timerTime(state.focus)));
 }, 1000);
 setInterval(() => {
@@ -1679,6 +1825,7 @@ async function boot() {
   current = state.chats[0]?.id || '';
   render();
   setupAvatar();
+  if (!state.settings.introDone) openSetup(state, refresh);
 }
 boot().catch(err);
 
@@ -1688,5 +1835,6 @@ document.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLocaleLowerCase();
     for (const card of document.querySelectorAll('#content .box'))
       card.hidden = !card.textContent.toLocaleLowerCase().includes(q);
+    sections();
   }
 });

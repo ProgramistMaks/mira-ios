@@ -26,6 +26,7 @@ const widgetNames = {
   tasks: 'Задачи',
   notes: 'Заметки',
   events: 'Календарь',
+  clock: 'Часы',
   weather: 'Погода',
   rates: 'Курсы валют',
   music: 'Плеер',
@@ -73,6 +74,8 @@ const defaults = () => ({
     glow: 55,
     glass: false,
     fps: 120,
+    overlayHeight: 440,
+    overlayAnchor: 'bottom-right',
     provider: 'local',
     model: 'qwen4',
     base: 'https://api.openai.com/v1',
@@ -89,7 +92,8 @@ const defaults = () => ({
     fishVoice: '',
     avatar: 'vita',
     outfit: 'original',
-    showAvatar: true,
+    showAvatar: false,
+    introDone: false,
     city: 'Москва',
     reduced: false,
     hotkey: 'CommandOrControl+Alt+M',
@@ -132,7 +136,12 @@ class Store {
     this.data = {
       ...initial,
       ...disk,
-      settings: { ...initial.settings, ...disk.settings, widgets: widgetLayout(disk.settings?.widgets) },
+      settings: {
+        ...initial.settings,
+        introDone: Boolean(disk.settings),
+        ...disk.settings,
+        widgets: widgetLayout(disk.settings?.widgets),
+      },
     };
   }
   save() {

@@ -56,11 +56,14 @@ class PlantedLeg {
     const a = this.upperLength, b = this.lowerLength;
     const worldScale = this.root.getWorldScale(this.direction).y;
     const kneeLift = (a + b - Math.sqrt(a*a + b*b + 2*a*b*Math.cos(knee))) / Math.max(1e-8, worldScale);
+    const seat = Math.max(0, bounded(pose, 'floorSeat', 1));
     this.offset.set((side === 'left' ? -1 : 1) * bounded(pose, side + 'FootSide', .18),
-      Math.max(0, bounded(pose, side + 'FootLift', .1)), bounded(pose, side + 'FootForward', .09) * this.forward).multiplyScalar(height);
+      Math.max(0, bounded(pose, side + 'FootLift', .1)), bounded(pose, side + 'FootForward', .09 + .09 * seat) * this.forward).multiplyScalar(height);
     this.offset.y += kneeLift;
     this.footTilt.setFromEuler(this.footEuler.set(-this.forward * bounded(pose, side + 'FootPitch', .4), 0, bounded(pose, side + 'FootRoll', .2)));
-    this.kneeIn=(side==='left'?1:-1)*bounded(pose,side+'KneeIn',.65);
+    const outward = .45 * seat;
+    this.kneeUp = 1.08 * seat;
+    this.kneeIn=(side==='left'?1:-1)*(bounded(pose,side+'KneeIn',.65)-outward);
     this.rollFoot=this.toes && Number.isFinite(pose[side+'HeelRoll']);
     if(this.rollFoot){
       const roll=bounded(pose,side+'HeelRoll',.55);
@@ -99,7 +102,7 @@ class PlantedLeg {
     const along = (this.upperLength ** 2 - this.lowerLength ** 2 + reach ** 2) / (2 * reach);
     const height = Math.sqrt(Math.max(0, this.upperLength ** 2 - along ** 2));
     if (transferring) this.bend.copy(this.transferBend);
-    else this.bend.set(this.kneeIn, 0, this.forward);
+    else this.bend.set(this.kneeIn, this.kneeUp, this.forward);
     this.bend.applyQuaternion(rootRotation);
     this.bend.addScaledVector(this.direction, -this.bend.dot(this.direction)).normalize();
     this.knee.copy(this.a).addScaledVector(this.direction, along).addScaledVector(this.bend, height);
@@ -140,7 +143,8 @@ export class PlantedStance {
     // An incomplete rig keeps its original pose; never animate only one leg.
     if (this.legs.length !== 2) return;
     const side = bounded(pose, 'hipsSide', 0.09), forward = bounded(pose, 'hipsForward', 0.02);
-    const drop = Math.max(0, bounded(pose, 'hipsDrop', 0.06));
+    const seat = Math.max(0, bounded(pose, 'floorSeat', 1));
+    const drop = Math.max(0, bounded(pose, 'hipsDrop', 0.06 + .42 * seat));
     for (const [index, leg] of this.legs.entries()) { leg.reset(); leg.configure(pose, index === 0 ? 'left' : 'right', this.height); }
     this.hips.quaternion.copy(this.restRotation)
       .multiply(this.tilt.setFromEuler(this.euler.set(bounded(pose, 'hipsPitch', .12), bounded(pose, 'hipsYaw', 0.06), bounded(pose, 'hipsRoll', 0.04))));

@@ -1,9 +1,9 @@
 const { endpoint, webURL } = require('./core.cjs');
-async function response(url, options = {}, timeout = 25000) {
+async function response(url, options = {}, timeout = 25000, fetcher = fetch) {
   const signal = options.signal
     ? AbortSignal.any([options.signal, AbortSignal.timeout(timeout)])
     : AbortSignal.timeout(timeout);
-  const r = await fetch(url, { ...options, signal });
+  const r = await fetcher(url, { ...options, signal });
   if (!r.ok) throw Error('Сервис вернул ' + r.status + ' (' + new URL(url).hostname + ')');
   return r;
 }
@@ -151,19 +151,18 @@ function plain(s) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-async function search(query, key, signal) {
+async function search(query, key, signal, fetcher = fetch) {
+  const request = (url, options, timeout) => response(url, { ...options, signal }, timeout, fetcher);
   if (key) {
     const d = await (
-      await response('https://api.tavily.com/search', { ...post({ query, max_results: 5 }, key), signal })
+      await request('https://api.tavily.com/search', post({ query, max_results: 5 }, key))
     ).json();
     return (d.results || []).map((x) => ({ title: x.title, url: webURL(x.url), text: x.content }));
   }
   const du = new URL('https://lite.duckduckgo.com/lite/');
   du.searchParams.set('q', query);
   try {
-    const html = await (
-        await response(du, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal }, 12000)
-      ).text(),
+    const html = await (await request(du, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 12000)).text(),
       results = [];
     const anchors = [...html.matchAll(/<a\b([^>]*\bclass=['"]result-link['"][^>]*)>([\s\S]*?)<\/a>/gi)];
     for (let i = 0; i < anchors.length && results.length < 5; i++) {
@@ -184,7 +183,7 @@ async function search(query, key, signal) {
   const url = new URL('https://www.bing.com/search');
   url.searchParams.set('format', 'rss');
   url.searchParams.set('q', query);
-  const xml = await (await response(url, { signal })).text();
+  const xml = await (await request(url)).text();
   const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)]
     .map((m) => {
       const get = (t) =>

@@ -74,10 +74,7 @@ try {
     'Packaged Piper must generate speech',
   );
   // Fixed microphone recording keeps pronunciation stable across Piper's random noise samples.
-  await writeFile(
-    mic,
-    microphoneWav(await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'))),
-  );
+  await writeFile(mic, microphoneWav(await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'))));
   const args = [
     '--use-angle=swiftshader',
     '--enable-unsafe-swiftshader',
@@ -100,10 +97,14 @@ try {
   const p = await app.firstWindow(),
     errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
+  await p.locator('#introSkip').click();
+  await expect(p.locator('#homeCharacter')).toHaveAttribute('aria-pressed', 'false');
+  if (evidence) await p.screenshot({ path: path.join(evidence, 'home.png') });
+  await p.locator('#homeCharacter').click();
   await p.waitForFunction(() => document.querySelector('#avatar')?.contentWindow.companion?.ready, null, {
     timeout: 90000,
   });
-  if (evidence) await p.screenshot({ path: path.join(evidence, 'home.png') });
+  if (evidence) await p.screenshot({ path: path.join(evidence, 'home-character.png') });
   for (const dest of ['desk', 'commands', 'model', 'voice', 'ai', 'plugins', 'settings']) {
     await p
       .locator('[data-go="' + dest + '"]')
@@ -143,8 +144,7 @@ try {
   });
   await p.locator('#voiceStart').click();
   await p.waitForFunction(
-    () =>
-      window.voicePhases.includes('Отвечаю…') && window.voicePhases.at(-1) === 'Слушаю. Можно говорить.',
+    () => window.voicePhases.includes('Отвечаю…') && window.voicePhases.at(-1) === 'Слушаю. Можно говорить.',
     null,
     { timeout: 90000 },
   );
@@ -186,6 +186,7 @@ try {
       }
     });
     await p.locator('[data-go=model]').first().click();
+    await p.locator('[data-act=modelSection][data-id=advanced]').click();
     await p.locator('#motionPort').fill(String(listener.address().port));
     await p.locator('[data-act=motionOutput]').click();
     await expect
@@ -216,6 +217,20 @@ try {
     null,
     { timeout: 90000 },
   );
+  await p.locator('[data-go=model]').first().click();
+  await p.locator('[data-act=modelSection][data-id=window]').click();
+  await p.locator('#overlayHeight').selectOption('300');
+  await p.locator('#overlayAnchor').selectOption('top-left');
+  await expect
+    .poll(() =>
+      app.evaluate(({ BrowserWindow, screen }) => {
+        const w = BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/overlay.html'));
+        const rect = w.getBounds(),
+          area = screen.getDisplayMatching(rect).workArea;
+        return [rect.x - area.x, rect.y - area.y, rect.height];
+      }),
+    )
+    .toEqual([20, 15, 300]);
   await p.evaluate(() => window.desk.call('overlay', { open: false }));
   assert.deepEqual(errors, []);
   console.log(

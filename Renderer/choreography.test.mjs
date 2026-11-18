@@ -39,7 +39,7 @@ const point = name => bone(name).getWorldPosition(new Vector3()).divideScalar(he
 test('all menu clips produce finite, moving, different trajectories on Vita', () => {
   const ids = CHOREOGRAPHY.map(entry => entry.id);
   const samples = new Set();
-  assert.equal(new Set(ids).size,16);
+  assert.equal(new Set(ids).size,18);
   for (const id of ids) {
     hold(id,.1);
     const trajectory = [], names = ['leftHand','rightHand','leftFoot','rightFoot','head'];
@@ -80,6 +80,28 @@ test('chest hold, cheek, wave, index fingers and raised foot are distinguishable
   }
   hold('skip',.7);
   assert.ok(point('leftFoot').y-point('rightFoot').y>.035);
+});
+
+test('floor sitting lowers the pelvis, folds both knees out and settles the feet before the hands', () => {
+  hold('idle',1);
+  const standing=point('hips').y;
+  hold('sitFloor',.55);
+  const lowering=point('hips').y;
+  advance(2.1);
+  const pelvis=point('hips'), left=point('leftFoot'), right=point('rightFoot');
+  assert.ok(standing-lowering>.06 && lowering-pelvis.y>.12);
+  assert.ok(standing-pelvis.y>.33);
+  assert.ok(Math.abs(left.x-right.x)<.10);
+  const knees=['leftLowerLeg','rightLowerLeg'].map(point);
+  const spread=Math.abs(knees[0].x-knees[1].x);
+  assert.ok(spread>.12 && spread<.34, 'knee separation '+spread);
+  assert.ok(knees.every(k=>k.y>pelvis.y+.02), 'knees must finish above the seated pelvis');
+  assert.ok(point('leftHand').distanceTo(point('rightHand'))<.12);
+  assert.ok(point('leftHand').y<pelvis.y+.14);
+  advance(.7);
+  assert.ok(point('leftFoot').distanceTo(left)<.003 && point('rightFoot').distanceTo(right)<.003);
+  hold('idle',1);
+  assert.ok(Math.abs(point('hips').y-standing)<.02);
 });
 
 test('side step opens on a planted foot and transfers to the other support leg', () => {

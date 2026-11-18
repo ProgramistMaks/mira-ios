@@ -6,7 +6,7 @@ export const names = {
   model: 'Модель',
   voice: 'Голос',
   ai: 'ИИ',
-  plugins: 'Плагины',
+  plugins: 'Мастерская',
   settings: 'Настройки',
 };
 export const tabIcons = {
@@ -138,6 +138,8 @@ const scale = (title, key, value, items) =>
     items.map((x) => [String(x), String(x)]),
     String(value),
   );
+export const wallDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' });
+const wallTime = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 export function desk(s, c, only) {
   const w = c.weather,
     r = c.rates,
@@ -148,7 +150,17 @@ export function desk(s, c, only) {
   const prefs = s.settings;
   const money = ['USD', 'EUR', 'CNY', 'RUB'].map((x) => [x, x]);
   const temperature = (n) => Math.round(prefs.degree === 'F' ? 32 + n * 1.8 : n) + '°' + prefs.degree;
+  const now = new Date();
   const cards = {
+    clock: box(
+      'Часы',
+      'clock-3',
+      '<div class="wallClock"><time data-wall-time>' +
+        wallTime.format(now) +
+        '</time><small data-wall-date>' +
+        wallDate.format(now) +
+        '</small></div>',
+    ),
     launch: box(
       'Быстрый запуск',
       'play',
@@ -304,10 +316,8 @@ export function desk(s, c, only) {
       'Рабочий стол',
       acts(btn('Виджеты', 'widgets', 'sliders-horizontal'), btn('Найти файл', 'find', 'search')),
     ) +
-    '<div class="grid">' +
-    (active.length
-      ? active.map((w) => cards[w.id]).join('')
-      : empty('Выбери виджеты для рабочего стола.')) +
+    '<div class="grid deskGrid">' +
+    (active.length ? active.map((w) => cards[w.id]).join('') : empty('Выбери виджеты для рабочего стола.')) +
     '</div>'
   );
 }
@@ -471,9 +481,7 @@ export function commands(s, c) {
         ends,
         b.next ?? selected + 1,
       ) +
-      (branch
-        ? select(b.kind === 'repeat' ? 'Повторять с' : 'Нет', 'nodeAlt', ends, b.alternate ?? 0)
-        : '') +
+      (branch ? select(b.kind === 'repeat' ? 'Повторять с' : 'Нет', 'nodeAlt', ends, b.alternate ?? 0) : '') +
       '</div></div>';
   }
   const flow =
@@ -561,78 +569,180 @@ export function reorder(d, from, to) {
     return { ...b, next: dest(b.next), alternate: dest(b.alternate) };
   });
 }
+const modelSections = [
+  ['characters', 'Персонажи'],
+  ['animations', 'Анимации'],
+  ['appearance', 'Внешний вид'],
+  ['window', 'Окно'],
+  ['advanced', 'Дополнительно'],
+];
 export function model(s, c) {
   const a = s.settings;
-  return (
-    heading('Персонаж') +
-    '<div class="stack modelOptions">' +
-    box(
-      'Внешность',
-      'user-round',
-      select(
-        'Модель или комплект одежды',
-        'avatarPick',
-        [['vita', 'Вита'], ...s.avatars.map((x) => [x.id, x.name])],
-        a.avatar,
-      ) +
-        (a.avatar === 'vita'
-          ? select(
-              'Наряд Виты',
-              'outfit',
-              s.outfits.map((o) => [o.id, o.name]),
-              a.outfit,
-            )
-          : '') +
-        acts(
-          btn('Импорт VRM', 'avatar', 'upload'),
-          btn(a.showAvatar ? 'Скрыть на главной' : 'Показать на главной', 'showAvatar', 'user-round'),
-        ),
-    ) +
-    box(
-      'Движения и эмоции',
-      'orbit',
-      select(
-        'Движение',
-        'gesture',
-        [['auto', 'По ситуации'], ...(c.catalog?.clips || []).map((x) => [x.id, x.title])],
-        c.gesture,
-      ) +
+  const tab = c.modelTab || 'characters';
+  const character = s.avatars.find((v) => v.id === a.avatar)?.name || 'Вита';
+  const look =
+    a.avatar === 'vita'
+      ? select(
+          'Наряд Виты',
+          'outfit',
+          s.outfits.map((o) => [o.id, o.name]),
+          a.outfit,
+        )
+      : '';
+  const preview = btn(
+    c.modelPreview ? 'Закрыть просмотр' : 'Посмотреть персонажа',
+    'modelPreview',
+    'user-round',
+  );
+  let content;
+  switch (tab) {
+    case 'animations':
+      content = box(
+        'Что она умеет играть',
+        'orbit',
         select(
           'Эмоция',
           'emotion',
           [['', 'По ситуации'], ...(c.catalog?.emotions || []).map((e) => [e.id, e.title])],
           c.emotion,
         ) +
-        acts(btn('Повторить', 'replay', 'play'), btn('Потанцевать', 'dance', 'music-2')),
-    ) +
-    box(
-      'Рабочий стол',
-      'monitor',
-      acts(
-        btn(s.overlay ? 'Убрать с рабочего стола' : 'Поверх окон', 'overlay', 'pin'),
-        btn(s.seated ? 'Встать' : 'Сесть на край окна', 'seat', 'pin'),
-        btn('Настроить частоту', 'settings', 'sliders-horizontal'),
-      ),
-    ) +
-    box(
-      'Игры и VMC',
-      'monitor',
-      '<p class="muted">Передача движений и мимики на этом ПК. В Minecraft Java выбери VRM в моде ArmorStand и включи приём VMC на том же порту.</p>' +
-        field('Порт получателя', 'motionPort', String(s.motionPort || 39539), 'number') +
-        acts(
-          btn(s.motionPort ? 'Остановить передачу' : 'Передавать движения', 'motionOutput', 'cable'),
-          btn('Сохранить VRM', 'exportAvatar', 'download'),
-          btn(
-            'Страница мода',
-            'source',
-            'external-link',
-            '',
-            'https://github.com/TouchController/ArmorStand',
+          acts(
+            preview,
+            btn('По ситуации', 'playModelClip', 'orbit', '', 'auto'),
+            btn('Потанцевать', 'dance', 'music-2'),
+          ) +
+          '<div class="clipList">' +
+          (c.catalog?.clips || [])
+            .map(
+              (clip) =>
+                '<div><span>' +
+                esc(clip.title) +
+                '</span>' +
+                btn('Показать', 'playModelClip', 'play', '', clip.id) +
+                '</div>',
+            )
+            .join('') +
+          '</div>',
+      );
+      break;
+    case 'appearance':
+      content =
+        box('Внешний вид', 'user-round', look + acts(preview)) +
+        box(
+          'Движение',
+          'orbit',
+          select(
+            'Уменьшение движения',
+            'reduced',
+            [
+              ['off', 'Выключено'],
+              ['on', 'Включено'],
+            ],
+            a.reduced ? 'on' : 'off',
+          ),
+        );
+      break;
+    case 'window':
+      content =
+        box(
+          'Размер',
+          'monitor',
+          select(
+            'Высота окна персонажа',
+            'overlayHeight',
+            [300, 440, 600, 750].map((v) => [v, v + ' пикс.']),
+            a.overlayHeight,
           ),
         ) +
-        '<p class="muted" id="frameMeter" aria-live="off"></p>',
-    ) +
-    '</div>'
+        box(
+          'Расположение',
+          'monitor',
+          select(
+            'Угол экрана',
+            'overlayAnchor',
+            [
+              ['bottom-right', 'Справа внизу'],
+              ['bottom-left', 'Слева внизу'],
+              ['top-right', 'Справа вверху'],
+              ['top-left', 'Слева вверху'],
+            ],
+            a.overlayAnchor,
+          ) +
+            acts(
+              btn(s.seated ? 'Встать' : 'Сесть на край окна', 'seat', 'pin'),
+              btn(a.showAvatar ? 'Скрыть на главной' : 'Показать на главной', 'showAvatar', 'user-round'),
+              preview,
+            ),
+        );
+      break;
+    case 'advanced':
+      content =
+        box(
+          'Отрисовка',
+          'monitor',
+          select(
+            'Целевая частота кадров',
+            'fps',
+            [30, 60, 120, 240].map((v) => [v, v + ' кадров/с']),
+            a.fps,
+          ) +
+            acts(preview) +
+            '<p class="muted" id="frameMeter" aria-live="off"></p>',
+        ) +
+        box(
+          'Игры и VMC',
+          'cable',
+          '<p class="muted">Передача движений и мимики на этом ПК. В Minecraft Java выбери VRM в моде ArmorStand и включи приём VMC на том же порту.</p>' +
+            field('Порт получателя', 'motionPort', String(s.motionPort || 39539), 'number') +
+            acts(
+              btn(s.motionPort ? 'Остановить передачу' : 'Передавать движения', 'motionOutput', 'cable'),
+              btn('Сохранить VRM', 'exportAvatar', 'download'),
+              btn(
+                'Страница мода',
+                'source',
+                'external-link',
+                '',
+                'https://github.com/TouchController/ArmorStand',
+              ),
+            ),
+        );
+      break;
+    default:
+      content = box(
+        'Персонажи',
+        'user-round',
+        select(
+          'Персонаж',
+          'avatarPick',
+          [['vita', 'Вита'], ...s.avatars.map((v) => [v.id, v.name])],
+          a.avatar,
+        ) + acts(btn('Добавить персонажа', 'avatar', 'plus'), preview),
+      );
+  }
+  return (
+    '<div class="modelWorkspace">' +
+    heading('3D-компаньон') +
+    '<div class="companionBar"><strong>' +
+    esc(character) +
+    '</strong><button type="button" role="switch" aria-checked="' +
+    Boolean(s.overlay) +
+    '" data-act="overlay">Включить компаньона <i></i></button></div>' +
+    '<nav class="modelSections" aria-label="Разделы модели">' +
+    modelSections
+      .map(
+        ([key, title]) =>
+          '<button data-act="modelSection" data-id="' +
+          key +
+          '" aria-current="' +
+          (tab === key ? 'page' : 'false') +
+          '">' +
+          title +
+          '</button>',
+      )
+      .join('') +
+    '</nav><div class="stack">' +
+    content +
+    '</div></div>'
   );
 }
 export function voice(s, c) {
@@ -1046,7 +1156,7 @@ export function plugins(s, c) {
 export function settings(s, c) {
   const a = s.settings;
   return (
-    heading('Настройки') +
+    heading('Настройки', btn('Пошаговая настройка', 'setup', 'sliders-horizontal')) +
     '<input class="control" id="prefsQuery" placeholder="Найти настройку" aria-label="Поиск настроек">' +
     '<div class="grid">' +
     box(
@@ -1093,8 +1203,7 @@ export function settings(s, c) {
             rowAction('remove-notes', n.id, 'x', 'Забыть') +
             '</div>',
         )
-        .join('') ||
-        '<p class="muted">Скажи «Запомни …», чтобы Мира учитывала это в будущих разговорах.</p>',
+        .join('') || '<p class="muted">Скажи «Запомни …», чтобы Мира учитывала это в будущих разговорах.</p>',
     ) +
     box(
       'Оформление',

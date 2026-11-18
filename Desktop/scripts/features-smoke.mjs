@@ -65,6 +65,9 @@ try {
   p.on('console', (s) => {
     if (s.type() === 'error') console.error(s.text().slice(0, 260));
   });
+  await p.locator('#introSkip').click();
+  await expect(p.locator('#homeCharacter')).toHaveAttribute('aria-pressed', 'false');
+  await p.locator('#homeCharacter').click();
   await p.waitForFunction(() => document.querySelector('#avatar')?.contentWindow.companion?.ready, null, {
     timeout: 90000,
   });
@@ -100,6 +103,13 @@ try {
   }
   console.log('PDF and DOCX read through the file picker');
   await go('model');
+  await expect(p.locator('.modelSections button')).toHaveCount(5);
+  await p.locator('[data-act=modelSection][data-id=animations]').click();
+  await p.locator('[data-act=playModelClip]').nth(1).click();
+  await expect(p.locator('#scene')).toBeVisible();
+  await p.locator('[data-act=modelSection][data-id=window]').click();
+  await expect(p.locator('[data-act=seat]')).toBeVisible();
+  await p.locator('[data-act=modelSection][data-id=appearance]').click();
   await p.locator('#outfit').selectOption('iris');
   await expect.poll(async () => (await state()).settings.outfit).toBe('iris');
   await p.waitForFunction(
@@ -135,6 +145,7 @@ try {
     .toBe(true);
   console.log('Wardrobe and command generation passed');
   await go('desk');
+  await expect(p.locator('#content [data-wall-time]')).toHaveText(/\d{2}:\d{2}/);
   await p.locator('#content [data-act=widgets]').click();
   await p.locator('[data-widget=weather]').uncheck();
   await p.locator('[data-act=widgetUp][data-id=tasks]').click();
@@ -190,8 +201,7 @@ try {
   await p.locator('[data-act=exportPack]').click();
   await expect
     .poll(
-      async () =>
-        JSON.parse(await readFile(dest, 'utf8').catch(() => '{}')).contributions?.triggers[0].event,
+      async () => JSON.parse(await readFile(dest, 'utf8').catch(() => '{}')).contributions?.triggers[0].event,
     )
     .toBe('reminder');
   const count = (await state()).notes.length;
@@ -246,15 +256,26 @@ try {
           .toBeGreaterThan(n + count);
       };
       for (let k = 0; k < 3; k++) {
-        await canvas.press('Enter', { delay: 90 });
-        await waitFrames(6);
+        await canvas.focus();
+        await p.keyboard.down('Enter');
+        await waitFrames(3);
+        await p.keyboard.up('Enter');
+        await waitFrames(10);
       }
       await waitFrames(25);
       await expect(f.locator('#state')).toContainText('Phase 2');
       const before = await canvas.evaluate((c) => c.toDataURL());
-      await canvas.press('ArrowRight', { delay: 400 });
-      await waitFrames(5);
-      assert.notEqual(await canvas.evaluate((c) => c.toDataURL()), before);
+      await p.keyboard.down('ArrowRight');
+      try {
+        await expect
+          .poll(() => canvas.evaluate((c, data) => c.toDataURL() !== data, before), {
+            timeout: 15000,
+            message: 'Turning in the level must change the rendered frame',
+          })
+          .toBe(true);
+      } finally {
+        await p.keyboard.up('ArrowRight');
+      }
     }
     if (evidence) await p.screenshot({ path: path.join(evidence, id + '.png') });
     await close();

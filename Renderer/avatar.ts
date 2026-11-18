@@ -235,7 +235,7 @@ async function main() {
   let displayedVariant = -1;
   let mouth = 0, elapsed = 0;
   let previousPhase = phase;
-  acting.update(0, reduced); acting.trigger('greeting'); authored.react('greeting'); details.listenCue();
+  acting.update(0, reduced); acting.trigger('greeting'); authored.react(location.protocol === 'mira:' && location.hostname === 'desk' ? 'arrival' : 'greeting'); details.listenCue();
   let lastPoseTime = 0;
   const renderFrame = (timestamp: number) => {
     // A cap is a target, not a claim about measured device performance.
@@ -268,7 +268,7 @@ async function main() {
       if (neck) neck.rotation.set(pose.neckX, pose.neckY, pose.neckZ);
       if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
       armTargets.apply(pose);
-    } else authored.update(delta, {phase, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+    } else authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
     seatWeight = THREE.MathUtils.damp(seatWeight, seated ? 1 : 0, 7, delta);
     if (seatWeight > .001) {
       for (const side of ['left','right'] as const) {

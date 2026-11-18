@@ -50,3 +50,14 @@ test('a visible stall is bounded and invalid or reversed timestamps cannot corru
   assert.equal(timeline.advance(5000, 120), 0);
   assert.ok(Math.abs(timeline.advance(5010, 120) - 0.01) < 1e-10);
 });
+
+test('sampled gestures keep their duration on a slow display while physics remains bounded', () => {
+  const clock = new AnimationTimeline();
+  clock.advance(0, 120);
+  assert.equal(clock.advance(400, 120), .05);
+  assert.equal(clock.playbackDelta, .4);
+  clock.setActive(false);
+  clock.setActive(true);
+  assert.equal(clock.advance(4000, 120), 0);
+  assert.equal(clock.playbackDelta, 0);
+});
