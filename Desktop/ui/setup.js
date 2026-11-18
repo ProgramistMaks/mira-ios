@@ -20,7 +20,7 @@ export function openSetup(state, finished, tour) {
     changed = {},
     short = ['welcome', 'mode', 'speech', 'ai', 'avatar', 'theme', 'done'];
   let step = 0,
-    quick = false,
+    quick = true,
     busy = false,
     steps = [];
   const pages = [
@@ -221,12 +221,19 @@ export function openSetup(state, finished, tour) {
     $('#introTitle').textContent = title;
     $('#introInfo').textContent = n;
     $('#introFields').innerHTML = body();
+    $('#introError').textContent = '';
+    dialog.querySelector('.introPage').scrollTop = 0;
     $('#introBack').hidden = step === 0;
     $('#introNext').textContent = id === 'done' ? 'Завершить' : 'Далее';
-    $('#introProgress').innerHTML = steps
-      .map((_, i) => '<i class="' + (i === step ? 'current' : '') + '"></i>')
-      .join('');
-    $('#introProgress').setAttribute('aria-label', 'Шаг ' + (step + 1) + ' из ' + steps.length);
+    const stepList = $('#introSteps');
+    stepList.innerHTML = steps.map(([, label], i) =>
+      '<li' + (i === step ? ' aria-current="step"' : '') + '>' + esc(label) + '</li>').join('');
+    const current = stepList.querySelector('[aria-current]');
+    const end = current.offsetTop + current.offsetHeight - stepList.offsetTop;
+    if (end > stepList.scrollTop + stepList.clientHeight || step === 0)
+      stepList.scrollTop = Math.max(0, end - stepList.clientHeight);
+    $('#introProgress').textContent = 'Шаг ' + (step + 1) + ' из ' + steps.length;
+
   }
   function capture() {
     for (const el of $('#introFields').querySelectorAll('input[id],select[id],textarea[id]')) {

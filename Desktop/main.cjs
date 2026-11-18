@@ -2667,7 +2667,7 @@ function init() {
     show: !(store.data.settings.startHidden && process.argv.includes('--login')),
     width: 1280,
     height: 820,
-    minWidth: 820,
+    minWidth: 700,
     minHeight: 580,
     frame: false,
     backgroundColor: '#f5efe2',

@@ -1614,10 +1614,13 @@ export function settings(s, c) {
       'Настройки',
       btn('Пошаговая настройка', 'setup', 'sliders-horizontal') + btn('Экскурсия', 'tour', 'compass'),
     ) +
-    '<input class="control" id="prefsQuery" placeholder="Найти настройку" aria-label="Поиск настроек">' +
+    '<label class="preferencesSearch">' + ico('search') +
+    '<input class="control" id="prefsQuery" type="search" value="' + esc(c.preferencesQuery || '') +
+    '" placeholder="Найти настройку" aria-label="Поиск настроек"></label>' +
+    '<p class="settingsEmpty" id="prefsEmpty" role="status" hidden>Настройки по этому запросу не найдены.</p>' +
     '<div class="grid">' +
     box(
-      'Язык и инструменты',
+      'Язык интерфейса',
       'settings',
       select(
         'Язык интерфейса',
@@ -1627,11 +1630,13 @@ export function settings(s, c) {
           ['en', 'English'],
         ],
         a.language,
-      ) +
-        acts(
-          btn('Размещение и форма виджетов', 'widgetShapes', 'layout-dashboard') +
-            btn('Предпросмотр и очистка кэша', 'cachePreview', 'trash-2'),
-        ),
+      ),
+    ) +
+    box(
+      'Виджеты и хранилище',
+      'layout-dashboard',
+      acts(btn('Размещение и форма виджетов', 'widgetShapes', 'layout-dashboard'),
+        btn('Предпросмотр и очистка кэша', 'cachePreview', 'trash-2')),
     ) +
     box(
       'Обновления приложения',
@@ -1652,14 +1657,15 @@ export function settings(s, c) {
         onOff('Исключать окна Миры из захвата экрана', 'hideCapture', a.hideCapture),
     ) +
     box(
-      'При запуске',
+      'Окно и запуск',
       'play',
       (s.platform === 'win32'
         ? onOff('Запуск при входе в Windows', 'startLogin', a.startLogin) +
           onOff('При входе сворачивать в трей', 'startHidden', a.startHidden)
         : '') +
         onOff('Ждать обращения при запуске', 'startListening', a.startListening) +
-        onOff('Пузыри сообщений ИИ', 'bubbles', a.bubbles),
+        onOff('Подложка под кнопками окна', 'windowButtonBackground', a.windowButtonBackground) +
+        onOff('Сворачивать в трей при закрытии', 'minimizeToTray', a.minimizeToTray),
     ) +
     box(
       'Уведомления',
@@ -1727,8 +1733,7 @@ export function settings(s, c) {
           a.glass ? 'on' : 'off',
         ) +
         onOff('Отключить размытие', 'disableBlur', a.disableBlur) +
-        onOff('Подложка под кнопками окна', 'windowButtonBackground', a.windowButtonBackground) +
-        onOff('Сворачивать в трей при закрытии', 'minimizeToTray', a.minimizeToTray) +
+        onOff('Пузыри сообщений ИИ', 'bubbles', a.bubbles) +
         select(
           'Частота анимации',
           'fps',

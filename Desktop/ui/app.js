@@ -218,30 +218,76 @@ function drawWidget() {
     $('#widgetBody #musicSlot')?.append(music);
   }
 }
-function sections() {
-  const nav = $('#sectionNav');
-  nav.hidden = !['voice', 'ai', 'settings'].includes(page);
-  if (nav.hidden) {
-    nav.replaceChildren();
-    return;
+const sectionNav = $('#sectionNav');
+const pageContent = $('#content');
+let pageSections = [];
+
+function markSection(active) {
+  for (const { button, heading } of pageSections) {
+    if (heading === active) button.setAttribute('aria-current', 'true');
+    else button.removeAttribute('aria-current');
   }
-  const headings = [...document.querySelectorAll('#content article.box:not([hidden]) > h3')];
-  nav.innerHTML = headings
-    .map((h, i) => {
-      h.id = 'setting-heading-' + i;
-      return '<button data-section="' + h.id + '">' + esc(h.textContent) + '</button>';
-    })
-    .join('');
 }
-$('#content').addEventListener('error', (event) => {
+
+function updateSection() {
+  if (sectionNav.hidden) return;
+  const viewport = pageContent.getBoundingClientRect();
+  let active = pageSections[0]?.heading;
+  for (const { heading } of pageSections) {
+    if (heading.getBoundingClientRect().top > viewport.top + 42) break;
+    active = heading;
+  }
+  if (pageContent.scrollTop > 0 &&
+      pageContent.scrollHeight - pageContent.clientHeight - pageContent.scrollTop <= 2)
+    active = pageSections.at(-1)?.heading;
+  markSection(active);
+}
+
+function sections() {
+  const allowed = ['voice', 'ai', 'settings', 'plugins'].includes(page);
+  pageSections = allowed
+    ? Array.from(pageContent.querySelectorAll('article.box:not([hidden]) > h3'), (heading, index) => {
+        const button = document.createElement('button');
+        heading.id = 'page-section-' + index;
+        button.type = 'button';
+        button.dataset.section = heading.id;
+        button.setAttribute('aria-controls', heading.id);
+        const icon = heading.querySelector('svg')?.cloneNode(true);
+        if (icon) button.append(icon);
+        const label = document.createElement('span');
+        label.textContent = heading.textContent;
+        button.append(label);
+        return { button, heading };
+      })
+    : [];
+  sectionNav.hidden = !pageSections.length;
+  sectionNav.replaceChildren(...pageSections.map(({ button }) => button));
+  updateSection();
+}
+
+function filterPreferences() {
+  const query = (cache.preferencesQuery || '').trim().toLocaleLowerCase();
+  let count = 0;
+  for (const card of pageContent.querySelectorAll('article.box')) {
+    card.hidden = !card.textContent.toLocaleLowerCase().includes(query);
+    if (!card.hidden) count++;
+  }
+  $('#prefsEmpty').hidden = count > 0;
+}
+
+pageContent.addEventListener('scroll', updateSection, { passive: true });
+pageContent.addEventListener('error', (event) => {
   if (event.target.classList?.contains('voiceCover')) event.target.hidden = true;
 }, true);
-$('#sectionNav').onclick = (e) => {
-  const id = e.target.closest('button')?.dataset.section;
-  if (id)
-    document
-      .getElementById(id)
-      ?.scrollIntoView({ block: 'start', behavior: motionEnabled() ? 'smooth' : 'instant' });
+sectionNav.onclick = (event) => {
+  const target = event.target.closest('button');
+  const heading = pageSections.find(({ button }) => button === target)?.heading;
+  if (!heading) return;
+  const card = heading.parentElement;
+  const top = pageContent.scrollTop + card.getBoundingClientRect().top -
+    pageContent.getBoundingClientRect().top - 10;
+  pageContent.scrollTo({ top, behavior: motionEnabled() ? 'smooth' : 'instant' });
+  markSection(heading);
 };
 function boardRows(inner, height) {
   // Reserve the card border and gutter in the grid's one-pixel rows.
@@ -267,10 +313,8 @@ function renderPage() {
   const cursor =
     quick && document.activeElement === quick ? [quick.selectionStart, quick.selectionEnd] : null;
   if (quick) quick.onblur = null;
-  const typing =
-    page === 'voice' && ['fishQuery', 'fishKey'].includes(document.activeElement?.id)
-      ? document.activeElement
-      : null;
+  const managedInputs = page === 'voice' ? ['fishQuery', 'fishKey'] : page === 'settings' ? ['prefsQuery'] : [];
+  const typing = managedInputs.includes(document.activeElement?.id) ? document.activeElement : null;
   cache.fishKeyFocus = typing?.id === 'fishKey' || !!$('.fishAccess[open]');
   const content = $('#content');
   const subpage =
@@ -355,9 +399,10 @@ function renderPage() {
     setMusic();
     $('#musicSlot').append(music);
   }
+  if (page === 'settings') filterPreferences();
+  $('#content').scrollTop = previous;
   sections();
   if (page === 'commands') filterCommandList();
-  $('#content').scrollTop = previous;
 }
 function setMusic() {
   if (state.music && music.dataset.name !== state.music.name) {
@@ -723,10 +768,14 @@ async function refreshSystem() {
   } catch {}
 }
 const val = (id) => $('#' + id)?.value || '';
-function modal(title, html) {
+function modal(title, html, layout) {
+  const dialog = $('#modal');
   $('#modalTitle').textContent = title;
   $('#modalBody').innerHTML = html;
-  if (!$('#modal').open) $('#modal').showModal();
+  $('#modalBody').scrollTop = 0;
+  if (layout) dialog.dataset.layout = layout;
+  else delete dialog.dataset.layout;
+  if (!dialog.open) dialog.showModal();
 }
 function closeModal() {
   if ($('#modal').open) $('#modal').close();
@@ -1056,12 +1105,15 @@ async function handle(action, id) {
     case 'context':
       modal(
         'Добавить контекст',
-        btn('Прикрепить файл', 'pickContext', 'paperclip') +
-          btn('Разговоры и проекты', 'chooseProject', 'history') +
-          state.notes
-            .slice(0, 8)
-            .map((n) => btn(n.text.slice(0, 65), 'attachNote', 'notebook-pen', '', n.id))
-            .join(''),
+        '<div class="contextActions">' +
+          btn('Прикрепить файл', 'pickContext', 'paperclip') +
+          btn('Разговоры и проекты', 'chooseProject', 'history') + '</div>' +
+          (state.notes.length
+            ? '<h3 class="contextHeading">Заметки</h3><div class="contextActions">' +
+              state.notes.slice(0, 8)
+                .map((n) => btn(n.text.slice(0, 65), 'attachNote', 'notebook-pen', '', n.id)).join('') + '</div>'
+            : ''),
+        'context',
       );
       return;
     case 'chooseProject':
@@ -2448,6 +2500,13 @@ $('#content').addEventListener('pointerup', () => {
   renderPage();
 });
 $('#content').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && e.target.id === 'prefsQuery' && e.target.value) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.target.value = '';
+    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
   if (e.key === 'Enter' && ['aiKey', 'cloudModel', 'base'].includes(e.target.id)) {
     e.preventDefault();
     handle('saveAI').catch(err);
@@ -2964,9 +3023,9 @@ document.addEventListener('input', (e) => {
     filterCommandList();
   }
   if (e.target.id === 'prefsQuery') {
-    const q = e.target.value.trim().toLocaleLowerCase();
-    for (const card of document.querySelectorAll('#content .box'))
-      card.hidden = !card.textContent.toLocaleLowerCase().includes(q);
+    cache.preferencesQuery = e.target.value;
+    filterPreferences();
+    pageContent.scrollTop = 0;
     sections();
   }
 });

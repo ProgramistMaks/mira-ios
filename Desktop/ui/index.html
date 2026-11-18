@@ -335,19 +335,25 @@
     </dialog>
     <dialog id="intro" aria-labelledby="introTitle">
       <button id="introSkip" type="button">Пропустить</button>
-      <div class="introPage">
-        <div id="introMark"></div>
-        <h2 id="introTitle"></h2>
-        <p id="introInfo"></p>
-        <div id="introFields"></div>
-        <p id="introError" role="alert"></p>
+      <div class="introLayout">
+        <aside class="introOutline" aria-label="Шаги настройки">
+          <img src="icon.png" alt="">
+          <ol id="introSteps"></ol>
+        </aside>
+        <div class="introPage">
+          <div id="introMark"></div>
+          <h2 id="introTitle"></h2>
+          <p id="introInfo"></p>
+          <div id="introFields"></div>
+          <p id="introError" role="alert"></p>
+        </div>
       </div>
       <div class="introFoot">
         <button id="introBack">Назад</button><span id="introProgress"></span
         ><button id="introNext">Далее</button>
       </div>
     </dialog>
-    <dialog id="modal">
+    <dialog id="modal" aria-labelledby="modalTitle">
       <div class="subhead">
         <h2 id="modalTitle"></h2>
         <button class="plain" data-dismiss="modal" aria-label="Закрыть" data-i="x"></button>

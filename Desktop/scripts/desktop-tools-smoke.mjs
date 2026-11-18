@@ -191,6 +191,25 @@ try {
   await p.locator('#uiLanguage').selectOption('ru');
   await expect(p.locator('html')).toHaveAttribute('lang', 'ru');
   await expect(p.locator('#tabs [data-go=settings]')).toContainText('Настройки');
+  await app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().endsWith('/index.html')).setSize(760, 620);
+  });
+  await p.locator('#tabs [data-go=settings]').click();
+  await p.locator('#prefsQuery').fill('частота анимации');
+  await expect(p.locator('#sectionNav button')).toHaveCount(1);
+  await expect(p.locator('#sectionNav [aria-current=true]')).toHaveText('Оформление');
+  await p.evaluate(() => window.desk.call('settings', { user: 'Проверка настроек' }));
+  await expect(p.locator('#prefsQuery')).toHaveValue('частота анимации');
+  const layout = await p.evaluate(() => {
+    const nav = document.querySelector('#sectionNav').getBoundingClientRect();
+    const content = document.querySelector('#content').getBoundingClientRect();
+    return { width: window.innerWidth, gap: content.top - nav.bottom };
+  });
+  assert.ok(layout.width <= 820 && layout.gap >= 0, JSON.stringify(layout));
+  await p.locator('#prefsQuery').fill('несуществующая настройка');
+  await expect(p.locator('#prefsEmpty')).toBeVisible();
+  await p.locator('#prefsQuery').press('Escape');
+  await expect(p.locator('#prefsEmpty')).toBeHidden();
   assert.deepEqual(errors, []);
   console.log(
     'RU/EN first launch, eleven tour stops, provider presets, durable assistant job, desktop command, shape, cache preview and restart passed.',
