@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { widgetSize } = require('./ui/widget-size.mjs');
 
 function webURL(value) {
   const u = new URL(value);
@@ -41,7 +42,7 @@ function widgetLayout(input) {
   for (const row of Array.isArray(input) ? input : []) {
     if (!Object.hasOwn(widgetNames, row?.id) || seen.has(row.id)) continue;
     seen.add(row.id);
-    rows.push({ id: row.id, visible: row.visible !== false });
+    rows.push({ id: row.id, visible: row.visible !== false, ...widgetSize(row.id, row.width, row.height) });
   }
   for (const id of Object.keys(widgetNames))
     if (!seen.has(id))
@@ -109,6 +110,8 @@ const defaults = () => ({
   },
   chats: [],
   tasks: [],
+  taskLists: [{ id: 'main', name: 'Мои задачи' }],
+  activeTaskList: 'main',
   notes: [],
   events: [],
   routines: [

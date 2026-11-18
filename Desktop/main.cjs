@@ -37,6 +37,8 @@ const {
   checkVRM,
 } = require('./core.cjs');
 const commandLibrary = require('./command-library.cjs');
+const { calendarStart, occursOn } = require('./ui/calendar-dates.mjs');
+const { noteDocument, noteText, taskListOf, sortedNotes } = require('./ui/note-format.mjs');
 const { LocalModels } = require('./models.cjs'),
   network = require('./network.cjs'),
   speech = require('./speech.cjs'),
@@ -74,7 +76,19 @@ let main,
   overlayLock = false,
   cursorTimer,
   decoding;
-let island, screenWidgets;
+let island, screenWidgets, noteRefresh, noteBatch;
+function persistNotes() {
+  const batch = noteBatch;
+  if (!batch) return;
+  noteBatch = undefined;
+  clearTimeout(batch.timer);
+  try {
+    store.save();
+    batch.resolve();
+  } catch (error) {
+    batch.reject(error);
+  }
+}
 const { catalog: systemApps, launch: launchSystem, windowsOnly } = require('./launchers.cjs');
 const push = (data) => {
   if (data.type === 'refresh') {
@@ -453,7 +467,7 @@ function tick() {
     dirty = true;
   }
   for (const ev of d.events)
-    if (!ev.fired && ev.time <= now) {
+    if (!ev.disabled && !ev.fired && ev.time <= now) {
       if (['week', 'day'].includes(ev.repeat)) ev.time = nextDue(ev.time, ev.repeat, now);
       else ev.fired = true;
       alert('Напоминание', ev.text);
@@ -468,7 +482,12 @@ function addItem(kind, text, time, options = {}) {
     .trim()
     .slice(0, 10000);
   if (!text) throw Error('Введите текст');
-  if (kind === 'events' && (!Number.isFinite(time) || time <= Date.now()))
+  if (
+    kind === 'events' &&
+    (!Number.isFinite(new Date(time).getTime()) ||
+      !Number.isFinite(time) ||
+      (options.category !== 'calendar' && time <= Date.now()))
+  )
     throw Error('Выберите дату в будущем');
   const item = {
     id: uid(),
@@ -477,9 +496,16 @@ function addItem(kind, text, time, options = {}) {
     ...(kind === 'notes' && options.remember ? { remember: true } : {}),
     ...(kind === 'events' && options.routineId ? { routineId: options.routineId } : {}),
     ...(kind === 'events' && ['day', 'week'].includes(options.repeat) ? { repeat: options.repeat } : {}),
-    ...(kind === 'tasks' ? { done: false } : {}),
-    ...(kind === 'events' ? { time, fired: false } : {}),
+    ...(kind === 'tasks' ? { done: false, list: options.list || store.data.activeTaskList } : {}),
+    ...(kind === 'events'
+      ? {
+          time,
+          fired: time <= Date.now(),
+          category: options.category === 'calendar' ? 'calendar' : 'reminder',
+        }
+      : {}),
   };
+  if (item.category === 'calendar') Object.assign(item, calendarTiming(time, item.repeat));
   store.data[kind].unshift(item);
   changed();
   return item;
@@ -681,7 +707,7 @@ async function execute(spec, remote = false) {
           case 'meeting': {
             const now = Date.now(),
               events = store.data.events
-                .filter((e) => !e.fired && e.time >= now)
+                .filter((e) => !e.disabled && !e.fired && e.time >= now)
                 .sort((a, b) => a.time - b.time);
             for (const e of events) {
               const link = e.text.match(/https?:\/\/[^\s<>"«»]+/iu)?.[0];
@@ -811,7 +837,7 @@ function getChat(id) {
   }
   return c;
 }
-const { plan, calendarPhrase, nextDue } = require('./planner.cjs');
+const { plan, calendarPhrase, nextDue, calendarTiming } = require('./planner.cjs');
 function searchWeb(query, signal) {
   return network.search(query, secret('search'), signal, (url, options) => net.fetch(String(url), options));
 }
@@ -904,18 +930,27 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
       text,
     )
   ) {
+    const today = new Date(),
+      plans = /сегодня/iu.test(text);
     const events = d.events
-      .filter(
-        (e) =>
-          !e.fired &&
-          (!text.includes('сегодня') || new Date(e.time).toDateString() === new Date().toDateString()),
-      )
-      .sort((a, b) => a.time - b.time);
+      .filter((e) => (plans ? occursOn(e, today) : !e.disabled && !e.fired && e.category !== 'calendar'))
+      .map((e) => {
+        let date = new Date(e.time);
+        if (plans) {
+          const start = new Date(calendarStart(e));
+          date = new Date(today);
+          date.setHours(start.getHours(), start.getMinutes(), 0, 0);
+        }
+        return { date, text: e.text };
+      })
+      .sort((a, b) => a.date - b.date);
     const list = /заметки/iu.test(text)
-      ? d.notes.map((n) => n.text)
+      ? sortedNotes(d.notes)
+          .map((n) => n.text)
+          .filter(Boolean)
       : /задачи/iu.test(text)
-        ? d.tasks.filter((t) => !t.done).map((t) => t.text)
-        : events.map((e) => new Date(e.time).toLocaleString('ru-RU') + ' — ' + e.text);
+        ? d.tasks.filter((t) => !t.done && taskListOf(t) === d.activeTaskList).map((t) => t.text)
+        : events.map((e) => e.date.toLocaleString('ru-RU') + ' — ' + e.text);
     return { text: list.slice(0, 12).join('\n') || 'Список пока пуст.' };
   }
   if ((m = text.match(/^(?:запиши(?:\s+заметку)?|заметка|запомни)[\s:!,.-]+(.+)/isu))) {
@@ -1811,24 +1846,113 @@ const actions = {
   url: ({ url }) => shell.openExternal(webURL(url)),
   weather: () => network.weather(store.data.settings.city),
   rates: network.rates,
-  add: ({ kind, text, time, repeat, id, routineId }) => {
+  boardTile: ({ id, size, hide }) => {
+    const row = store.data.settings.widgets.find((w) => w.id === id);
+    if (!row) throw Error('Виджет не найден');
+    if (hide) row.visible = false;
+    else {
+      const dimensions = require('./ui/widget-size.mjs').widgetSize(id, size?.width, size?.height);
+      if (!dimensions) throw Error('Проверьте размер виджета');
+      Object.assign(row, dimensions);
+    }
+    changed();
+  },
+  createNote: () => {
+    const row = { id: uid(), title: '', body: [], text: '', created: Date.now() };
+    store.data.notes.unshift(row);
+    changed();
+    return row;
+  },
+  writeNote: ({ id, title, body }) => {
+    const row = store.data.notes.find((n) => n.id === id);
+    if (!row) throw Error('Заметка удалена');
+    const content = noteDocument(body);
+    const heading = String(title ?? '').slice(0, 200);
+    Object.assign(row, {
+      title: heading,
+      body: content,
+      text: [heading.trim(), noteText(content)].filter(Boolean).join('\n'),
+    });
+    // Multiple keystrokes can share an atomic write. Acknowledgement waits for it.
+    if (!noteBatch) {
+      noteBatch = Promise.withResolvers();
+      noteBatch.timer = setTimeout(persistNotes, 80);
+    }
+    clearTimeout(noteRefresh);
+    noteRefresh = setTimeout(() => push({ type: 'refresh' }), 220);
+    return noteBatch.promise;
+  },
+  pinNote: ({ id, pinned }) => {
+    const row = store.data.notes.find((n) => n.id === id);
+    if (!row) throw Error('Заметка удалена');
+    row.pinned = !!pinned;
+    changed();
+  },
+  taskList: ({ action, id, name }) => {
+    const d = store.data;
+    if (action === 'create' || action === 'rename') {
+      name = String(name || '')
+        .trim()
+        .slice(0, 80);
+      if (!name) throw Error('Введите название списка');
+    }
+    if (action === 'create') {
+      id = uid();
+      d.taskLists.push({ id, name });
+    } else {
+      const list = d.taskLists.find((i) => i.id === id);
+      if (!list) throw Error('Список удалён');
+      if (action === 'rename') list.name = name;
+      else if (action === 'remove' && id !== 'main') {
+        for (const task of d.tasks) if (taskListOf(task) === id) task.list = 'main';
+        d.taskLists = d.taskLists.filter((l) => l.id !== id);
+        id = 'main';
+      } else if (action !== 'select') throw Error('Действие недоступно');
+    }
+    d.activeTaskList = id;
+    changed();
+    return id;
+  },
+  enableReminder: ({ id, enabled }) => {
+    const row = store.data.events.find((e) => e.id === id && e.category !== 'calendar');
+    if (!row) throw Error('Напоминание удалено');
+    if (enabled && row.time <= Date.now()) {
+      if (!['day', 'week'].includes(row.repeat)) throw Error('Сначала назначьте новое время');
+      row.time = nextDue(row.time, row.repeat, Date.now());
+      row.fired = false;
+    }
+    row.disabled = !enabled;
+    changed();
+  },
+  add: ({ kind, text, time, repeat, id, routineId, list, category }) => {
     if (!['tasks', 'notes', 'events'].includes(kind)) throw Error('Неизвестный список');
     if (routineId && !store.data.routines.some((r) => r.id === routineId)) throw Error('Команда не найдена');
-    if (!id) return addItem(kind, text, time, { repeat, routineId });
+    if (kind === 'tasks' && list && !store.data.taskLists.some((l) => l.id === list))
+      throw Error('Список удалён');
+    if (!id) return addItem(kind, text, time, { repeat, routineId, list, category });
     const row = store.data[kind].find((x) => x.id === id),
       value = String(text || '')
         .trim()
         .slice(0, 10000);
     if (!row || !value) throw Error('Проверь текст записи');
     if (kind === 'events') {
-      if (!Number.isFinite(time) || (time !== row.time && time <= Date.now()))
+      if (
+        !Number.isFinite(time) ||
+        !Number.isFinite(new Date(time).getTime()) ||
+        (row.category !== 'calendar' && time !== row.time && time <= Date.now())
+      )
         throw Error('Выбери дату в будущем');
-      if (time !== row.time) row.fired = false;
+      if (time !== row.time) row.fired = time <= Date.now();
       row.time = time;
       row.routineId = routineId || '';
       row.repeat = ['day', 'week'].includes(repeat) ? repeat : '';
+      if (row.category === 'calendar') Object.assign(row, calendarTiming(time, row.repeat));
     }
     row.text = value;
+    if (kind === 'notes') {
+      delete row.body;
+      delete row.title;
+    }
     changed();
     return row;
   },
@@ -2098,6 +2222,8 @@ else {
   app.whenReady().then(init);
 }
 app.on('before-quit', () => {
+  persistNotes();
+  clearTimeout(noteRefresh);
   closing = true;
   voiceLibrary.stop();
   motionOutput.configure(0);

@@ -1,7 +1,7 @@
 {
   "name": "mira-desktop",
   "productName": "Мира",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "main": "main.cjs",
   "description": "Голосовой компаньон для рабочего стола",

@@ -197,6 +197,49 @@
       </div>
       <div id="widgetBody"></div>
     </aside>
+    <dialog id="agenda" aria-labelledby="agendaHeading">
+      <header class="orgHeader">
+        <h2 id="agendaHeading"></h2>
+        <small id="agendaCount"></small>
+        <button data-ag="add" aria-label="Добавить напоминание" data-i="plus"></button>
+        <button data-ag="options" aria-label="Параметры календаря" data-i="sliders-horizontal"></button>
+        <button data-ag="close" aria-label="Закрыть" data-i="x"></button>
+      </header>
+      <label id="agendaOptions" hidden
+        >На экране ПК
+        <select id="calendarPlace">
+          <option value="off">В приложении</option>
+          <option value="window">В отдельном окне</option>
+          <option value="pin">Поверх окон</option>
+        </select></label
+      >
+      <div id="agendaBody"></div>
+    </dialog>
+    <dialog id="organizer" aria-labelledby="orgHeading">
+      <header class="orgHeader">
+        <h2 id="orgHeading"></h2>
+        <small id="orgCount"></small>
+        <button data-org="add" id="orgAdd" aria-label="Добавить" data-i="plus"></button>
+        <button data-org="options" aria-label="Параметры виджета" data-i="sliders-horizontal"></button>
+        <button data-org="close" aria-label="Закрыть" data-i="x"></button>
+      </header>
+      <div id="orgOptions" hidden>
+        <label
+          >На экране ПК
+          <select id="orgPlace">
+            <option value="off">В приложении</option>
+            <option value="window">В отдельном окне</option>
+            <option value="pin">Поверх окон</option>
+          </select></label
+        >
+        <button data-org="renameList">Переименовать список</button>
+        <button data-org="removeList">Перенести задачи в основной список и удалить список</button>
+      </div>
+      <div class="orgLayout">
+        <nav id="orgList" aria-label="Список записей"></nav>
+        <section id="orgPane"></section>
+      </div>
+    </dialog>
     <dialog id="intro" aria-labelledby="introTitle">
       <button id="introSkip" type="button">Пропустить</button>
       <div class="introPage">

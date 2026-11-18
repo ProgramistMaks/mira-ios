@@ -1,3 +1,4 @@
+const { sortedNotes, taskListOf } = require('./ui/note-format.mjs');
 const { BrowserWindow, screen } = require('electron');
 const modes = new Set(['focus', 'tasks', 'notes', 'events']);
 class ScreenWidgets {
@@ -74,8 +75,14 @@ class ScreenWidgets {
         items:
           id === 'focus'
             ? []
-            : d[id]
-                .filter((x) => !x.done && !x.fired)
+            : (id === 'notes' ? sortedNotes(d.notes) : d[id])
+                .filter(
+                  (x) =>
+                    !x.done &&
+                    !x.fired &&
+                    (id !== 'events' || x.category !== 'reminder') &&
+                    (id !== 'tasks' || taskListOf(x) === d.activeTaskList),
+                )
                 .slice(0, 12)
                 .map(({ id, text, time }) => ({ id, text, time })),
         pinned: !!d.screenWidgets?.[id]?.pin,

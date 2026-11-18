@@ -1,4 +1,6 @@
 import { $, esc, ico, opt, btn, box, field, select, timerTime, timeLabel } from './shared.js';
+import { occursOn } from './calendar-dates.mjs';
+import { sortedNotes, noteLabel, taskListOf } from './note-format.mjs';
 export const names = {
   home: 'Главная',
   desk: 'Рабочий стол',
@@ -322,7 +324,7 @@ export function desk(s, c, only) {
 }
 function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
   const active = s.settings.widgets.filter((w) => w.visible);
-  const tile = (id) => {
+  const tile = ({ id, width, height }) => {
     const open = rowAction('day', id, 'chevron-right', 'Открыть виджет «' + s.widgetNames[id] + '»');
     const symbols = {
       tasks: 'list-checks',
@@ -345,12 +347,13 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
       const scheduled = id === 'events' || id === 'reminders';
       const items = scheduled
         ? s.events
-            .filter(
-              (e) =>
-                !e.fired && (id === 'reminders' || new Date(e.time).toDateString() === now.toDateString()),
+            .filter((e) =>
+              id === 'reminders' ? e.category !== 'calendar' && !e.fired && !e.disabled : occursOn(e, now),
             )
             .sort((a, b) => a.time - b.time)
-        : s[id];
+        : id === 'notes'
+          ? sortedNotes(s.notes)
+          : s.tasks.filter((t) => taskListOf(t) === s.activeTaskList);
       meta =
         id === 'events'
           ? now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
@@ -361,12 +364,62 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
         events: 'Ничего не запланировано',
         reminders: 'Напоминаний пока нет.',
       };
-      const addLabel = { notes: 'Новая заметка', tasks: 'Новая задача', events: 'Новое событие', reminders: 'Напомнить' }[id];
+      const addLabel = {
+        notes: 'Новая заметка',
+        tasks: 'Новая задача',
+        events: 'Новое событие',
+        reminders: 'Напомнить',
+      }[id];
       if (id !== 'notes') addControl = rowAction('add-' + id, '', 'plus', addLabel);
       body = items.length
-        ? items.slice(0, 2).map((item) => entry(item, scheduled ? 'events' : id)).join('')
+        ? items
+            .slice(0, 2)
+            .map((item) => entry(item, scheduled ? 'events' : id))
+            .join('')
         : '<div class="boardEmpty">' + ico(symbols[id]) + '<p>' + placeholder[id] + '</p></div>';
-      if (id === 'notes') body += btn(addLabel, 'add-notes', 'plus');
+      if (id === 'notes') {
+        if (items.length)
+          body =
+            '<button class="boardNote" data-act="edit-notes" data-id="' +
+            esc(items[0].id) +
+            '">' +
+            (items[0].pinned ? ico('pin') : '') +
+            esc(noteLabel(items[0])) +
+            '</button>';
+        body += btn(addLabel, 'add-notes', 'plus');
+      }
+      if (id === 'tasks') {
+        const draft = c.quickTask;
+        const quick = draft
+          ? '<input id="quickTask" aria-label="Текст задачи" maxlength="10000" placeholder="Задача..." value="' +
+            esc(draft.text) +
+            '">'
+          : '';
+        if (draft || items.length)
+          body =
+            (draft && !draft.id ? quick : '') +
+            items
+              .slice(0, 3)
+              .map((t) =>
+                draft?.id === t.id
+                  ? quick
+                  : '<div class="tileTask' +
+                    (t.done ? ' done' : '') +
+                    '">' +
+                    rowAction(
+                      'toggleTask',
+                      t.id,
+                      t.done ? 'check-check' : 'circle-dot',
+                      'Изменить состояние',
+                    ) +
+                    '<button data-act="edit-tasks" data-id="' +
+                    esc(t.id) +
+                    '">' +
+                    esc(t.text) +
+                    '</button></div>',
+              )
+              .join('');
+      }
     } else if (id === 'clock') {
       body = clockFace(now);
     } else if (id === 'focus') {
@@ -411,17 +464,29 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
       ? '<div class="boardOrder">' +
         rowAction('boardUp', id, 'chevron-up', 'Переместить раньше') +
         rowAction('boardDown', id, 'chevron-down', 'Переместить позже') +
-        '</div>'
+        '</div>' +
+        rowAction('boardHide', id, 'trash-2', 'Удалить с рабочего стола: ' + s.widgetNames[id]) +
+        rowAction('boardResize', id, 'corner-down-right', 'Изменить размер виджета: ' + s.widgetNames[id])
       : '';
+    const dimensions =
+      width && height ? ' boardSized" style="--tile-width:' + width + ';--tile-height:' + height : '';
     return (
-      '<article class="box boardTile" data-tile="' +
+      '<article class="box boardTile' +
+      dimensions +
+      '" data-tile="' +
       id +
       '" draggable="' +
       Boolean(c.boardEditing) +
       '"><div class="tileInner"><header>' +
       '<h3>' +
       ico(symbols[id]) +
-      esc(s.widgetNames[id]) +
+      '<span>' +
+      esc(
+        id === 'tasks'
+          ? s.taskLists.find((l) => l.id === s.activeTaskList)?.name || s.widgetNames[id]
+          : s.widgetNames[id],
+      ) +
+      '</span>' +
       '</h3><small>' +
       esc(meta) +
       '</small>' +
@@ -442,8 +507,16 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
     btn('Найти файл', 'find', 'search') +
     '</div>' +
     '<div class="deskGrid" aria-label="Рабочий стол">' +
-    (active.length ? active.map((w) => tile(w.id)).join('') : empty('Выбери виджеты для рабочего стола.')) +
-    '</div>'
+    (active.length ? active.map(tile).join('') : empty('Выбери виджеты для рабочего стола.')) +
+    '</div>' +
+    (c.boardEditing
+      ? '<div class="boardDock">' +
+        ico('pencil') +
+        '<span>Перетащи карточку, чтобы переместить. Потяни за угол, чтобы изменить размер.</span>' +
+        btn('Добавить виджет', 'boardAdd', 'plus') +
+        btn('Готово', 'boardDone', 'check', 'primary') +
+        '</div>'
+      : '')
   );
 }
 export function newRoutine() {

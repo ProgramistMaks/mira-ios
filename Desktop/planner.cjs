@@ -188,4 +188,9 @@ function parseDraft(raw, allowed, files, name, steps) {
   }
   return routine({ name: data.name || name, phrase: data.phrase || '', blocks });
 }
-module.exports = { plan, calendarPhrase, nextDue };
+function calendarTiming(startTime, repeat, now = Date.now()) {
+  const recurring = repeat === 'day' || repeat === 'week';
+  const time = startTime <= now && recurring ? nextDue(startTime, repeat, now) : startTime;
+  return { startTime, time, fired: time <= now };
+}
+module.exports = { plan, calendarPhrase, nextDue, calendarTiming };

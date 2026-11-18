@@ -2270,13 +2270,18 @@ footer {
 }
 .deskGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  --columns: 12;
+  container-type: inline-size;
+  grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
   grid-auto-flow: row dense;
-  grid-auto-rows: 4px;
-  gap: 12px;
+  grid-auto-rows: 1px;
+  gap: 0 12px;
   align-items: start;
 }
 .boardTile {
+  position: relative;
+  min-width: 0;
+  grid-column: span 4;
   padding: 0;
   align-self: start;
 }
@@ -2358,17 +2363,6 @@ footer {
   display: none;
 }
 @media (min-width: 940px) {
-  .deskGrid {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-    container-type: inline-size;
-  }
-  .boardTile {
-    grid-column: span 4;
-  }
-  [data-tile='system'],
-  [data-tile='events'] {
-    grid-column: span 3;
-  }
   [data-tile='notes'] .tileInner,
   [data-tile='tasks'] .tileInner,
   [data-tile='events'] .tileInner {
@@ -2407,7 +2401,8 @@ footer {
   justify-content: flex-start;
 }
 #area[data-page='desk'] #content {
-  padding: 10px clamp(8px, 2.4vw, 34px) 15px;
+  scrollbar-width: none;
+  padding: 8px clamp(8px, 1.24vw, 18px) 15px clamp(8px, 2.67vw, 38px);
 }
 :is(.boardTile, .commandEmpty) svg:not(.wires) {
   fill: none;
@@ -2511,4 +2506,682 @@ footer {
   height: 100%;
   border-radius: inherit;
   background: transparent;
+}
+
+:is(#organizer, #agenda) {
+  width: min(760px, calc(100vw - 48px));
+  height: min(500px, calc(100dvh - 88px));
+  max-height: none;
+  padding: 18px 20px 20px;
+  margin: auto;
+  transform: translateY(min(29px, 5vh));
+  overflow: hidden;
+  border-radius: 22px;
+}
+:is(#organizer, #agenda)[open] {
+  display: flex;
+  flex-direction: column;
+}
+:is(#organizer, #agenda)::backdrop {
+  background: #302c274f;
+  backdrop-filter: blur(4px);
+}
+.orgHeader {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 38px;
+  margin-bottom: 5px;
+}
+.orgHeader h2 {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  font-size: 17px;
+  margin: 0;
+}
+.orgHeader small {
+  margin-right: auto;
+  color: var(--muted);
+}
+:is(#organizer, #agenda) svg,
+.tileTask svg,
+.boardNote svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.orgHeader h2 svg {
+  box-sizing: content-box;
+  padding: 7px;
+  background: var(--hero);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.orgHeader button,
+.noteControls > button,
+.orgTask > button:not(.taskText) {
+  width: 31px;
+  height: 31px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--muted);
+}
+.orgHeader button:hover,
+.noteControls button:hover,
+.orgRow:hover,
+.orgTask > button:hover {
+  background: var(--shade);
+}
+.orgLayout {
+  display: grid;
+  grid-template-columns: minmax(125px, 31%) minmax(0, 1fr);
+  gap: 15px;
+  min-height: 0;
+  flex: 1;
+}
+#organizer[data-mode='tasks'] .orgLayout {
+  grid-template-columns: minmax(125px, 28%) minmax(0, 1fr);
+}
+#orgList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  overflow: auto;
+  padding: 1px 2px 8px;
+}
+.orgRow,
+.orgNewList {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 39px;
+  padding: 6px 11px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: var(--ink);
+  text-align: start;
+  font-weight: 700;
+}
+.orgRow[aria-current='true'],
+#orgPane {
+  background: color-mix(in srgb, var(--panel) 92%, white);
+  box-shadow: 0 3px 9px var(--shade);
+  border: 1px solid var(--line);
+}
+.orgRow span,
+.tileInner h3 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orgRow small {
+  margin-left: auto;
+  color: var(--muted);
+}
+#orgPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 15px 18px;
+  border-radius: 17px;
+}
+#orgOptions {
+  position: absolute;
+  right: 20px;
+  top: 55px;
+  z-index: 1;
+  max-width: 290px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 6px 18px var(--shade);
+}
+#orgOptions:not([hidden]) {
+  display: grid;
+  gap: 7px;
+}
+#organizer[data-mode='notes'] #orgOptions button,
+#organizer[data-main-list='true'] [data-org='removeList'] {
+  display: none;
+}
+.noteControls {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.noteTools {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: var(--hero);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+.noteTools button {
+  min-width: 22px;
+  height: 27px;
+  padding: 0 3px;
+  color: var(--ink);
+  font:
+    14px Georgia,
+    serif;
+}
+.noteTools button[data-format='bold'] {
+  font-weight: bold;
+}
+.noteTools button[data-format='italic'] {
+  font-style: italic;
+}
+.noteTools button[data-format='underline'] {
+  text-decoration: underline;
+}
+.noteTools button[data-format='strikeThrough'] {
+  text-decoration: line-through;
+}
+.noteTools button[aria-pressed='true'],
+.noteControls button[aria-pressed='true'] {
+  background: var(--shade);
+  color: var(--accent);
+}
+#noteTitle {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 3px 0;
+  font:
+    800 22px/1.2 Nunito,
+    sans-serif;
+  width: 100%;
+  outline: none;
+}
+#noteBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  padding: 9px 0;
+}
+#noteBody:empty:before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  opacity: 0.6;
+  pointer-events: none;
+}
+#noteBody code {
+  background: var(--shade);
+  padding: 1px 3px;
+  border-radius: 4px;
+}
+#noteBody blockquote {
+  margin: 4px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--line);
+}
+#noteBody h2,
+#noteBody p {
+  margin: 0 0 0.35em;
+}
+#noteBody ul,
+#noteBody ol {
+  padding-inline-start: 1.5em;
+}
+#organizer[data-mode='tasks'] #orgPane {
+  background: var(--paper);
+  box-shadow: none;
+  padding: 12px;
+}
+#taskRows {
+  flex: 1;
+  overflow: auto;
+}
+.orgTask,
+.tileTask {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9px;
+  padding: 4px;
+}
+.orgTask {
+  margin-bottom: 5px;
+  border: 1px solid var(--line);
+  background: var(--shade);
+}
+.orgTask .taskText,
+.tileTask button[data-act='edit-tasks'] {
+  flex: 1;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  color: var(--ink);
+}
+.orgTask.done .taskText,
+.tileTask.done button[data-act='edit-tasks'] {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.orgTask button[data-org='removeTask'] {
+  opacity: 0;
+}
+.orgTask:hover button[data-org='removeTask'],
+.orgTask:focus-within button[data-org='removeTask'] {
+  opacity: 1;
+}
+.taskAdd,
+.orgNewList,
+.orgEmpty button {
+  background: var(--shade);
+  border-radius: 10px;
+  min-height: 37px;
+  color: var(--ink);
+}
+.orgEmpty {
+  display: grid;
+  place-content: center;
+  text-align: center;
+  height: 100%;
+  color: var(--muted);
+}
+#quickTask,
+#orgTaskText,
+#orgListName {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 8px;
+  border-radius: 9px;
+}
+.boardNote {
+  flex: 1;
+  display: block;
+  text-align: start;
+  align-content: start;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 88%, white);
+  border-radius: 11px;
+  padding: 12px;
+  box-shadow: 0 3px 9px var(--shade);
+}
+.boardNote svg {
+  vertical-align: middle;
+  margin-right: 5px;
+}
+@media (max-width: 610px) {
+  #organizer {
+    width: calc(100vw - 16px);
+    padding: 12px;
+  }
+  .orgLayout,
+  #organizer[data-mode='tasks'] .orgLayout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  #orgList {
+    display: flex;
+    flex-direction: row;
+    overflow: auto;
+  }
+  .orgRow,
+  .orgNewList {
+    width: auto;
+    max-width: 180px;
+    flex: none;
+  }
+}
+
+#agendaBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 18px;
+}
+#agenda[data-mode='events'] .orgHeader [data-ag='add'],
+#agenda[data-mode='reminders'] [data-ag='options'] {
+  display: none;
+}
+.monthGrid {
+  width: 46%;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.monthGrid header,
+.agendaDay header,
+.reminderGrid header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.monthGrid header b,
+.agendaDay header b,
+.reminderGrid header button:first-child {
+  margin-right: auto;
+}
+.monthGrid header b::first-letter {
+  text-transform: uppercase;
+}
+#agenda [data-ag] {
+  border-radius: 8px;
+  color: var(--ink);
+}
+#agenda [data-ag]:hover {
+  background: var(--shade);
+}
+.monthGrid header button,
+.agendaDay header button,
+.reminderGrid header button {
+  padding: 6px;
+  display: grid;
+  place-items: center;
+}
+.monthCells {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: 26px repeat(6, 1fr);
+  gap: 2px;
+  min-height: 0;
+}
+.monthCells small,
+.monthCells button {
+  align-content: center;
+  text-align: center;
+}
+.monthCells .other {
+  opacity: 0.45;
+}
+.monthCells .today {
+  font-weight: 800;
+}
+.monthCells button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 32%, var(--panel));
+  font-weight: 800;
+}
+.monthCells .marked {
+  position: relative;
+}
+.monthCells .marked::after {
+  content: '';
+  position: absolute;
+  bottom: 8%;
+  left: calc(50% - 2px);
+  height: 4px;
+  width: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.agendaDay {
+  flex: 1;
+  min-width: 0;
+  background: var(--paper);
+  padding: 13px;
+  border-radius: 15px;
+  overflow: auto;
+}
+.agendaDay p {
+  text-align: center;
+  color: var(--muted);
+}
+.agendaRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+}
+.agendaRow button:first-child {
+  flex: 1;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+#agendaForm {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--panel);
+}
+#agendaForm input,
+#agendaForm select,
+#agendaOptions select {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 4px 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+#agendaForm label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: space-between;
+}
+#agendaForm summary {
+  cursor: pointer;
+}
+#agendaForm details label {
+  margin-top: 5px;
+}
+#agendaForm button {
+  padding: 5px 8px;
+  color: var(--ink);
+  background: var(--shade);
+  border-radius: 7px;
+  margin-right: 4px;
+}
+.reminderGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(205px, 100%), 1fr));
+  gap: 12px;
+  width: 100%;
+  align-content: start;
+  align-items: start;
+  overflow: auto;
+}
+.reminderGrid article,
+.reminderAdd {
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  min-height: 86px;
+  padding: 10px;
+}
+.reminderGrid article {
+  background: var(--hero);
+}
+.reminderGrid footer {
+  position: static;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: auto;
+  margin-top: 7px;
+  padding: 0;
+  font-size: 12px;
+}
+.reminderText {
+  width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.reminderAdd {
+  font-size: 22px;
+  border-style: dashed;
+}
+#agendaOptions {
+  align-self: end;
+  padding: 8px;
+  font-size: 13px;
+}
+@media (max-width: 610px) {
+  #agendaBody {
+    gap: 7px;
+  }
+  .agendaDay {
+    padding: 6px;
+  }
+  .monthGrid {
+    width: 50%;
+  }
+}
+
+body[data-theme='cream'] #organizer {
+  --note-paper: #fffdf6;
+  --agenda-inset: #efeae1;
+}
+body[data-theme='cream'] #agenda {
+  --agenda-inset: #efeae1;
+}
+#orgPane,
+.orgRow[aria-current='true'] {
+  background: var(--note-paper, color-mix(in srgb, var(--panel) 92%, white));
+}
+#organizer[data-mode='tasks'] #orgPane,
+.agendaDay {
+  background: var(--agenda-inset, var(--paper));
+}
+
+[data-tile='events'],
+[data-tile='system'] {
+  grid-column: span 3;
+}
+[data-tile='reminders'] {
+  grid-column: span 6;
+}
+@media (max-width: 939px) {
+  .deskGrid {
+    --columns: 8;
+  }
+}
+@media (max-width: 610px) {
+  .deskGrid {
+    --columns: 4;
+  }
+  [data-tile='reminders'] {
+    grid-column: span 4;
+  }
+}
+.boardTile.boardSized {
+  grid-column: span min(var(--columns), var(--tile-width));
+}
+.boardTile.boardSized .tileInner {
+  height: calc((100cqw + 12px) / var(--columns) * var(--tile-height) - 14px);
+  min-height: 0;
+  aspect-ratio: auto;
+}
+.boardSized .boardBody {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.boardTile.boardSized .boardEmpty {
+  min-height: 0;
+}
+.boardTile [data-act='boardHide'],
+.boardTile [data-act='boardResize'] {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  height: 28px;
+  width: 28px;
+  color: var(--muted);
+  background: var(--panel);
+  border-radius: 8px;
+}
+.boardTile [data-act='boardHide'] {
+  top: 3px;
+  right: 3px;
+}
+.boardTile [data-act='boardResize'] {
+  bottom: 2px;
+  right: 2px;
+  touch-action: none;
+  cursor: nwse-resize;
+}
+.boardTile [data-act='boardHide'] svg,
+.boardTile [data-act='boardResize'] svg {
+  width: 14px;
+  height: 14px;
+}
+.boardOrder {
+  position: absolute;
+  bottom: 3px;
+  left: 4px;
+  opacity: 0;
+  background: var(--panel);
+  padding: 0;
+  border-radius: 8px;
+  z-index: 1;
+}
+.boardTile:hover .boardOrder,
+.boardTile:focus-within .boardOrder {
+  opacity: 1;
+}
+.boardDock {
+  position: sticky;
+  bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 2;
+  margin: 15px auto 0;
+  padding: 9px 12px;
+  max-width: 840px;
+  border-radius: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 20px var(--shade);
+}
+.boardDock > svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+}
+.boardDock > span {
+  flex: 1;
+  color: var(--muted);
+  font-size: 13px;
+}
+.boardDock .btn {
+  white-space: nowrap;
+}
+@media (max-width: 650px) {
+  .boardDock > span,
+  .boardDock > svg {
+    display: none;
+  }
+  .boardDock {
+    justify-content: center;
+  }
 }

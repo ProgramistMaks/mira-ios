@@ -16,7 +16,11 @@ import {
   phase,
 } from './shared.js';
 import * as pages from './pages.js';
+import { noteLabel, sortedNotes, taskListOf } from './note-format.mjs';
+import { boardSizing } from './board-sizing.js';
 import { Voice } from './audio.js';
+import { openOrganizer, syncOrganizer } from './organizer.js';
+import { openAgenda, syncAgenda } from './agenda.js';
 import { openSetup } from './setup.js';
 let state,
   page = 'home',
@@ -158,16 +162,19 @@ $('#sectionNav').onclick = (e) => {
   const id = e.target.closest('button')?.dataset.section;
   if (id) document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'instant' });
 };
+function boardRows(inner, height) {
+  // Reserve the card border and gutter in the grid's one-pixel rows.
+  const rows = 'span ' + Math.ceil(height + 2 + 12);
+  if (inner.parentElement.style.gridRowEnd !== rows) inner.parentElement.style.gridRowEnd = rows;
+}
 const boardObserver = new ResizeObserver((entries) => {
-  for (const { target } of entries) {
-    const tile = target.closest('.boardTile');
-    if (!tile) continue;
-    const gap = 12;
-    const span = Math.ceil((target.offsetHeight + 2 + gap) / (4 + gap));
-    tile.style.gridRowEnd = 'span ' + span;
-  }
+  for (const { target, borderBoxSize } of entries)
+    if (target.isConnected) boardRows(target, borderBoxSize[0]?.blockSize ?? target.offsetHeight);
 });
 function renderPage() {
+  if (page === 'desk' && sizingBoard()) return;
+  const handleId =
+    document.activeElement?.dataset.act === 'boardResize' ? document.activeElement.dataset.id : null;
   boardObserver.disconnect();
   if (page === 'home') {
     sections();
@@ -175,11 +182,44 @@ function renderPage() {
   }
   const previous = $('#content').scrollTop;
   $('#content').classList.toggle('expandedGraph', page === 'commands' && !!cache.expanded);
+  const quick = $('#quickTask');
+  const cursor =
+    quick && document.activeElement === quick ? [quick.selectionStart, quick.selectionEnd] : null;
+  if (quick) quick.onblur = null;
   $('#content').innerHTML = pages[page](state, cache);
   if (page === 'desk') {
+    const input = $('#quickTask');
+    if (input) {
+      input.oninput = () => {
+        if (cache.quickTask) cache.quickTask.text = input.value;
+      };
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          finishQuickTask(e.key === 'Escape').catch(err);
+        }
+      };
+      input.onblur = () => finishQuickTask(false).catch(err);
+      if (cursor) {
+        input.focus({ preventScroll: true });
+        input.setSelectionRange(...cursor);
+      }
+    }
     $('#boardMenu').ontoggle = () =>
       $('#panelWidgets').setAttribute('aria-expanded', String(!!$('#boardMenu')?.matches(':popover-open')));
-    document.querySelectorAll('.tileInner').forEach((inner) => boardObserver.observe(inner));
+    // Set the first layout before paint, including when a background refresh replaces the grid.
+    const sizes = Array.from(document.querySelectorAll('.tileInner'), (inner) => [
+      inner,
+      inner.getBoundingClientRect().height,
+    ]);
+    for (const [inner, height] of sizes) {
+      boardRows(inner, height);
+      boardObserver.observe(inner);
+    }
+    if (handleId)
+      $('#content [data-act=boardResize][data-id="' + CSS.escape(handleId) + '"]')?.focus({
+        preventScroll: true,
+      });
   }
   if (page === 'desk' && state.music && $('#musicSlot')) {
     setMusic();
@@ -204,17 +244,25 @@ function cards() {
   const meta = {
     clock: ['clock-3', '', clock.format(new Date())],
     focus: ['timer', 'gold', timerTime(s.focus)],
-    tasks: ['list-checks', 'green', s.tasks.filter((t) => !t.done).length + ' в списке'],
-    reminders: ['calendar-days', '', s.events.filter((e) => !e.fired).length + ' запланировано'],
+    tasks: [
+      'list-checks',
+      'green',
+      s.tasks.filter((t) => !t.done && taskListOf(t) === s.activeTaskList).length + ' в списке',
+    ],
+    reminders: [
+      'calendar-days',
+      '',
+      s.events.filter((e) => !e.fired && !e.disabled && e.category !== 'calendar').length + ' запланировано',
+    ],
     events: [
       'calendar-days',
       '',
       s.events
-        .filter((e) => !e.fired)
+        .filter((e) => !e.fired && e.category !== 'reminder')
         .sort((a, b) => a.time - b.time)
-        .map((e) => timeLabel(e.time))[0] || 'Нет напоминаний',
+        .map((e) => timeLabel(e.time))[0] || 'Нет событий',
     ],
-    notes: ['notebook-pen', 'gold', s.notes[0]?.text || 'Записать заметку'],
+    notes: ['notebook-pen', 'gold', s.notes.length ? noteLabel(sortedNotes(s.notes)[0]) : 'Записать заметку'],
     music: ['music-2', '', s.music?.name || 'Выбрать дорожку'],
     weather: [
       'cloud-sun',
@@ -400,6 +448,8 @@ function render() {
     .join('');
   cards();
   drawWidget();
+  syncOrganizer(state);
+  syncAgenda(state);
   renderChat();
   renderPage();
   renderFrame();
@@ -524,6 +574,15 @@ async function moveBoardTile(from, to) {
   await saveSettings({ widgets: layout });
 }
 const boardContent = $('#content');
+const sizingBoard = boardSizing(
+  boardContent,
+  async (id, size) => {
+    await call('boardTile', { id, size });
+    await refresh();
+  },
+  renderPage,
+  err,
+);
 boardContent.addEventListener('dragstart', (e) => {
   const tile = e.target.closest('.boardTile[draggable=true]');
   if (tile) {
@@ -547,55 +606,53 @@ boardContent.addEventListener('drop', (e) => {
     moveBoardTile(from, tile.dataset.tile).catch(err);
   }
 });
+async function finishQuickTask(cancel) {
+  const draft = cache.quickTask;
+  if (!draft) return;
+  cache.quickTask = null;
+  const text = draft.text.trim();
+  if (!cancel && text) {
+    try {
+      await call('add', { ...draft, kind: 'tasks', text });
+    } catch (e) {
+      cache.quickTask = draft;
+      renderPage();
+      throw e;
+    }
+  }
+  renderPage();
+}
 async function handle(action, id) {
   $('#boardMenu')?.hidePopover();
-  if (action === 'add-reminders') action = 'add-events';
+  if (action === 'add-reminders') return openAgenda('reminders', true);
   if (action?.startsWith('remove-')) {
     await call('remove', { kind: action.slice(7), id });
     return;
   }
-  if (/^(add|edit)-(tasks|events|notes)$/.test(action)) {
-    const [op, k] = action.split('-'),
-      row = op === 'edit' ? state[k].find((x) => x.id === id) : null;
-    let when = '';
-    if (row?.time) {
-      const date = new Date(row.time);
-      when = new Date(+date - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    }
-    const title = { tasks: 'Задача', events: 'Напоминание', notes: 'Заметка' }[k];
-    const text =
-      k === 'notes'
-        ? '<label class="field">Текст<textarea id="itemText">' + esc(row?.text || '') + '</textarea></label>'
-        : field('Текст', 'itemText', row?.text || '');
-    modal(
-      title,
-      text +
-        (k === 'events'
-          ? field('Дата и время', 'itemTime', when, 'datetime-local') +
-            select(
-              'Повтор',
-              'itemRepeat',
-              [
-                ['', 'Один раз'],
-                ['day', 'Каждый день'],
-                ['week', 'Каждую неделю'],
-              ],
-              row?.repeat || '',
-            ) +
-            select(
-              'Действие по расписанию',
-              'itemRoutine',
-              [['', 'Только напомнить'], ...state.routines.map((r) => [r.id, r.name])],
-              row?.routineId || '',
-            )
-          : '') +
-        btn('Сохранить', 'commitItem', 'check', 'primary', k),
-    );
-    $('#itemText').dataset.id = row?.id || '';
-    $('#itemText').focus();
+  if (action === 'add-notes' || action === 'edit-notes')
+    return openOrganizer('notes', id, action === 'add-notes');
+  if (action === 'add-tasks' || action === 'edit-tasks') {
+    if (page !== 'desk' || cache.openWidget) return openOrganizer('tasks', id, action === 'add-tasks');
+    if (cache.quickTask) await finishQuickTask(false);
+    cache.quickTask = {
+      id,
+      list: state.activeTaskList,
+      text: state.tasks.find((t) => t.id === id)?.text || '',
+    };
+    renderPage();
+    $('#quickTask')?.focus();
     return;
   }
+  if (action === 'add-events') return openAgenda('events', true);
+  if (action === 'edit-events') {
+    const event = state.events.find((item) => item.id === id);
+    return openAgenda(event?.category === 'reminder' ? 'reminders' : 'events', false, id);
+  }
   switch (action) {
+    case 'boardHide':
+      await call('boardTile', { id, hide: true });
+      return;
+    case 'boardAdd':
     case 'widgets':
       cache.widgetDraft = structuredClone(state.settings.widgets);
       drawWidgets();
@@ -617,17 +674,7 @@ async function handle(action, id) {
       cache.widgetDraft = structuredClone(state.defaultWidgets);
       drawWidgets();
       return;
-    case 'commitItem':
-      await call('add', {
-        kind: id,
-        id: $('#itemText').dataset.id,
-        text: val('itemText'),
-        time: new Date(val('itemTime')).getTime(),
-        repeat: val('itemRepeat'),
-        routineId: val('itemRoutine'),
-      });
-      closeModal();
-      return;
+    case 'boardDone':
     case 'boardEdit':
       cache.boardEditing = !cache.boardEditing;
       renderPage();
@@ -643,6 +690,8 @@ async function handle(action, id) {
     case 'day':
       $('#home').classList.remove('widgets-open');
       $('#panelWidgets').setAttribute('aria-expanded', 'false');
+      if (id === 'notes' || id === 'tasks') return openOrganizer(id);
+      if (id === 'events' || id === 'reminders') return openAgenda(id);
       cache.openWidget = id;
       if (id === 'system') cache.sys = await call('system');
       drawWidget();

@@ -199,6 +199,32 @@ try {
   await go('desk');
   await p.locator('#panelWidgets').click();
   await p.locator('[data-act=boardEdit]').click();
+  const tile = p.locator('[data-tile=notes]'),
+    handle = tile.locator('[data-act=boardResize]');
+  const initial = await tile.boundingBox(),
+    grip = await handle.boundingBox();
+  const pitch = await p
+    .locator('.deskGrid')
+    .evaluate((el) => (el.clientWidth + 12) / Number(getComputedStyle(el).getPropertyValue('--columns')));
+  const x = grip.x + grip.width / 2,
+    y = grip.y + grip.height / 2;
+  await p.mouse.move(x, y);
+  await p.mouse.down();
+  await p.mouse.move(x, y - pitch, { steps: 8 });
+  await p.mouse.up();
+  await expect
+    .poll(async () => (await state()).settings.widgets.find((w) => w.id === 'notes').height)
+    .toBe(Math.round((initial.height + 12) / pitch) - 1);
+  await expect.poll(async () => (await tile.boundingBox()).height).toBeLessThan(initial.height - 20);
+  await handle.focus();
+  await handle.press('ArrowRight');
+  await expect.poll(async () => (await state()).settings.widgets.find((w) => w.id === 'notes').width).toBe(5);
+  await p.locator('[data-tile=reminders] [data-act=boardHide]').click();
+  await expect(p.locator('[data-tile=reminders]')).toHaveCount(0);
+  await p.locator('[data-act=boardAdd]').click();
+  await p.locator('[data-widget=reminders]').check();
+  await p.locator('[data-act=saveWidgets]').click();
+  await expect(p.locator('[data-tile=reminders]')).toHaveCount(1);
   const firstTile = await p.locator('.boardTile').first().getAttribute('data-tile');
   const secondTile = await p.locator('.boardTile').nth(1).getAttribute('data-tile');
   await p.locator('[data-tile="' + firstTile + '"]').dragTo(p.locator('[data-tile="' + secondTile + '"]'));
@@ -213,23 +239,101 @@ try {
   await p.locator('[data-widget=weather]').uncheck();
   await p.locator('[data-act=widgetUp][data-id=tasks]').click();
   await p.locator('[data-act=saveWidgets]').click();
-  await expect(p.locator('#content .box h3').first()).toHaveText('Задачи');
+  await expect(p.locator('#content .box h3').first()).toHaveText('Мои задачи');
   await expect(p.locator('#content .box h3', { hasText: 'Погода' })).toHaveCount(0);
   await p.locator('[data-act=add-notes]').click();
-  await p.locator('#itemText').fill('Черновик');
-  await p.locator('[data-act=commitItem]').click();
-  await expect(p.locator('[data-act=edit-notes]').first()).toBeVisible();
+  const organizer = p.locator('#organizer'),
+    body = p.locator('#noteBody');
+  await p.locator('#noteTitle').fill('Черновик');
+  await body.fill('Готовая запись');
+  await body.press('Control+a');
+  await organizer.getByRole('button', { name: 'Полужирный (Ctrl+B)', exact: true }).click();
+  await expect.poll(async () => (await state()).notes[0]?.body?.[0]?.tag).toBe('b');
+  await organizer.getByRole('button', { name: 'Закрепить заметку', exact: true }).click();
+  await expect(organizer.getByRole('button', { name: 'Открепить заметку' })).toBeVisible();
+  await organizer.getByRole('button', { name: 'Закрыть', exact: true }).click();
   await p.locator('[data-act=edit-notes]').first().click();
-  await p.locator('#itemText').fill('Готовая запись');
-  await p.locator('[data-act=commitItem]').click();
-  await expect.poll(async () => (await state()).notes[0].text).toBe('Готовая запись');
+  await expect(p.locator('#noteTitle')).toHaveValue('Черновик');
+  await expect(body.locator('b')).toHaveText('Готовая запись');
+  await body.fill('');
+  await body.evaluate((el) => {
+    el.focus();
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/html', '<p><strong>Формат</strong> <em>сохранён</em></p>');
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  });
+  await expect(body.locator('b,strong')).toHaveText('Формат');
+  await expect(body.locator('i,em')).toHaveText('сохранён');
+  await body.fill('Текст из редактора');
+  await organizer.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect.poll(async () => (await state()).notes[0].text).toBe('Черновик\nТекст из редактора');
+  await p.locator('[data-act=add-tasks]').click();
+  await p.locator('#quickTask').fill('Проверить запись');
+  await p.locator('#quickTask').press('Enter');
+  await expect.poll(async () => (await state()).tasks.some((t) => t.text === 'Проверить запись')).toBe(true);
+  await p.locator('#content [data-act=day][data-id=tasks]').click();
+  await organizer.getByRole('button', { name: 'Добавить список' }).click();
+  await p.locator('#orgListName').fill('Съёмка');
+  await p.locator('#orgListName').press('Enter');
+  await expect(organizer.locator('.orgRow[aria-current=true]')).toContainText('Съёмка');
+  await organizer.locator('.taskAdd').click();
+  await p.locator('#orgTaskText').fill('Настроить свет');
+  await p.locator('#orgTaskText').press('Enter');
+  await expect(organizer.locator('.taskText')).toHaveText('Настроить свет');
+  await organizer.getByRole('button', { name: 'Отметить выполненной' }).click();
+  await expect(organizer.locator('.orgTask.done')).toHaveCount(1);
+  await organizer.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await expect(p.locator('[data-tile=tasks] h3')).toHaveText('Съёмка');
+  await p.reload();
+  await go('desk');
+  await expect(p.locator('[data-tile=tasks] h3')).toHaveText('Съёмка');
+  await p.locator('[data-act=edit-notes]').first().click();
+  await expect(body).toHaveText('Текст из редактора');
+  await expect.poll(async () => (await state()).settings.widgets.find((w) => w.id === 'notes').width).toBe(5);
+  await expect(organizer.getByRole('button', { name: 'Открепить заметку' })).toBeVisible();
+  await organizer.getByRole('button', { name: 'Закрыть', exact: true }).click();
   await p.locator('[data-act=add-events]').click();
-  await p.locator('#itemText').fill('Рабочая сессия');
-  await p.locator('#itemTime').fill(new Date().getFullYear() + 1 + '-09-16T10:00');
-  await p.locator('#itemRepeat').selectOption('week');
-  await p.locator('#itemRoutine').selectOption('study-session');
-  await p.locator('[data-act=commitItem]').click();
+  const agenda = p.locator('#agenda'),
+    form = agenda.locator('#agendaForm');
+  await form.locator('[name=text]').fill('Рабочая сессия');
+  await form.locator('summary').click();
+  await form.locator('[name=date]').fill(new Date().getFullYear() + 1 + '-09-16');
+  await form.locator('[name=time]').fill('10:00');
+  await form.locator('[name=repeat]').selectOption('week');
+  await form.locator('[name=routine]').selectOption('study-session');
+  await form.getByRole('button', { name: 'Сохранить' }).click();
   await expect.poll(async () => (await state()).events[0]?.routineId).toBe('study-session');
+  await expect(agenda.locator('.agendaRow')).toContainText('Рабочая сессия');
+  await expect(agenda.locator('button[data-ag=day]')).toHaveCount(42);
+  await agenda.getByRole('button', { name: 'Предыдущий месяц' }).click();
+  await agenda.getByRole('button', { name: 'Следующий месяц' }).click();
+  await expect.poll(() => agenda.locator('[data-ag=day].marked').count()).toBeGreaterThan(1);
+  await agenda.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  await p.locator('#content [data-act=add-reminders]').click();
+  await form.locator('[name=text]').fill('Выпить воды');
+  await form.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(agenda.locator('.reminderText')).toHaveText('Выпить воды');
+  await agenda.getByRole('switch').click();
+  await expect(agenda.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+  await expect
+    .poll(async () => (await state()).events.find((e) => e.text === 'Выпить воды')?.disabled)
+    .toBe(true);
+  await agenda.getByRole('switch').click();
+  await expect(agenda.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+  await agenda.getByRole('button', { name: 'Закрыть', exact: true }).click();
+  const dailyAnswer = await p.evaluate(async () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    await window.desk.call('add', {
+      kind: 'events',
+      category: 'calendar',
+      time: +today,
+      text: 'Проверка повестки',
+    });
+    return (await window.desk.call('send', { text: 'Планы на сегодня' })).text;
+  });
+  assert.match(dailyAnswer, /Проверка повестки/);
+  assert.doesNotMatch(dailyAnswer, /Выпить воды/);
   const packfile = path.join(dir, 'work.json');
   await writeFile(
     packfile,
@@ -274,6 +378,7 @@ try {
   await expect.poll(async () => (await state()).notes.length, { timeout: 9000 }).toBe(count + 1);
   await close();
   await go('commands');
+  await p.locator('[data-act=edit][data-id=study-session]').click();
   const option = await p
     .locator('#kind option')
     .filter({ hasText: 'Записать с панели' })
