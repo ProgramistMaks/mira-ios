@@ -1,5 +1,11 @@
 # Verification — 2026-11-17
 
+## Continuous hand motion and changes of stance, 2026-11-18
+
+Revision `20d80b0` passed the TypeScript check, renderer build and 85 renderer tests. The local test site passed its 13 tests. During review the Chromium integration checks covered 12 composed performances, three viewport sizes, touch, speech-driven mouth movement, pause and resume, WebGL recovery and both normalized and skinned foot contact.
+
+The final greeting was captured from the front and at 41° with 120 independent animation steps per second. FFprobe reported 564 frames over 4.70 seconds. All 564 decoded composite frames had distinct checksums. The capture uses a controlled clock. Actual display cadence on the physical phone remains unmeasured. The last private iOS job stopped before a build host started, and this animation pass used local checks. [Frame and contact measurements](MOTION-REFERENCE-STUDY.md)
+
 ## Seven reference performances, 2026-11-18
 
 Revision `53f8beb` passed the renderer build, TypeScript check and 81 renderer tests. The local test site uses the same motion sources and passed 13 tests. All seven performances were recorded from the app's renderer in front and three-quarter views. The 120 fps dance recording contained 738 distinct decoded frames in 6.15 seconds on a controlled animation clock. The camera comparison used 125 joint markers from 34 intermediate source frames. [Frame measurements](MOTION-REFERENCE-STUDY.md)
