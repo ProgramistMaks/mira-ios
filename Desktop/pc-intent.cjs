@@ -26,8 +26,8 @@ function desktopIntent(text, spoken = false) {
     .replace(/[.,!?]/g, '')
     .replace(/(браузер)[-–—]+(?=[а-яa-z])/g, '$1 ')
     .replace(/^(?:(?:мира|пожалуйста|please)\s+)+|\s+(?:пожалуйста|please)$/g, '');
-  // Local Russian STT can transcribe the imperative «открой» as «открою».
-  if (spoken && /^открою браузер (?:гугл|гугол|бугл|google)$/.test(phrase)) return 'browser';
+  // Allow one misheard vowel or final sound only for the complete spoken Google browser command.
+  if (spoken && /^откр[оуа](?:й|ю) браузер (?:гугл|гугол|бугл|google)$/.test(phrase)) return 'browser';
   const match = /^(?:открой(?:те)?|открывай(?:те)?|открыть|запусти(?:те)?|запускай(?:те)?|запустить|open|launch)\s+(?:(?:the|мой)\s+)?(.+)$/.exec(phrase);
   if (!match) return;
   if (/^(?:браузер\s+)?(?:(?:гугл|гугол|google)\s+)?(?:хром|chrome)(?:\s+browser)?$/.test(match[1]))
