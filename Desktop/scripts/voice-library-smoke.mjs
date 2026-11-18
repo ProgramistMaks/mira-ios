@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
-import { microphoneWav } from './microphone-fixture.mjs';
+import { microphoneSequence } from './microphone-fixture.mjs';
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const dir = await mkdtemp(path.join(os.tmpdir(), 'mira-voices-'));
@@ -14,7 +14,16 @@ let app;
 try {
   const clip = await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'));
   const mic = path.join(dir, 'mic.wav');
-  await writeFile(mic, microphoneWav(clip));
+  await writeFile(
+    mic,
+    microphoneSequence([
+      2,
+      await readFile(path.join(root, 'Desktop/tests/fixtures/wake-word-ru.wav')),
+      5,
+      clip,
+      8,
+    ]),
+  );
   const args = [
     '--use-fake-ui-for-media-stream',
     '--use-fake-device-for-media-stream',
@@ -36,6 +45,7 @@ try {
   const p = await app.firstWindow();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
+  await p.locator('#intro #startListening').selectOption('off');
   await p.locator('#introSkip').click();
   await p.locator('[data-go=voice]').first().click();
   await p.evaluate(() => {
@@ -107,7 +117,7 @@ try {
   });
   await p.locator('#voiceStart').click();
   await p.waitForFunction(
-    () => window.phases.includes('Отвечаю…') && window.phases.at(-1) === 'Слушаю. Можно говорить.',
+    () => window.phases.includes('Отвечаю…') && window.phases.at(-1) === 'Жду обращения «Мира»',
     null,
     { timeout: 90000 },
   );

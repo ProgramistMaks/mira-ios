@@ -1,13 +1,21 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-test('wake follow-ups expire in standby only and allow a command after a bare name', async () => {
-  const { followUpDelay } = await import('../ui/wake.mjs');
-  assert.equal(followUpDelay(false, false, false, 3), null);
-  assert.equal(followUpDelay(true, true, false, 3), null);
-  assert.equal(followUpDelay(true, false, true, 0), 8000);
-  assert.equal(followUpDelay(true, false, false, 0), 0);
-  assert.equal(followUpDelay(true, false, false, 6), 6000);
+test('every hands-free turn needs its own wake word. A separate name accepts exactly one question', async () => {
+  const { WakeGate } = await import('../ui/wake.mjs');
+  const gate = new WakeGate();
+  assert.equal(gate.accept('открой браузер', 'Вита', 100, 100), undefined);
+  assert.equal(gate.accept('Мира, открой браузер', 'Вита', 200, 200), 'открой браузер');
+  assert.equal(gate.accept('запиши заметку', 'Вита', 300, 300), undefined);
+  assert.equal(gate.accept('привет, Мира!', 'Вита', 400, 400), undefined);
+  assert.ok(gate.pending(450));
+  assert.equal(gate.accept('какая погода', 'Вита', 10399, 18000), 'какая погода');
+  assert.ok(!gate.pending(18001));
+  gate.accept('Мира', 'Вита', 20000, 20000);
+  assert.equal(gate.accept('привет', 'Вита', 30001, 30001), undefined);
+  assert.equal(gate.accept('мы говорили про Миру', 'Вита', 31000, 31000), undefined);
+  assert.equal(gate.accept('Mira, hello', 'Вита', 32000, 32000), 'hello');
+  assert.equal(gate.accept('Вита, привет', 'Вита', 33000, 33000), 'привет');
 });
 
 test('delayed loudspeaker echo does not interrupt playback, but independent speech interrupts and keeps its first syllable', async () => {

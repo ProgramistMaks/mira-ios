@@ -329,8 +329,9 @@ export function desk(s, c, only) {
         ['off', 'В приложении'],
         ['window', 'В отдельном окне'],
         ['pin', 'Поверх окон'],
+        ...(s.platform === 'win32' ? [['wallpaper', 'На слое обоев Windows']] : []),
       ],
-      mode ? (mode.pin ? 'pin' : 'window') : 'off',
+      mode ? (mode.wallpaper ? 'wallpaper' : mode.pin ? 'pin' : 'window') : 'off',
     );
     cards[id] = cards[id].replace('</article>', place + '</article>');
   }
@@ -1211,8 +1212,8 @@ export function voice(s, c) {
           String(a.sensitivity),
         ) +
         onOff('Можно перебивать ответ голосом', 'interruptReplies', a.interruptReplies) +
-        scale('Следующая реплика без обращения, сек', 'wakeWindow', a.wakeWindow, [0, 3, 6, 10, 20, 30, 60]) +
-        field('Слово активации', 'wakeAlias', a.wakeAlias || a.name) +
+        '<p>Скажи «Мира» перед каждым вопросом. Можно произнести имя отдельно и начать вопрос в течение десяти секунд.</p>' +
+        field('Слово активации', 'wakeAlias', a.wakeAlias || 'Мира') +
         btn('Сохранить слово', 'saveWake', 'save'),
     ) +
     box(
@@ -1233,7 +1234,7 @@ export function voice(s, c) {
       '<p class="muted">Мира слушает до паузы, отвечает вслух и снова включает микрофон. В ожидании имени речь распознаётся на этом компьютере.</p>' +
         acts(
           btn('Начать разговор', 'voice', 'mic', 'primary'),
-          btn('Ждать обращения «' + (a.wakeAlias || a.name) + '»', 'standby', 'audio-lines'),
+          btn('Ждать обращения «' + (a.wakeAlias || 'Мира') + '»', 'standby', 'audio-lines'),
         ),
     ) +
     box(
@@ -1291,7 +1292,10 @@ export function voice(s, c) {
 export const providerPresets = [
   ['https://api.openai.com/v1', 'OpenAI'],
   ['https://openrouter.ai/api/v1', 'OpenRouter'],
-  ['https://api.deepseek.com/v1', 'DeepSeek'],
+  ['https://api.deepseek.com/v1', 'DeepSeek', 'deepseek-chat'],
+  ['https://api.mistral.ai/v1', 'Mistral AI', 'mistral-small-latest'],
+  ['https://api.groq.com/openai/v1', 'Groq', 'llama-3.3-70b-versatile'],
+  ['https://api.together.ai/v1', 'Together AI', 'meta-llama/Llama-3.3-70B-Instruct-Turbo'],
   ['https://api.anthropic.com/v1', 'Anthropic Claude'],
   ['https://generativelanguage.googleapis.com/v1beta/openai', 'Google Gemini'],
   ['https://api.x.ai/v1', 'xAI'],
@@ -1302,7 +1306,7 @@ export const providerPresets = [
 export function ai(s, c) {
   const a = s.settings;
   return (
-    heading('Искусственный интеллект') +
+    heading('Искусственный интеллект', btn('Фоновые помощники и изображения', 'assistants', 'sparkles')) +
     '<div class="grid">' +
     box(
       'Источник ответов',
@@ -1588,9 +1592,29 @@ export function plugins(s, c) {
 export function settings(s, c) {
   const a = s.settings;
   return (
-    heading('Настройки', btn('Пошаговая настройка', 'setup', 'sliders-horizontal')) +
+    heading(
+      'Настройки',
+      btn('Пошаговая настройка', 'setup', 'sliders-horizontal') + btn('Экскурсия', 'tour', 'compass'),
+    ) +
     '<input class="control" id="prefsQuery" placeholder="Найти настройку" aria-label="Поиск настроек">' +
     '<div class="grid">' +
+    box(
+      'Язык и инструменты',
+      'settings',
+      select(
+        'Язык интерфейса',
+        'uiLanguage',
+        [
+          ['ru', 'Русский'],
+          ['en', 'English'],
+        ],
+        a.language,
+      ) +
+        acts(
+          btn('Размещение и форма виджетов', 'widgetShapes', 'layout-dashboard') +
+            btn('Предпросмотр и очистка кэша', 'cachePreview', 'trash-2'),
+        ),
+    ) +
     box(
       'Остров на экране',
       'monitor',

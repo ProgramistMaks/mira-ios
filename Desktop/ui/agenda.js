@@ -220,10 +220,13 @@ export async function openAgenda(kind, add = false, id = '') {
     ico(kind === 'events' ? 'calendar-days' : 'bell') + (kind === 'events' ? 'Календарь' : 'Напоминания');
   $('#agendaCount').textContent = '';
   $('#agendaOptions').hidden = true;
+  $('#calendarPlace option[value=wallpaper]').disabled = state.platform !== 'win32';
   $('#calendarPlace').value = state.screenWidgets?.events
-    ? state.screenWidgets.events.pin
-      ? 'pin'
-      : 'window'
+    ? state.screenWidgets.events.wallpaper
+      ? 'wallpaper'
+      : state.screenWidgets.events.pin
+        ? 'pin'
+        : 'window'
     : 'off';
   const item = id ? state.events.find((e) => e.id === id) : undefined;
   if (item && kind === 'events') {

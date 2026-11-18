@@ -37,8 +37,8 @@ function join(frames) {
   return data;
 }
 export class Voice {
-  constructor(onTurn, onStatus, onError, localOnly = () => false) {
-    Object.assign(this, { onTurn, onStatus, onError, localOnly });
+  constructor(onTurn, onStatus, onError, localOnly = () => false, wakeDuringPlayback) {
+    Object.assign(this, { onTurn, onStatus, onError, localOnly, wakeDuringPlayback });
     this.epoch = 0;
     this.audioEpoch = 0;
     this.enabled = false;
@@ -183,6 +183,23 @@ export class Voice {
       if (time > this.tail.until) this.tail = null;
       else if (voiced && isPlaybackEcho(buf, this.ctx.sampleRate, time, this.tail.reference)) voiced = false;
     }
+    if (this.wakeDuringPlayback && (this.interruption || this.playing)) {
+      if (this.settings?.interruptReplies === false || this.probingWake) return;
+      const echo =
+        this.playing && (!this.speaker || isPlaybackEcho(buf, this.ctx.sampleRate, time, this.reference));
+      const speech = voiced && !echo;
+      if (!this.interruption && !speech) return;
+      const capture = (this.interruption ??= { start: Date.now(), frames: [], quiet: 0, speech: 0 });
+      capture.frames.push(echo ? new Float32Array(buf.length) : buf);
+      capture.quiet = speech ? 0 : capture.quiet + sec;
+      if (speech) capture.speech += sec;
+      if (capture.quiet >= (this.settings?.silence ?? 0.78) || capture.frames.length * sec >= 35) {
+        this.interruption = null;
+        if (capture.speech >= 0.16) this.checkInterruption(capture).catch((e) => this.onError(e));
+      }
+      return;
+    }
+    if (this.probingWake) return;
     if (this.playing) {
       if (!this.speaker || this.settings?.interruptReplies === false) return;
       if (
@@ -221,6 +238,7 @@ export class Voice {
       this.talking = voiced ? this.talking + sec : 0;
       if (this.talking < 0.12) return;
       this.recording = true;
+      this.utteranceStart = Date.now() - this.talking * 1000;
       this.frames = this.pre;
       this.pre = [];
       this.onStatus('Слышу тебя…', 'listening');
@@ -229,9 +247,26 @@ export class Voice {
     if (this.quiet < (this.settings?.silence ?? 0.78) && this.frames.length * sec < 70) return;
     const bytes = wav(join(this.frames), this.ctx.sampleRate);
     this.reset();
-    this.turn(bytes).catch((e) => this.onError(e));
+    this.turn(bytes, this.utteranceStart).catch((e) => this.onError(e));
   }
-  async turn(bytes) {
+  async checkInterruption(capture) {
+    const epoch = this.epoch,
+      probe = {};
+    this.probingWake = probe;
+    try {
+      const bytes = wav(join(capture.frames), this.ctx.sampleRate);
+      const text = await call('transcribe', { bytes, localOnly: true });
+      if (epoch !== this.epoch || !this.enabled || !this.wakeDuringPlayback(text)) return;
+      this.probingWake = null;
+      this.turnId++;
+      this.hush();
+      this.reset();
+      await this.turn(null, capture.start, text);
+    } finally {
+      if (this.probingWake === probe) this.probingWake = null;
+    }
+  }
+  async turn(bytes, startedAt = Date.now(), recognized) {
     const e = this.epoch,
       turn = ++this.turnId,
       reply = ++this.replyEpoch;
@@ -240,14 +275,13 @@ export class Voice {
     this.transcribing = true;
     this.onStatus('Распознаю фразу…', 'thinking');
     try {
-      const text = await call('transcribe', { bytes, localOnly: this.localOnly() });
+      const text = recognized ?? (await call('transcribe', { bytes, localOnly: this.localOnly(startedAt) }));
       if (!active()) return;
       this.transcribing = false;
       if (!text.trim()) return;
-      this.onStatus('Думаю…', 'thinking');
       let result;
       try {
-        result = await this.onTurn(text);
+        result = await this.onTurn(text, startedAt);
       } catch (err) {
         if (!active()) return;
         this.onError(err);
@@ -349,6 +383,8 @@ export class Voice {
     this.enabled = false;
     this.testing = false;
     this.captureId++;
+    this.interruption = null;
+    this.probingWake = null;
     this.turnId++;
     this.busy = false;
     this.transcribing = false;

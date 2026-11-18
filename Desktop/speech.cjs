@@ -59,7 +59,7 @@ async function temp(fn) {
     await fs.rm(folder, { recursive: true, force: true }).catch(() => {});
   }
 }
-async function transcribe(base, bytes, signal) {
+async function transcribe(base, bytes, signal, wakeName) {
   const b = Buffer.from(bytes);
   if (
     b.length < 44 ||
@@ -72,11 +72,7 @@ async function transcribe(base, bytes, signal) {
     const file = path.join(dir, 'speech.wav'),
       out = path.join(dir, 'text');
     await fs.writeFile(file, b);
-    const exe = path.join(
-      base,
-      'whisper',
-      process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli',
-    );
+    const exe = path.join(base, 'whisper', process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli');
     await childRun(
       exe,
       [
@@ -87,6 +83,7 @@ async function transcribe(base, bytes, signal) {
         '-l',
         'ru',
         '-nt',
+        ...(wakeName ? ['--prompt', String(wakeName).slice(0, 50) + '.'] : []),
         '-otxt',
         '-of',
         out,

@@ -1,6 +1,7 @@
 const path = require('node:path'),
   { spawn } = require('node:child_process');
 const catalog = {
+  explorer: ['Проводник', 'explorer.exe'],
   notepad: ['Блокнот', 'notepad.exe'],
   calculator: ['Калькулятор', 'calc.exe'],
   tasks: ['Диспетчер задач', 'Taskmgr.exe'],
@@ -27,10 +28,18 @@ async function launch(id, app, shell) {
   if (target.startsWith('ms-settings:')) return shell.openExternal(target);
   if (target.endsWith('.exe'))
     return new Promise((resolve, reject) => {
-      const c = spawn(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', target), [], {
-        detached: true,
-        stdio: 'ignore',
-      });
+      const c = spawn(
+        path.join(
+          process.env.SystemRoot || 'C:\\Windows',
+          ...(id === 'explorer' ? [] : ['System32']),
+          target,
+        ),
+        [],
+        {
+          detached: true,
+          stdio: 'ignore',
+        },
+      );
       c.once('spawn', () => {
         c.unref();
         resolve();

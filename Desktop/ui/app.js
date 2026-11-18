@@ -11,7 +11,7 @@ import { navigation } from './navigation.js';
 import { applyPalette } from './themes.mjs';
 import './error-journal.js';
 import { updateBackdrop } from './backgrounds.js';
-import { address, followUpDelay } from './wake.mjs';
+import { WakeGate } from './wake.mjs';
 import { syncCat } from './cat.js';
 import {
   $,
@@ -39,6 +39,8 @@ import { canRevise } from './chat-history.mjs';
 import { openOrganizer, syncOrganizer } from './organizer.js';
 import { openMail } from './mail.js';
 import { openAgenda, syncAgenda } from './agenda.js';
+import { desktopTools } from './extras.js';
+import { startTour } from './tour.js';
 import { openSetup } from './setup.js';
 let state,
   page = 'home',
@@ -58,42 +60,42 @@ const cache = { gesture: 'auto', emotion: '', draft: null, progress: null },
   music = new Audio();
 music.controls = true;
 music.preload = 'metadata';
-let standbyMode = false,
-  waitingForCommand = false,
-  wakeTimer;
-let waitingForName = false,
+const wakeGate = new WakeGate();
+let wakeTimer,
   lastMicMode = 'off';
 const voice = new Voice(
-  async (text) => {
-    const next = address(text, state.settings.wakeAlias || state.settings.name, waitingForName);
-    waitingForCommand = waitingForName && !next.waiting && !next.text;
-    waitingForName = next.waiting;
-    if (waitingForName) standbyMode = true;
-    if (next.text) return send(next.text, true);
-    return next.reply;
+  async (text, startedAt) => {
+    const question = wakeGate.accept(text, state.settings.wakeAlias, startedAt);
+    clearTimeout(wakeTimer);
+    if (wakeGate.pending())
+      wakeTimer = setTimeout(() => {
+        if (voice.enabled && !voice.recording && !voice.busy)
+          voice.onStatus('Слушаю. Можно говорить.', 'listening');
+      }, 10001);
+    if (!question) return;
+    voice.onStatus('Думаю…', 'thinking');
+    return send(question, true);
   },
   (msg, p) => {
     renderServices();
-    clearTimeout(wakeTimer);
     if (voice.testing) return;
-    if (voice.enabled && msg === 'Слушаю. Можно говорить.') {
-      const ms = followUpDelay(standbyMode, waitingForName, waitingForCommand, state.settings.wakeWindow);
-      if (ms === 0) waitingForName = true;
-      else if (ms !== null)
-        wakeTimer = setTimeout(() => {
-          if (!voice.enabled) return;
-          waitingForName = true;
-          waitingForCommand = false;
-          voice.onStatus('Слушаю. Можно говорить.', 'listening');
-        }, ms);
-    }
-    const mode = voice.enabled ? (waitingForName ? 'waiting' : 'talking') : 'off';
+    const mode = voice.enabled
+      ? wakeGate.pending() || sending || voice.playing
+        ? 'talking'
+        : 'waiting'
+      : 'off';
     if (mode !== lastMicMode) {
       lastMicMode = mode;
       call('micMode', { mode }).catch(err);
     }
-    if (mode === 'waiting' && msg && p !== 'speaking')
-      msg = 'Жду обращения «' + (state.settings.wakeAlias || state.settings.name) + '»';
+    if (voice.enabled && voice.transcribing && !wakeGate.pending()) {
+      msg = 'Жду обращения «' + (state?.settings.wakeAlias || 'Мира') + '»';
+      p = 'listening';
+    }
+    if (voice.enabled && msg && p === 'listening' && !voice.recording)
+      msg = wakeGate.pending()
+        ? 'Слушаю вопрос…'
+        : 'Жду обращения «' + (state?.settings.wakeAlias || 'Мира') + '»';
     liveStatus = msg;
     $('#voiceStatus').textContent = msg;
     $('#voiceBar').hidden = !msg;
@@ -102,7 +104,8 @@ const voice = new Voice(
     phase(p, state?.settings.reduced || false);
   },
   err,
-  () => waitingForName,
+  (startedAt) => !wakeGate.pending(startedAt),
+  (text) => !!wakeGate.match(text, state?.settings.wakeAlias),
 );
 let meterAt = 0;
 voice.onMeter = (rms, label) => {
@@ -122,6 +125,7 @@ async function refreshAudioDevices() {
   if (page === 'voice') renderPage();
 }
 navigator.mediaDevices?.addEventListener('devicechange', () => {
+  if (state?.settings.introDone && !$('#intro').open) listenOnOpen();
   if (page === 'voice' || voice.enabled) refreshAudioDevices().catch(err);
 });
 const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -775,16 +779,23 @@ async function send(input, voiceMode = false) {
 }
 async function toggleVoice(standby = false, fromFooter = false) {
   if (voice.enabled && !standby) {
+    sessionStorage.setItem('voiceMuted', '1');
+    wakeGate.reset();
+    clearTimeout(wakeTimer);
     if (fromFooter) {
       voice.stop(false, true);
       await call('stopRecognition');
     } else voice.stop();
     return;
   }
-  waitingForName = standby;
-  standbyMode = standby;
-  waitingForCommand = false;
-  if (!fromFooter) nav('home');
+  wakeGate.reset();
+  clearTimeout(wakeTimer);
+  if (standby && voice.enabled) {
+    voice.onStatus('Слушаю. Можно говорить.', 'listening');
+    return;
+  }
+  sessionStorage.removeItem('voiceMuted');
+  if (!fromFooter && !standby) nav('home');
   await voice.start(false, fromFooter);
 }
 function newChat() {
@@ -799,6 +810,12 @@ function newChat() {
 async function saveSettings(data) {
   await call('settings', data);
   await refresh();
+  if ('startListening' in data) {
+    if (data.startListening) {
+      sessionStorage.removeItem('voiceMuted');
+      listenOnOpen();
+    } else if (voice.enabled) await toggleVoice(false, true);
+  }
 }
 function loadDraft(id) {
   const r = state.routines.find((r) => r.id === id);
@@ -895,6 +912,33 @@ async function finishQuickTask(cancel) {
   }
   renderPage();
 }
+const toolsPanel = desktopTools(modal, () => state);
+function listenOnOpen() {
+  if (
+    state.settings.introDone &&
+    state.settings.startListening &&
+    !voice.enabled &&
+    !voice.testing &&
+    !sessionStorage.getItem('voiceMuted')
+  )
+    toggleVoice(true, true).catch((error) => {
+      if (['NotFoundError', 'NotAllowedError', 'NotReadableError'].includes(error.name)) {
+        toast('Микрофон недоступен. Подключи его или разреши доступ в настройках системы.');
+        return;
+      }
+      err(error);
+    });
+}
+function launchSetup() {
+  openSetup(
+    state,
+    async () => {
+      await refresh();
+      listenOnOpen();
+    },
+    () => startTour(nav, page),
+  );
+}
 async function handle(action, id) {
   $('#boardMenu')?.hidePopover();
   if (action === 'add-reminders') return openAgenda('reminders', true);
@@ -974,8 +1018,18 @@ async function handle(action, id) {
       cache.openWidget = null;
       drawWidget();
       return;
+    case 'assistants':
+      return toolsPanel.assistants();
+    case 'widgetShapes':
+      return toolsPanel.shape();
+    case 'cachePreview':
+      return toolsPanel.scan();
+    case 'tour':
+      return startTour(nav, page);
+    case 'gitBranches':
+      return toolsPanel.git(state.activeProject);
     case 'setup':
-      openSetup(state, refresh);
+      launchSetup();
       return;
     case 'context':
       modal(
@@ -1068,6 +1122,7 @@ async function handle(action, id) {
       modal(
         'Файлы · ' + p.name,
         btn(p.folder || 'Выбрать рабочую папку', 'projectFolder', 'folder-open') +
+          (p.folder ? btn('Ветки Git', 'gitBranches', 'git-branch') : '') +
           (data.files.length
             ? select(
                 'Открыть текстовый файл',
@@ -2224,10 +2279,7 @@ document.addEventListener('change', (e) => {
       ].map((k) => [k, { [k]: v === 'on' }]),
     ),
     ...Object.fromEntries(
-      ['speechRate', 'speechVolume', 'sensitivity', 'silence', 'wakeWindow'].map((k) => [
-        k,
-        { [k]: Number(v) },
-      ]),
+      ['speechRate', 'speechVolume', 'sensitivity', 'silence'].map((k) => [k, { [k]: Number(v) }]),
     ),
     ...Object.fromEntries(
       ['degree', 'exchangeFrom', 'exchangeTo', 'cryptoCoin', 'currency'].map((k) => [k, { [k]: v }]),
@@ -2241,7 +2293,17 @@ document.addEventListener('change', (e) => {
     saveSettings(settings).catch(err);
     return;
   }
-  if (e.target.id === 'preset' && v) $('#base').value = v;
+  if (e.target.id === 'uiLanguage' && v !== state.settings.language) {
+    call('settings', { language: v })
+      .then(() => location.reload())
+      .catch(err);
+    return;
+  }
+  if (e.target.id === 'preset' && v) {
+    $('#base').value = v;
+    const preset = pages.providerPresets.find((p) => p[0] === v);
+    if (preset?.[2]) $('#cloudModel').value = preset[2];
+  }
   if (e.target.id === 'gesture') {
     cache.gesture = v;
     avatar()?.configureChoreography(v);
@@ -2525,7 +2587,12 @@ $('#composerVoice').onclick = $('#serviceVoice').onclick = async () => {
   }
 };
 $('#mic').onclick = $('#voiceStart').onclick = () => toggleVoice().catch(err);
-$('#voiceEnd').onclick = () => voice.stop();
+$('#voiceEnd').onclick = () => {
+  sessionStorage.setItem('voiceMuted', '1');
+  wakeGate.reset();
+  clearTimeout(wakeTimer);
+  voice.stop();
+};
 $('#composeOptions').onclick = () => {
   const panel = $('#chatOptions');
   panel.hidden = !panel.hidden;
@@ -2580,10 +2647,13 @@ document.addEventListener('keydown', (e) => {
     $('#panelWidgets').setAttribute('aria-expanded', 'false');
     cache.openWidget = null;
     drawWidget();
-    if (voice.enabled) voice.stop();
   }
 });
 window.desk.on(async (e) => {
+  if (e.type === 'assistantJobs') {
+    if ($('#jobList')) await toolsPanel.jobs();
+    return;
+  }
   if (e.type === 'modelActivity') {
     syncModelActivity(e);
     renderServices();
@@ -2744,7 +2814,10 @@ async function boot() {
   current = state.chats[0]?.id || '';
   render();
   setupAvatar();
-  if (!state.settings.introDone) openSetup(state, refresh);
+  if (!state.settings.introDone || sessionStorage.getItem('reopenIntro')) {
+    sessionStorage.removeItem('reopenIntro');
+    launchSetup();
+  } else listenOnOpen();
 }
 boot().catch(err);
 

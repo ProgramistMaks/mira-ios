@@ -177,6 +177,15 @@ def build(cache, out, stage_only):
     subprocess.run(["node", DESKTOP / "scripts/stage-mail.mjs", app], check=True)
     subprocess.run(["node", DESKTOP / "scripts/vendor.mjs"], check=True)
     shutil.copytree(DESKTOP / "ui", app / "ui", dirs_exist_ok=True)
+    shutil.copytree(DESKTOP / "windows", app / "windows", dirs_exist_ok=True)
+    if os.name == "nt":
+        csc = Path(os.environ["SystemRoot"]) / "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+        subprocess.run([csc, "/nologo", "/target:winexe", "/platform:x64", "/optimize+",
+                        "/out:" + str(app / "windows/MiraWallpaper.exe"), app / "windows/MiraWallpaper.cs"], check=True)
+    elif shutil.which("mcs"):
+        subprocess.run(["mcs", "-target:winexe", "-platform:x64", "-optimize+",
+                        "-out:" + str(app / "windows/MiraWallpaper.exe"), app / "windows/MiraWallpaper.cs"], check=True)
+    subprocess.run(["node", DESKTOP / "scripts/locale-build.cjs", app / "ui/en"], check=True)
     shutil.copytree(ROOT / "Resources/Web", app / "renderer", dirs_exist_ok=True)
     unpack(
         cache,

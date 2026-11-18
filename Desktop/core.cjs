@@ -69,7 +69,8 @@ const defaults = () => ({
     clipMemory: false,
     startHidden: false,
     startLogin: false,
-    startListening: false,
+    startListening: true,
+    wakePerTurn: true,
     bubbles: true,
     ttsEnabled: true,
     speechRate: 1,
@@ -77,7 +78,6 @@ const defaults = () => ({
     sensitivity: 0.012,
     microphoneId: '',
     speakerId: '',
-    wakeWindow: 6,
     interruptReplies: true,
     silence: 0.78,
     degree: 'C',
@@ -85,7 +85,7 @@ const defaults = () => ({
     exchangeTo: 'RUB',
     cryptoCoin: 'bitcoin',
     currency: 'usd',
-    wakeAlias: '',
+    wakeAlias: 'Мира',
     accent: '',
     glow: 55,
     glass: false,
@@ -115,6 +115,7 @@ const defaults = () => ({
     avatar: 'vita',
     outfit: 'original',
     showAvatar: false,
+    language: 'ru',
     introDone: false,
     city: 'Москва',
     reduced: false,
@@ -166,10 +167,14 @@ class Store {
         introDone: Boolean(disk.settings),
         ...(disk.settings ? { allowTypos: false, routineSteps: 160, routineRepeats: 10 } : {}),
         ...disk.settings,
+        // Introduce always-on wake mode once for profiles made before per-question activation.
+        ...(disk.settings && !Object.hasOwn(disk.settings, 'wakePerTurn')
+          ? { startListening: true, wakePerTurn: true }
+          : {}),
         widgets: widgetLayout(disk.settings?.widgets),
       },
     };
-    let migrated = false;
+    let migrated = !!disk.settings && !Object.hasOwn(disk.settings, 'wakePerTurn');
     for (const chat of this.data.chats)
       for (const message of chat.messages)
         if (!message.id) {
@@ -184,8 +189,17 @@ class Store {
     fs.renameSync(temp, this.file);
   }
   public() {
-    const { secrets, mailBoxes, mailIndex, telegramOffset, pairedChat, shelf, excludedDirs, ...state } =
-      this.data;
+    const {
+      secrets,
+      assistantJobs,
+      mailBoxes,
+      mailIndex,
+      telegramOffset,
+      pairedChat,
+      shelf,
+      excludedDirs,
+      ...state
+    } = this.data;
     return {
       ...state,
       projects: (state.projects || []).map(({ root, ...p }) => ({

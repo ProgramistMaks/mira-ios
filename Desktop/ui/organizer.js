@@ -337,10 +337,13 @@ export async function openOrganizer(kind, id, create = false) {
   $('#orgHeading').innerHTML =
     ico(kind === 'notes' ? 'notebook-pen' : 'list-checks') + (kind === 'notes' ? 'Заметки' : 'Задачи');
   $('#orgAdd').setAttribute('aria-label', kind === 'notes' ? 'Добавить заметку' : 'Добавить задачу');
+  $('#orgPlace option[value=wallpaper]').disabled = data.platform !== 'win32';
   $('#orgPlace').value = data.screenWidgets?.[kind]
-    ? data.screenWidgets[kind].pin
-      ? 'pin'
-      : 'window'
+    ? data.screenWidgets[kind].wallpaper
+      ? 'wallpaper'
+      : data.screenWidgets[kind].pin
+        ? 'pin'
+        : 'window'
     : 'off';
   $('#orgOptions').hidden = true;
   paint();

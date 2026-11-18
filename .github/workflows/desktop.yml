@@ -46,6 +46,10 @@ jobs:
         run: node Desktop/scripts/features-smoke.mjs
       - name: Test island, clipboard, pinned windows and project files
         run: node Desktop/scripts/workspace-smoke.mjs
+      - name: Check wake-word gating with a microphone fixture
+        run: node Desktop/scripts/wake-smoke.mjs
+      - name: Check translated onboarding, background jobs and desktop controls
+        run: node Desktop/scripts/desktop-tools-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: Mira-Windows-x64

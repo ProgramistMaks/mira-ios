@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import dgram from 'node:dgram';
-import { microphoneWav } from './microphone-fixture.mjs';
+import { microphoneSequence } from './microphone-fixture.mjs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -37,7 +37,16 @@ try {
     'Packaged Piper must generate speech',
   );
   // Fixed microphone recording keeps pronunciation stable across Piper's random noise samples.
-  await writeFile(mic, microphoneWav(await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'))));
+  await writeFile(
+    mic,
+    microphoneSequence([
+      2,
+      await readFile(path.join(root, 'Desktop/tests/fixtures/wake-word-ru.wav')),
+      5,
+      await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav')),
+      8,
+    ]),
+  );
   const args = [
     '--use-angle=swiftshader',
     '--enable-unsafe-swiftshader',
@@ -60,6 +69,7 @@ try {
   const p = await app.firstWindow(),
     errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
+  await p.locator('#intro #startListening').selectOption('off');
   await p.locator('#introSkip').click();
   await expect(p.locator('#homeCharacter')).toHaveAttribute('aria-pressed', 'false');
   if (evidence) await p.screenshot({ path: path.join(evidence, 'home.png') });
@@ -124,7 +134,7 @@ try {
   });
   await micControl.click();
   await p.waitForFunction(
-    () => window.voicePhases.includes('Отвечаю…') && window.voicePhases.at(-1) === 'Слушаю. Можно говорить.',
+    () => window.voicePhases.includes('Отвечаю…') && window.voicePhases.at(-1) === 'Жду обращения «Мира»',
     null,
     { timeout: 90000 },
   );
@@ -184,10 +194,6 @@ try {
   await expect
     .poll(() => p.evaluate(async () => (await window.desk.call('state')).settings.microphoneId))
     .toBe(input);
-  await p.locator('#wakeWindow').selectOption('10');
-  await expect
-    .poll(() => p.evaluate(async () => (await window.desk.call('state')).settings.wakeWindow))
-    .toBe(10);
   await p.locator('[data-go=home]').first().click();
   await expect(p.locator('#voiceBar')).toBeHidden();
   await p.locator('[data-go=voice]').first().click();
@@ -245,7 +251,7 @@ try {
   assert.match(interrupt.heard[0], /молоко/iu);
   assert.ok(interrupt.states.indexOf('Слышу тебя…') > interrupt.states.indexOf('Отвечаю…'));
   assert.equal(interrupt.states.filter((s) => s === 'Отвечаю…').length, 2);
-  assert.equal(interrupt.states.at(-1), 'Слушаю. Можно говорить.');
+  assert.equal(interrupt.states.at(-1), 'Жду обращения «Мира»');
   console.log(
     'Microphone meter, device selection, follow-up preference and interruption with real local transcription and synthesis passed.',
   );

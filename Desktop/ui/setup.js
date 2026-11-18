@@ -13,7 +13,7 @@ const toggle = (label, id, on) =>
     ],
     on ? 'on' : 'off',
   );
-export function openSetup(state, finished) {
+export function openSetup(state, finished, tour) {
   const dialog = $('#intro');
   if (dialog.open) return;
   const data = { ...state.settings },
@@ -28,7 +28,16 @@ export function openSetup(state, finished) {
       'welcome',
       'Привет, я Мира',
       'Я могу говорить с тобой и жить на рабочем столе.',
-      () => '<p class="setupLanguage">Русский</p>',
+      () =>
+        choice(
+          'Язык интерфейса',
+          'language',
+          [
+            ['ru', 'Русский'],
+            ['en', 'English'],
+          ],
+          data.language,
+        ) + toggle('Ждать имени «Мира» в фоне', 'startListening', data.startListening),
     ],
     [
       'mode',
@@ -58,8 +67,9 @@ export function openSetup(state, finished) {
     [
       'speech',
       'Настройка звука',
-      'Выбери, сколько ждать паузы, прежде чем ответить.',
+      'После настройки Мира ждёт своё имя перед каждым вопросом. Выбери, сколько ждать паузы в конце фразы.',
       () =>
+        toggle('Слушать имя при запуске', 'startListening', data.startListening) +
         choice(
           'Пауза в конце фразы',
           'silence',
@@ -193,7 +203,7 @@ export function openSetup(state, finished) {
         esc(themeList.find((t) => t[0] === data.theme)?.[1]) +
         ' · ' +
         (data.provider === 'local' ? 'Локальный ИИ' : 'Сервис ИИ') +
-        '</span></div>',
+        '</span></div><label><input type="checkbox" id="takeTour" checked> Экскурсия по приложению</label>',
     ],
   ];
   const list = () => (quick ? pages.filter(([id]) => short.includes(id)) : pages);
@@ -221,6 +231,7 @@ export function openSetup(state, finished) {
   function capture() {
     for (const el of $('#introFields').querySelectorAll('input[id],select[id],textarea[id]')) {
       const k = el.id;
+      if (k === 'takeTour') continue;
       let v = el.value;
       if (typeof data[k] === 'boolean') v = v === 'on';
       if (typeof data[k] === 'number') v = Number(v);
@@ -244,9 +255,17 @@ export function openSetup(state, finished) {
     $('#introNext').disabled = true;
     try {
       if (apply) capture();
-      await call('settings', { ...(apply ? changed : {}), introDone: true });
+      if ($('#introFields #startListening'))
+        data.startListening = $('#introFields #startListening').value === 'on';
+      await call('settings', {
+        ...(apply ? changed : {}),
+        startListening: data.startListening,
+        introDone: true,
+      });
+      const guided = apply && $('#takeTour')?.checked;
       dialog.close();
       await finished();
+      if (guided) tour();
     } catch (e) {
       $('#introError').textContent = recordError(e);
     } finally {
@@ -285,6 +304,20 @@ export function openSetup(state, finished) {
   };
   $('#introFields').onchange = (e) => {
     e.stopPropagation();
+    if (e.target.id === 'language' && e.target.value !== data.language) {
+      const value = e.target.value;
+      e.target.disabled = true;
+      call('settings', { language: value, startListening: $('#introFields #startListening')?.value === 'on' })
+        .then(() => {
+          sessionStorage.setItem('reopenIntro', '1');
+          location.reload();
+        })
+        .catch((error) => {
+          $('#introError').textContent = recordError(error);
+          e.target.disabled = false;
+        });
+      return;
+    }
     if (e.target.id === 'provider') {
       capture();
       draw();

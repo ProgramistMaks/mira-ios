@@ -16,10 +16,33 @@ export function address(text, name, waiting) {
   return rest ? { waiting: false, text: rest } : { waiting: false, reply: 'Я слушаю.' };
 }
 
-// Continuous conversation stays open. In name-activated mode a bare name also
-// opens one answer window when the optional follow-up interval is set to zero.
-export function followUpDelay(standby, waiting, first, seconds) {
-  if (!standby || waiting) return null;
-  const duration = Math.min(60, Math.max(0, Number(seconds) || 0));
-  return (first ? Math.max(8, duration) : duration) * 1000;
+// A bare wake word admits one utterance. Compare its onset, not the time STT finished.
+export class WakeGate {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.until = 0;
+    this.armedAt = 0;
+  }
+  pending(at = Date.now()) {
+    return this.until > 0 && at >= this.armedAt && at <= this.until;
+  }
+  match(text, name) {
+    for (const word of new Set(['Мира', 'Mira', name].filter(Boolean))) {
+      const hit = address(text, word, true);
+      if (!hit.waiting) return hit;
+    }
+  }
+  accept(text, name, startedAt = Date.now(), now = Date.now()) {
+    const hit = this.match(text, name);
+    if (hit && !hit.text) {
+      this.armedAt = now;
+      this.until = now + 10000;
+      return;
+    }
+    const allowed = !!hit || this.pending(startedAt);
+    this.reset();
+    if (allowed) return hit?.text || String(text).trim() || undefined;
+  }
 }
