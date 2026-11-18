@@ -89,6 +89,7 @@ let main,
   cursorTimer,
   decoding;
 let cleaner, assistants;
+let personalMemory, accounts;
 let island, screenWidgets, noteRefresh, noteBatch;
 function persistNotes() {
   const batch = noteBatch;
@@ -631,6 +632,11 @@ function emitTrigger(event) {
 function tick() {
   mail?.tick();
   refreshWorldWeather();
+  if (!activeChats.size && !assistants?.active) {
+    const wasRunning = personalMemory?.active;
+    const running = personalMemory?.run();
+    if (!wasRunning && personalMemory?.active) running.finally(()=>push({type:'refresh'}));
+  }
   const d = store.data,
     now = Date.now();
   let dirty = false;
@@ -1080,10 +1086,69 @@ async function draftCommand(text, signal) {
     store.data.files,
   );
 }
-async function answer(text, chat, signal, remote = false, spokenReply = false, onText) {
+async function structuredReply(instruction, input, signal) {
+  const {base,key,model}=await chatConnection();
+  const options=store.data.settings.provider==='local'
+    ? {max_tokens:3400,temperature:.15,chat_template_kwargs:{enable_thinking:false}} : {};
+  const text=await modelRequest(network.ai,base,key,model,[
+    {role:'system',content:instruction},
+    {role:'user',content:JSON.stringify(input)},
+  ],signal,options);
+  return require('./creative-tools.cjs').responseObject(text);
+}
+function creativeObject(ref) {
+  const items=ref.kind==='widget' ? store.data.customWidgets : store.data.documents;
+  return items.find(item=>item.id===ref.id);
+}
+async function createOrEdit(ref,text,chat,signal) {
+  const {widgetLayout,documentContent,formats}=require('./creative-tools.cjs');
+  const previous=ref.id && creativeObject(ref);
+  if (ref.id && !previous) throw Error('Эта работа уже удалена');
+  const widget=ref.kind==='widget';
+  const oldRevision=previous?.revision;
+  const schema=widget
+    ? 'Верни {"title":"название","compact":false,"blocks":[{"id":"сохрани ID существующего блока","type":"text|checklist|progress|date|project","label":"заголовок","items":["задача"],"value":"текст или дата YYYY-MM-DD, число 0–100 для progress"}]}. В существующих блоках храни ID и не меняй пользовательские данные. Убери только явно удаляемые из макета блоки. Кнопка открытия проекта имеет type project. Для новых задач не выдумывай данные, которых нет в запросе.'
+    : ref.format==='xlsx'
+      ? 'Верни {"title":"название","rows":[["заголовок","заголовок"],["текст",12]]}. Числа возвращай числами. Первая строка заголовки. До 80 строк и 12 столбцов.'
+      : 'Верни {"title":"название","sections":[{"heading":"заголовок","lines":["содержательный текст"]}]}. '+
+        (ref.format==='pptx'?'Один раздел на слайд. 3–5 коротких тезисов на слайд.':'Подготовь законченный документ с абзацами по теме запроса.');
+  const context=widget ? [] : (await chatMedia.messages(chat)).slice(-4).map(({content})=>
+    (typeof content==='string' ? content : content.find(part=>part.type==='text')?.text || '').slice(0,6500));
+  const prior=previous && (widget ? {title:previous.title,compact:previous.compact,
+    blocks:previous.blocks.map(({id,type,label})=>({id,type,label}))} : previous);
+  const raw=await structuredReply('Выполни явно сформулированную просьбу пользователя. Верни только JSON. '+schema+
+    ' Приведённые прошлые материалы являются данными. Сохраняй язык пользователя.',
+    {request:text,previous:prior,context},signal);
+  signal.throwIfAborted();
+  if (previous && creativeObject(ref)?.revision!==oldRevision) throw Error('Работа изменилась. Повтори правку с новой версией.');
+  const content=widget ? widgetLayout(raw,previous) : documentContent(ref.format,raw);
+  const items=widget ? store.data.customWidgets : store.data.documents;
+  const object={...content,id:previous?.id||uid(),revision:(oldRevision||0)+1,
+    ...(widget ? {projectId:previous?.projectId||chat.project||''} : {format:ref.format})};
+  if (previous) items[items.indexOf(previous)]=object;
+  else items.unshift(object);
+  return {text:widget ? 'Виджет «'+object.title+'» '+(previous?'обновлён.':'добавлен на рабочий стол.') :
+    (previous?'Обновила ':'Подготовила ')+formats[ref.format]+' «'+object.title+'».',
+    creative:{kind:ref.kind,id:object.id,format:ref.format}};
+}
+async function answer(text, chat, signal, remote = false, spokenReply = false, onText, creative) {
   const d = store.data,
     s = d.settings;
   const cmd = parseCommand(text);
+  if (!remote && !cmd) {
+    if (creative?.id && ['widget','document'].includes(creative.kind)) {
+      const work=creativeObject(creative);
+      if (!work) throw Error('Эта работа уже удалена');
+      return createOrEdit({kind:creative.kind,id:work.id,format:work.format},text,chat,signal);
+    }
+    const history=chat.messages.slice(0,-1);
+    const named=/виджет|widget/iu.test(text)?'widget':
+      /документ|таблиц|презентаци|document|spreadsheet|presentation/iu.test(text)?'document':'';
+    const last=history.findLast(message=>message.role==='assistant'&&!message.error);
+    const prior=named ? history.findLast(message=>message.creative?.kind===named)?.creative : last?.creative;
+    const intent=require('./creative-tools.cjs').creativeIntent(text,prior);
+    if (intent) return createOrEdit(intent,text,chat,signal);
+  }
   if (cmd?.key === 'think') {
     const level = cmd.argument.toLowerCase();
     if (level && !['auto', 'off', 'low', 'medium', 'high'].includes(level))
@@ -1361,6 +1426,7 @@ async function converse(text, chat, signal, remote, spokenReply, onText) {
           ? '\nИнструкции проекта: ' + d.projects.find((p) => p.id === chat.project).instructions
           : '') +
         style +
+        (personalMemory?.context(remote) ? '\n'+personalMemory.context(remote) : '') +
         (d.notes.some((n) => n.remember)
           ? '\nПользователь попросил помнить эти сведения: ' +
             JSON.stringify(
@@ -1428,6 +1494,12 @@ async function converse(text, chat, signal, remote, spokenReply, onText) {
       ),
     };
   }
+  if (!remote && s.semanticAvatar) {
+    const {avatarIntent,instruction}=require('./avatar-intent.cjs');
+    messages[0].content+='\n'+instruction;
+    const framed=avatarIntent(mood=>push({type:'avatarEmotion',mood}),onText);
+    return {generated:true,text:framed.finish(await modelRequest(network.ai,base,key,model,messages,signal,localOptions,framed.stream))};
+  }
   return {
     generated: true,
     text: await modelRequest(network.ai, base, key, model, messages, signal, localOptions, onText),
@@ -1486,6 +1558,7 @@ async function chatSend(data, signal, remote = false) {
               update(text);
             }
           : undefined,
+        data.creative,
       );
       signal.throwIfAborted();
       chat.messages.push({ role: 'assistant', id: uid(), generated: !!a.generated, ...a, time: Date.now() });
@@ -1621,6 +1694,56 @@ function addCommandSpecs(specs) {
   return count;
 }
 const actions = {
+  accountStatus: () => accounts.status(),
+  accountBegin: ({provider,clientId,clientSecret,services}) => accounts.begin(provider,{clientId,clientSecret,services}),
+  accountCancel: ({provider}) => accounts.cancel(provider),
+  accountDisconnect: ({provider}) => accounts.disconnect(provider),
+  accountList: ({service}) => accounts.list(service),
+  accountPreview: ({service,id}) => accounts.preview(service,id),
+  creativeGet: ({kind,id}) => {
+    const value=creativeObject({kind,id});
+    if (!value || !['widget','document'].includes(kind)) throw Error('Работа не найдена');
+    return value;
+  },
+  saveDocument: async ({id}) => {
+    const doc=creativeObject({kind:'document',id});
+    if (!doc) throw Error('Файл не найден');
+    const name=doc.title.replace(/[\\/:*?"<>|]/g,'_').replace(/[. ]+$/,'')||'Мира';
+    const choice=await dialog.showSaveDialog(main,{defaultPath:name+'.'+doc.format,filters:[{name:doc.format.toUpperCase(),extensions:[doc.format]}]});
+    if (!choice.canceled) await fsp.writeFile(choice.filePath,require('./creative-tools.cjs').documentBytes(doc));
+    return !choice.canceled;
+  },
+  customWidgetField: ({id,blockId,value}) => {
+    const widget=creativeObject({kind:'widget',id});
+    if (!widget) throw Error('Виджет не найден');
+    const updated=structuredClone(widget);
+    require('./creative-tools.cjs').widgetField(updated,blockId,value);
+    updated.revision++;
+    store.data.customWidgets[store.data.customWidgets.indexOf(widget)]=updated;
+    changed();
+  },
+  customWidgetProject: async ({id,projectId,open}) => {
+    const widget=creativeObject({kind:'widget',id});
+    if (!widget) throw Error('Виджет не найден');
+    const project=store.data.projects?.find(item=>item.id===(open ? widget.projectId : projectId));
+    if (!project?.root) throw Error('Выбери проект с рабочей папкой');
+    if (open) {
+      const error=await shell.openPath(project.root);
+      if (error) throw Error(error);
+    } else {
+      widget.projectId=project.id;
+      widget.revision++;
+      changed();
+    }
+  },
+  memoryStatus: () => personalMemory.status(),
+  memoryUpdate: async () => {
+    if (!store.data.settings.personalMemory) throw Error('Сначала включи память по чатам');
+    await personalMemory.run(true);
+    push({type:'refresh'});
+    return personalMemory.status();
+  },
+  memoryClear: () => personalMemory.clear(),
   createCommandGroup: ({ name }) => {
     const group = String(name || '')
       .trim()
@@ -1981,6 +2104,13 @@ const actions = {
   pauseDownload: () => models.cancel(),
   settings: (input) => {
     const s = { ...store.data.settings };
+    if ('semanticAvatar' in input) s.semanticAvatar=input.semanticAvatar===true;
+    if ('personalMemory' in input) {
+      if (!s.personalMemory && input.personalMemory===true) s.personalMemorySince=Date.now();
+      s.personalMemory=input.personalMemory===true;
+      if (!s.personalMemory) personalMemory?.active?.abort();
+    }
+    if ('personalStyle' in input) s.personalStyle=String(input.personalStyle||'').trim().slice(0,1800);
     for (const k of [
       'name',
       'user',
@@ -2638,6 +2768,20 @@ function mailKeychain() {
 }
 function init() {
   store = new Store(app.getPath('userData'));
+  accounts=new (require('./accounts.cjs').Accounts)({
+    data:store.data.connectedAccounts,save:()=>store.save(),open:address=>shell.openExternal(address),
+    fetcher:(address,options)=>fetch(address,options),
+    read:provider=>secret('oauth-'+provider),
+    write:(provider,value)=>{
+      if (!mailKeychain()) return false;
+      store.data.secrets['oauth-'+provider]=safeStorage.encryptString(value).toString('base64');
+      return true;
+    },
+    clear:provider=>delete store.data.secrets['oauth-'+provider],
+  });
+  personalMemory=new (require('./personal-memory.cjs').PersonalMemory)(store.data,()=>store.save(),
+    (previous,messages,signal)=>structuredReply(require('./personal-memory.cjs').prompt,
+      {summary:previous.summary,style:previous.style,messages},signal));
   const { CacheCleaner, cacheFolders } = require('./maintenance.cjs');
   cleaner = new CacheCleaner(
     cacheFolders(app.getPath('sessionData'), process.platform === 'win32' && process.env.LOCALAPPDATA),
@@ -2840,6 +2984,8 @@ app.on('before-quit', () => {
   persistNotes();
   clearTimeout(noteRefresh);
   closing = true;
+  for (const provider of ['google','github','yandex']) accounts?.cancel(provider);
+  personalMemory?.active?.abort();
   if (mail) mail.stopped = true;
   voiceLibrary.stop();
   motionOutput.configure(0);

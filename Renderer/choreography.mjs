@@ -150,6 +150,10 @@ export class ChoreographyRig {
     else if(kind==='arrival')this.begin(this.nayu?'nayu_welcome':'arrival',true);
     else if(kind==='touch')this.begin(this.clip==='temples'?'heart':'temples',true);
   }
+  reactToMeaning(clip) {
+    if (this.mode==='auto' && !this.desktopAction && !this.desktopSeating && Object.hasOwn(SHOTS,clip))
+      this.begin(clip,true);
+  }
   updateDesktopAction(next, bpm, clipStep) {
     if (!this.nayu) return;
     const previous = this.desktopAction;

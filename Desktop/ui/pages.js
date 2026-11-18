@@ -1,6 +1,7 @@
 import { themeList, defaultCustomColor } from './themes.mjs';
 export { themeList };
 import { backgroundControls } from './backgrounds.js';
+import { widgetBlocks } from './creative.js';
 import { $, esc, ico, opt, btn, box, field, select, timerTime, timeLabel } from './shared.js';
 import { occursOn } from './calendar-dates.mjs';
 import { sortedNotes, noteLabel, taskListOf } from './note-format.mjs';
@@ -527,7 +528,10 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
     btn('Найти файл', 'find', 'search') +
     '</div>' +
     '<div class="deskGrid" aria-label="Рабочий стол">' +
-    (active.length ? active.map(tile).join('') : empty('Выбери виджеты для рабочего стола.')) +
+    (active.length || s.customWidgets?.length ? active.map(tile).join('') : empty('Выбери виджеты для рабочего стола.')) +
+    (s.customWidgets||[]).map(widget=>'<article class="box creativeWidget '+(widget.compact?'compact':'')+'"><header><h3>'+
+      esc(widget.title)+'</h3>'+btn('Открыть виджет','openCustomWidget','chevron-right','',widget.id)+'</header>'+
+      widgetBlocks(widget,s.projects||[],false)+'</article>').join('') +
     '</div>' +
     (c.boardEditing
       ? '<div class="boardDock">' +
@@ -922,6 +926,7 @@ export function model(s, c) {
       content = box('Погода вокруг персонажа','cloud-sun',
         select('Погода в отдельном окне','characterWeather',
           [['on','По выбранному городу'],['off','Выключена']],a.characterWeather ? 'on' : 'off') +
+        onOff('Жесты и мимика по смыслу разговора','semanticAvatar',a.semanticAvatar) +
         '<div class="row">' +
         select('Эффект для просмотра','worldWeather',[[0,'Солнце'],[3,'Облака'],[63,'Дождь'],
           [95,'Гроза'],[73,'Снег'],[45,'Туман']],c.worldWeather ?? 0) +
@@ -1658,6 +1663,9 @@ export function settings(s, c) {
       acts(btn('Размещение и форма виджетов', 'widgetShapes', 'layout-dashboard'),
         btn('Предпросмотр и очистка кэша', 'cachePreview', 'trash-2')),
     ) +
+    box('Документы и аккаунты','folder-open',
+      acts(btn('Готовые документы','documents','file-text'),
+        btn('Подключённые аккаунты','accounts','link'))) +
     box(
       'Обновления приложения',
       'refresh-cw',
@@ -1781,7 +1789,7 @@ export function settings(s, c) {
       field('Имя компаньона', 'name', a.name) +
         field('Как тебя называть', 'user', a.user) +
         field('Город для прогноза', 'city', a.city) +
-        acts(btn('Сохранить', 'saveProfile', 'save', 'primary')),
+        acts(btn('Сохранить', 'saveProfile', 'save', 'primary'),btn('Память по чатам','personalMemory','notebook-pen')),
     ) +
     box(
       'Управление',

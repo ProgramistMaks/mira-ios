@@ -1,6 +1,7 @@
 import { rollingNumber, appear, rowChanges, setReduced } from './motion.js';
 import { applyPalette } from './themes.mjs';
 import { $, esc, timerTime, timeLabel } from './shared.js';
+import { widgetBlocks } from './creative.js';
 const call = (op, task) => window.desk.call('screenAction', { op, task });
 const names = { focus: 'Фокус', tasks: 'Задачи', events: 'Календарь', notes: 'Заметки' };
 let state,
@@ -19,10 +20,11 @@ async function draw() {
     ['graphite', 'coal', 'night'].includes(s.theme) ||
       (s.theme === 'system' && matchMedia('(prefers-color-scheme:dark)').matches),
   );
-  $('b').textContent = names[s.id];
+  const name=s.custom?.title||names[s.id];
+  $('b').textContent = name;
   $('#pin').setAttribute('aria-pressed', String(s.pinned));
-  document.title = names[s.id] + ' · Мира';
-  $('main').innerHTML = s.focus
+  document.title = name + ' · Мира';
+  $('main').innerHTML = s.custom ? widgetBlocks(s.custom,[],false,true) : s.focus
     ? '<strong>' +
       timerTime(s.focus) +
       '</strong> <button id="focus">' +
@@ -48,7 +50,9 @@ document.onclick = async (e) => {
   const b = e.target.closest('button');
   if (b)
     try {
-      await call(b.dataset.task ? 'done' : b.id, b.dataset.task);
+      if (b.dataset.screenTask) await call('toggleCustomTask',{blockId:b.dataset.screenBlock,taskId:b.dataset.screenTask});
+      else if (b.dataset.act==='openWidgetProject') await call('customProject');
+      else await call(b.dataset.task ? 'done' : b.id, b.dataset.task);
     } catch (err) {
       $('main').textContent = err.message;
     }

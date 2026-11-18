@@ -56,6 +56,10 @@ const defaults = () => ({
     name: 'Мира',
     user: '',
     role: 'Дружелюбный личный компаньон. Отвечай по-русски.',
+    semanticAvatar: true,
+    personalMemory: false,
+    personalMemorySince: 0,
+    personalStyle: '',
     theme: 'cream',
     graphLines: 'round',
     allowTypos: true,
@@ -124,6 +128,9 @@ const defaults = () => ({
     hotkey: 'CommandOrControl+Alt+M',
   },
   chats: [],
+  customWidgets: [],
+  documents: [],
+  connectedAccounts: {},
   tasks: [],
   taskLists: [{ id: 'main', name: 'Мои задачи' }],
   activeTaskList: 'main',
@@ -199,6 +206,9 @@ class Store {
     const {
       secrets,
       assistantJobs,
+      personalMemory,
+      connectedAccounts,
+      documents,
       mailBoxes,
       mailIndex,
       telegramOffset,
@@ -209,6 +219,7 @@ class Store {
     } = this.data;
     return {
       ...state,
+      documents: documents.map(({id,title,format,revision})=>({id,title,format,revision})),
       projects: (state.projects || []).map(({ root, ...p }) => ({
         ...p,
         folder: root ? path.basename(root) : '',

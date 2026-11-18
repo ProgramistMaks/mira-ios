@@ -4808,3 +4808,21 @@ body[data-character='false'] #area[data-page='home'] #hero:not(.chatting) #compo
     scrollbar-width: thin;
   }
 }
+
+.creativeBlocks{display:grid;gap:.7rem;overflow-wrap:anywhere}
+.creativeBlock{display:grid;gap:.3rem}.creativeBlock ul{margin:.2rem 0;padding-inline-start:1.3rem}
+.creativeBlock progress{width:100%}.creativeBlock form{display:flex;gap:.4rem;flex-wrap:wrap}
+.creativeWidget{min-width:0}
+.creativeWidget.compact{align-self:start;padding:.65rem .8rem;font-size:.88rem}
+.creativeWidget.compact .creativeBlocks{gap:.38rem}
+.creativeWidget.compact h3,.creativeWidget.compact ul{margin-block:.15rem}
+.creativeWidget header,.creativeServiceRow{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.creativeAccounts{display:grid;gap:.75rem}.creativeAccounts .box{margin:0}.creativeAccounts label{margin-inline-end:.65rem}
+.creativeServiceRow{padding:.5rem 0;border-bottom:1px solid var(--line)}.creativeServiceRow p{flex-basis:100%;margin:0;overflow-wrap:anywhere}
+.creativeRevision{margin-top:1rem;display:grid;gap:.4rem}.creativeRevision textarea{min-height:4rem}
+.creativePreview{padding:1rem;background:var(--panel);border-radius:.75rem;overflow-wrap:anywhere}.creativePreview p{white-space:pre-wrap}
+.creativeSlides section{margin:.75rem 0;padding:1rem;border:1px solid var(--line);border-radius:.6rem;min-height:8rem}
+.creativeTable{overflow:auto;max-height:55vh}.creativeTable table{border-collapse:collapse;width:100%}
+.creativeTable th,.creativeTable td{text-align:start;padding:.35rem .55rem;border:1px solid var(--line);min-width:5rem}
+
+.creativeAccountPreview{white-space:pre-wrap;overflow-wrap:anywhere;max-height:55vh;overflow:auto}

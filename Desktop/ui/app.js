@@ -14,6 +14,7 @@ import { updateBackdrop } from './backgrounds.js';
 import { WakeGate } from './wake.mjs';
 import { syncCat } from './cat.js';
 import { MusicTempo } from './music-tempo.mjs';
+import { creativeUI } from './creative.js';
 import {
   $,
   esc,
@@ -564,6 +565,7 @@ function renderChat() {
               )
               .join('') +
             (m.draft ? btn('Открыть сценарий', 'openDraft', 'workflow', '', String(index)) : '') +
+            (m.creative ? btn(m.creative.kind==='widget'?'Открыть виджет':'Предпросмотр','openCreative','file-text','',m.id) : '') +
             (m.files || []).map((f) => btn(f.name, 'openFile', 'file-text', '', f.id)).join('') +
             (!sending && m.role === 'user' && canRevise(chat.messages[index + 1])
               ? '<div class="replyActions">' + btn('Изменить', 'editTurn', 'pencil', '', m.id) + '</div>'
@@ -804,7 +806,7 @@ function modal(title, html, layout) {
 function closeModal() {
   if ($('#modal').open) $('#modal').close();
 }
-async function send(input, voiceMode = false) {
+async function send(input, voiceMode = false, creative = undefined) {
   if (sending) return;
   let text = String(input || '').trim();
   const files = voiceMode ? [] : attachments;
@@ -843,7 +845,7 @@ async function send(input, voiceMode = false) {
   phase('thinking', state.settings.reduced);
   try {
     if (!current) current = await call('newChat');
-    const r = await call('send', { id: current, text, voiceMode, attachments: files, requestId: streamId });
+    const r = await call('send', { id: current, text, voiceMode, creative, attachments: files, requestId: streamId });
     current = r.id;
     return r.text;
   } finally {
@@ -1008,6 +1010,12 @@ async function finishQuickTask(cancel) {
   renderPage();
 }
 const toolsPanel = desktopTools(modal, () => state);
+const creationPanel = creativeUI(modal,closeModal,()=>state,send,saveSettings,openMail,item=>{
+  closeModal();
+  nav('home');
+  addAttachments([item]);
+  $('#prompt').focus();
+});
 function listenOnOpen() {
   if (
     state.settings.introDone &&
@@ -1115,6 +1123,22 @@ async function handle(action, id) {
       return;
     case 'assistants':
       return toolsPanel.assistants();
+    case 'accounts':
+      return creationPanel.connect();
+    case 'personalMemory':
+      return creationPanel.showMemory();
+    case 'documents':
+      return creationPanel.documents();
+    case 'openCreative': {
+      const chat=state.chats.find(row=>row.id===current);
+      const ref=chat?.messages.find(message=>message.id===id)?.creative;
+      if (ref) return creationPanel.view(ref);
+      return;
+    }
+    case 'openCustomWidget':
+      return creationPanel.view({id,kind:'widget'});
+    case 'openWidgetProject':
+      return call('customWidgetProject',{id,open:true});
     case 'widgetShapes':
       return toolsPanel.shape();
     case 'cachePreview':
@@ -2449,6 +2473,7 @@ document.addEventListener('change', (e) => {
     overlayHeight: { overlayHeight: +v },
     overlayAnchor: { overlayAnchor: v },
     characterWeather: { characterWeather: v === 'on' },
+    semanticAvatar: { semanticAvatar: v === 'on' },
     outfit: { outfit: v },
     searchFallback: { searchFallback: v === 'on' },
     voicePick: { voice: v },
@@ -2859,6 +2884,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 window.desk.on(async (e) => {
+  if (e.type==='openCreativeWidget') {
+    try {await creationPanel.view({kind:'widget',id:e.id});} catch (error) {err(error);}
+    return;
+  }
+  if (e.type==='avatarEmotion') {
+    avatar()?.reactToMeaning(e.mood);
+    return;
+  }
   if (e.type === 'assistantJobs') {
     if ($('#jobList')) await toolsPanel.jobs();
     return;

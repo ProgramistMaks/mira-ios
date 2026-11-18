@@ -35,6 +35,7 @@ declare global {
       onWindowDrag?: (event: DragEvent) => void; setDragging(value: boolean): void;
       onDepartureComplete?: () => void; setDeparting(value: boolean): void;
       setMusicTempo(value: number): void; setWeather(code: number | null): void; previewWeather(code: number | null): void;
+      reactToMeaning(mood: string): void;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
 }
@@ -62,6 +63,14 @@ let reduced = false;
 let seated = false, seatWeight = 0;
 let pointerGaze: { x: number; y: number; until: number } | undefined;
 let requestedReaction: string | undefined;
+const meanings: Record<string,{clip:string;smile:number;calm:number}> = {
+  warm:{clip:'wave',smile:.62,calm:.1}, joy:{clip:'heart',smile:.9,calm:0},
+  care:{clip:'nod',smile:.12,calm:.3}, explain:{clip:'palms',smile:.13,calm:.04},
+  curious:{clip:'cheek',smile:.22,calm:0}, unsure:{clip:'shrug',smile:.06,calm:0},
+};
+let semantic: {mood:string;remaining:number} | undefined;
+let displayedMeaning: string | undefined;
+let semanticWeight=0;
 let dragging = false, departing = false, departureSent = false, musicTempo = 0;
 let localWeather: number | null = null;
 let weatherPreview: {code: number | null; remaining: number} | undefined;
@@ -103,6 +112,10 @@ window.companion = {
   configurePerformance(settings) { acting.configure(settings); },
   replayGesture() { acting.replay(); choreography?.replay(); },
   playReaction(kind) { if (kind === 'pet' || kind === 'typing') requestedReaction = kind; },
+  reactToMeaning(mood) {
+    semantic = Object.hasOwn(meanings,mood) ? {mood,remaining:4.4} : undefined;
+    displayedMeaning=undefined;
+  },
   phase,
   setActive(value) {
     if (!active && value === true) resetPhysics?.();
@@ -122,6 +135,7 @@ window.companion = {
   setState(next, reduceMotion) {
     if (!['idle', 'listening', 'thinking', 'speaking'].includes(next)) return;
     if (phase !== next) speechSamples.reset();
+    if (phase !== next && next === 'thinking') { semantic=undefined; displayedMeaning=undefined; }
     if (reduced !== reduceMotion) resetCadence();
     phase = next; reduced = reduceMotion; window.companion.phase = phase;
     acting.setPhase(phase); acting.update(0, reduced);
@@ -355,6 +369,20 @@ async function main() {
       authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled,
         dragging, departing, bpm:musicTempo});
     }
+    const meaningActive = !reduced && acting.settings.enabled && useAuthored && !dragging && !departing &&
+      !seated && !authored.desktopAction && authored.mode==='auto';
+    if (!meaningActive && reduced) semantic=undefined;
+    if (semantic && phase!=='thinking') {
+      semantic.remaining-=Math.min(.15,timeline.playbackDelta);
+      if (semantic.remaining<=0) semantic=undefined;
+    }
+    if (semantic && meaningActive && displayedMeaning!==semantic.mood && phase!=='thinking') {
+      displayedMeaning=semantic.mood;
+      authored.reactToMeaning(meanings[semantic.mood].clip);
+    }
+    const expression = meaningActive && semantic && displayedMeaning===semantic.mood ? meanings[semantic.mood] : undefined;
+    semanticWeight=THREE.MathUtils.damp(semanticWeight,expression ? 1 : 0,8,delta);
+    window.companion.bodyStatus.semanticMood=expression ? displayedMeaning : null;
     const portalActive = !reduced && useAuthored && (authored.clip === 'nayu_farewell' || authored.clip === 'nayu_welcome');
     const portalLeaving = portalActive && authored.clip === 'nayu_farewell';
     const vanish = departing && portalLeaving ? THREE.MathUtils.smoothstep(authored.age/authored.duration,.64,.98) : 0;
@@ -407,8 +435,9 @@ async function main() {
     for (const [name, key] of [['ih','mouthIH'],['ou','mouthOU'],['ee','mouthEE'],['oh','mouthOH']]) {
       avatar.expressionManager?.setValue(name, faceTest && phase !== 'speaking' ? pose[key] : 0);
     }
-    avatar.expressionManager?.setValue('happy', Math.max(pose.smile, (reactions?.happiness ?? 0) * .88));
-    for (const [channel, name] of expressiveChannels) if (name) avatar.expressionManager?.setValue(name, pose[channel]);
+    avatar.expressionManager?.setValue('happy', Math.max(pose.smile,(expression?.smile??0)*semanticWeight,(reactions?.happiness ?? 0) * .88));
+    for (const [channel, name] of expressiveChannels) if (name)
+      avatar.expressionManager?.setValue(name,channel==='relaxed' ? Math.max(pose[channel],(expression?.calm??0)*semanticWeight) : pose[channel]);
     const natural = useAuthored && acting.settings.enabled && !reduced;
     if (natural && phase === 'listening' && phase !== previousPhase) details.listenCue();
     previousPhase = phase;

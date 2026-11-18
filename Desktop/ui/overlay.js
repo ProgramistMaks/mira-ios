@@ -129,6 +129,7 @@ window.desk.on((e) => {
   }
   if (e.type === 'level') a?.setSpeech(e.value, performance.now(), ++seq);
   if (e.type === 'look') a?.lookAtPointer(e.x, e.y);
+  if (e.type === 'avatarEmotion') a?.reactToMeaning(e.mood);
   const effect = {avatarMusic:['bpm',e.bpm],worldWeather:['weather',e.code],departure:['departing',e.value]}[e.type];
   if (effect) {
     const [key,value] = effect;

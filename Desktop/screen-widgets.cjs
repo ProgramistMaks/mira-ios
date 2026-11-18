@@ -54,11 +54,12 @@ class ScreenWidgets {
     Object.assign(this, { store, prefs, guard, main, changed, actions });
     this.windows = new Map();
   }
+  custom(id) { return this.store.data.customWidgets?.find(widget=>widget.id===id); }
   configure() {
     const rows = this.store.data.screenWidgets || {};
     for (const [id, w] of this.windows) if (!rows[id]) w.close();
     for (const [id, opt] of Object.entries(rows)) {
-      if (!modes.has(id)) continue;
+      if (!modes.has(id) && !this.custom(id)) continue;
       let w = this.windows.get(id);
       if (w && w.wallpaper !== !!opt.wallpaper) {
         w.destroy();
@@ -138,7 +139,7 @@ class ScreenWidgets {
     w.shapeKey = key;
   }
   set(id, mode, shape) {
-    if (!modes.has(id) || !['off', 'window', 'pin', 'wallpaper'].includes(mode))
+    if ((!modes.has(id) && !this.custom(id)) || !['off', 'window', 'pin', 'wallpaper'].includes(mode))
       throw Error('Неизвестный виджет');
     if (mode === 'wallpaper' && process.platform !== 'win32') throw Error('Слой обоев доступен в Windows');
     if (shape !== undefined) polygon(shape);
@@ -159,15 +160,17 @@ class ScreenWidgets {
   }
   action(id, { op, task }) {
     const d = this.store.data;
+    const widget=this.custom(id);
     if (op === 'state')
       return {
         id,
         theme: d.settings.theme,
         reduced: d.settings.reduced,
         customColor: d.settings.customColor,
+        ...(widget?{custom:{...widget,hidden:undefined}}:{}),
         focus: id === 'focus' ? d.focus : null,
         items:
-          id === 'focus'
+          id === 'focus' || widget
             ? []
             : (id === 'notes' ? sortedNotes(d.notes) : d[id])
                 .filter(
@@ -184,7 +187,7 @@ class ScreenWidgets {
     if (op === 'open') {
       this.main.show();
       this.main.focus();
-      this.main.webContents.send('update', { type: 'openWidget', id });
+      this.main.webContents.send('update', { type: widget?'openCreativeWidget':'openWidget', id });
       return;
     }
     if (op === 'close') return this.set(id, 'off');
@@ -196,6 +199,9 @@ class ScreenWidgets {
       });
     if (op === 'done' && id === 'tasks' && d.tasks.some((t) => t.id === task))
       return this.actions.toggleTask({ id: task });
+    if (widget && op==='toggleCustomTask')
+      return this.actions.customWidgetField({id,blockId:task?.blockId,value:{toggle:task?.taskId}});
+    if (widget && op==='customProject') return this.actions.customWidgetProject({id,open:true});
     throw Error('Действие недоступно');
   }
 }
