@@ -1,5 +1,11 @@
 # Verification — 2026-11-17
 
+## Seven reference performances, 2026-11-18
+
+Revision `53f8beb` passed the renderer build, TypeScript check and 81 renderer tests. The local test site uses the same motion sources and passed 13 tests. All seven performances were recorded from the app's renderer in front and three-quarter views. The 120 fps dance recording contained 738 distinct decoded frames in 6.15 seconds on a controlled animation clock. The camera comparison used 125 joint markers from 34 intermediate source frames. [Frame measurements](MOTION-REFERENCE-STUDY.md)
+
+One private iOS workflow requested an unsigned archive and simulator tests. GitHub stopped it before macOS started, citing account payment or spending-limit settings. This revision still requires an iOS package, WKWebView verification and a physical iPhone cadence measurement. [Workflow run](https://github.com/ProgramistMaks/mira-ios/actions/runs/44286589797)
+
 ## High-refresh playback, 2026-11-18
 
 Native commit `2a782d1` passed 66 renderer tests, TypeScript checking and Swift source parsing. Chromium advanced Vita through 120 distinct animation steps on 120 injected display callbacks, then resumed browser scheduling after a pause. The private site passed 13 controller and contract tests. FFprobe reported 120/1 fps for the recorded 13.5-second clip. All 1,620 decoded frames had distinct checksums. These measurements cover offline rendering and clock integration. Device presentation cadence remains unverified.
