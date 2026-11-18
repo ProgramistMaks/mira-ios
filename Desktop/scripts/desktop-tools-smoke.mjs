@@ -126,8 +126,8 @@ try {
   await expect.poll(() => app.evaluate(() => globalThis.openedByMira)).toBe('https://www.google.com/');
   await p.evaluate(() => window.desk.call('settings', { name: 'Nova' }));
   await expect(p.locator('#nameplate span')).toHaveText('Nova');
-  await p.locator('#navMenuButton').click();
-  await p.locator('#navMenu [data-act=buildVoiceRoutine]').click();
+  await p.locator('#historyBtn').click();
+  await p.locator('#drawer [data-act=buildVoiceRoutine]').click();
   await expect(p.locator('#area')).toHaveAttribute('data-page', 'commands');
   await p.locator('[data-act=youtubeRoutine]').click();
   await expect(p.locator('#rPhrase')).toHaveValue('открой ютуб');
