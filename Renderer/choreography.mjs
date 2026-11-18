@@ -247,7 +247,9 @@ export class ChoreographyRig {
     this.stance?.transferFeet(this.fade);
     if (sequence && !this.desktopSeating) {
       const hipOffset = (this.hips.position.y - this.origin.y) / this.scale;
-      this.viewOffset = Math.max(-.16, Math.min(.16, hipOffset * .65));
+      // Astra's seated dance has the seat-origin offset baked into it.
+      const minimum = this.track === 'nayu_sit_dance_loop' ? -1 : -.16;
+      this.viewOffset = Math.max(minimum, Math.min(.16, hipOffset * .65));
     }
   }
   sampleSource(id,t,loop=true) {

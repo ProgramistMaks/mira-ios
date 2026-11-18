@@ -540,6 +540,9 @@ test('all 52 Nayu takes retain their source durations and animate the correct bo
     }
     assert.deepEqual([...observed],expected,id);
   }
+  transfer.configure('nayu_program_sit_dance_mid');
+  for (let elapsed=0;elapsed<1;elapsed+=.05) transfer.update(.05);
+  assert.ok(transfer.viewOffset < -.4,'seated dance needs room below the standing stage');
   transfer.configure('nayu_program_dance_fast');
   const fast = transfer.duration;
   transfer.configure('nayu_dance');
