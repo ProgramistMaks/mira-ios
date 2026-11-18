@@ -478,9 +478,11 @@ test('seating follows enter, idle, and exit and preserves the configured gesture
 test('the jump plays takeoff and air before landing and does not restart while held', () => {
   hold('jump', .7);
   assert.equal(rig.track, 'jumpStart');
-  advance(.75);
+  const ground = point('hips').y;
+  advance(.95);
   assert.equal(rig.track, 'jumpAir');
-  advance(.8);
+  assert.ok(point('hips').y > ground + .12, 'the in-place take needs visible lift in a jump preview');
+  advance(.6);
   assert.equal(rig.track, 'jumpLand');
   advance(2);
   const landing = point('hips');

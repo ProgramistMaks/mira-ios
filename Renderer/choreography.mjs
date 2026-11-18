@@ -189,6 +189,11 @@ export class ChoreographyRig {
       for (let i=0;i<this.entries.length;i++) this.entries[i].node.quaternion.copy(this.stageBase.rotations[i]);
     } else {
       this.sampleSource(source,segment?.time ?? (shot?0:this.age),segment?.loop ?? !segment);
+      if (this.clip === 'jump' && source === 'jumpAir') {
+        // The imported game clip is in-place. Add root travel only in the composite preview.
+        const progress = segment.time / segment.hold;
+        this.hips.position.y += 1.36 * this.scale * progress * (1 - progress);
+      }
       if (shot) this.stageBase = {position:this.hips.position.clone(),rotations:this.entries.map(e=>e.node.quaternion.clone())};
     }
     if(this.stance && source==='idle')this.stage(shot);
