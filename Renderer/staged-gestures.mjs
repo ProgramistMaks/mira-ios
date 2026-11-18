@@ -15,11 +15,33 @@ const low = hand('chest', [.145,-.18,.035], [.55,-.82,0], [0,0,1],'soft');
 // Non-uniform timings retain a distinct preparation, arrival, hold and release.
 const track = (goal, times, weights = [0,.18,1,1,.58,0]) => ({goal,times,weights});
 const curve = (...pairs) => pairs;
+// Shape-preserving cubic interpolation. The wrist keeps moving through an
+// intermediate key in the same direction, and comes to rest at a hold or turn.
+const tangents = new WeakMap();
+function slopes(keys) {
+  let result=tangents.get(keys);
+  if (result) return result;
+  result=new Float64Array(keys.length);
+  for (let i=1;i<keys.length-1;i++) {
+    const before=keys[i][0]-keys[i-1][0], after=keys[i+1][0]-keys[i][0];
+    const incoming=(keys[i][1]-keys[i-1][1])/before, outgoing=(keys[i+1][1]-keys[i][1])/after;
+    if (incoming*outgoing>0) {
+      const w1=2*after+before, w2=after+2*before;
+      result[i]=(w1+w2)/(w1/incoming+w2/outgoing);
+    }
+  }
+  tangents.set(keys,result);
+  return result;
+}
 export function at(keys,t) {
   if (!keys || t < keys[0][0]) return 0;
   for (let i=1;i<keys.length;i++) {
     const [end,b]=keys[i], [start,a]=keys[i-1];
-    if (t<=end) {const u=(t-start)/(end-start);return a+(b-a)*u*u*(3-2*u);}
+    if (t<=end) {
+      if (a===b) return a;
+      const h=end-start, u=(t-start)/h, v=1-u, slope=slopes(keys);
+      return a+(b-a)*u*u*(3-2*u)+h*u*v*(v*slope[i-1]-u*slope[i]);
+    }
   }
   return keys.at(-1)[1];
 }
@@ -45,7 +67,11 @@ export const SHOTS = {
   nod: {title:'Кивает',duration:2.2,pitch:curve([0,0],[.28,-.055],[.56,.21],[.91,.075],[1.24,-.025],[1.84,0])},
   no: {title:'Качает головой',duration:2.4,yaw:curve([0,0],[.40,.24],[.91,-.28],[1.38,.14],[1.79,-.055],[2.22,0])},
   temples: {title:'Указывает на виски',duration:3.7,right:track(temple,[0,.18,.76,2.57,3.02,3.59]),
-    left:track(temple,[.09,.3,.89,2.47,2.97,3.67]),lean:-.075,turn:.06,bow:.075},
+    left:track(temple,[.09,.3,.89,2.47,2.97,3.67]),lean:-.075,turn:.06,bow:.075,
+    // Both feet stay down as bent knees absorb the accent; the torso follows
+    // the change of support while the pointing hands remain near the head.
+    dip:curve([0,0],[.36,.13],[.72,.88],[1.06,.17],[1.46,.74],[1.86,.20],[2.22,.44],[2.79,0]),
+    balance:curve([0,0],[.36,-.26],[.82,.86],[1.51,-.72],[2.25,.39],[2.91,0])},
   stretch: {title:'Потягивается',duration:4.25,left:track(above,[0,.28,1.08,2.5,3.17,4.19]),
     right:track(above,[.08,.36,1.21,2.63,3.26,4.23]),shoulder:.20,bow:-.105},
   skip: {title:'Игривый шаг',duration:2.75,left:track(low,[0,.2,.69,1.42,1.92,2.61],[0,.1,.75,.67,.3,0]),
@@ -80,9 +106,13 @@ export function sampleHand(lane,t,swing=0,wrist=0) {
   const weight=at(lane.envelope,t);
   if (weight<=0) return undefined;
   const g=lane.goal;
+  const fingerWeight=at(lane.envelope,t-.065);
+  // Lead the hand around the ribcage while reaching. The outward path on
+  // release has a different depth, and both arcs settle at the held pose.
+  const approach=t<lane.times[2]?Math.sin(Math.PI*weight)*.022:0;
   // The returning elbow opens away from the ribs before the hand drops.
   const release=t>lane.times[3]?Math.sin(Math.PI*(1-weight))*.035:0;
   const [x,y,z] = g.fingers;
   const fingers=wrist ? [x*Math.cos(wrist)+y*Math.sin(wrist),y*Math.cos(wrist)-x*Math.sin(wrist),z] : g.fingers;
-  return {...g,weight,fingers,position:[g.position[0]+swing+release,g.position[1],g.position[2]+release*.45]};
+  return {...g,weight,fingerWeight,fingers,position:[g.position[0]+swing+release+approach,g.position[1]-.3*approach,g.position[2]+release*.45+approach*.7]};
 }

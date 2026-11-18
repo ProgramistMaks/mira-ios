@@ -108,3 +108,24 @@ test('dance command holds across conversation phases, then restores manual selec
   rig.react('touch');
   assert.equal(rig.clip,'heart');
 });
+
+test('the reaching hand travels through intermediate keys and settles at a hold', async () => {
+  const {at}=await import('./staged-gestures.mjs');
+  const keys=[[0,0],[.2,.18],[.8,1],[2,1],[2.4,.6],[2.9,0]];
+  const d=.0001;
+  assert.ok((at(keys,.2+d)-at(keys,.2-d))/(2*d)>.5);
+  assert.equal(at(keys,1.4),1);
+  assert.ok((1-at(keys,.8-d))/d<.005);
+  for(let i=0;i<=350;i++)assert.ok(at(keys,i/120)>=0 && at(keys,i/120)<=1);
+});
+
+test('the temple gesture absorbs the accent through the knees with both feet planted', () => {
+  hold('temples',.72);
+  const hips=point('hips'), knee=bone('leftLowerLeg').quaternion.clone();
+  const foot=point('leftFoot'),other=point('rightFoot');
+  advance(.34);
+  assert.ok(point('hips').y-hips.y>.01);
+  assert.ok(knee.angleTo(bone('leftLowerLeg').quaternion)>.035);
+  assert.ok(foot.distanceTo(point('leftFoot'))<.001);
+  assert.ok(other.distanceTo(point('rightFoot'))<.001);
+});

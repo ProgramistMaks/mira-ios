@@ -4,11 +4,14 @@ import { FramePacer } from './frame-pacer.mjs';
 // a new time origin instead of applying time spent behind a sheet/in the background.
 export class AnimationTimeline {
   active = true; previous = undefined; pacer = new FramePacer();
+  resetClock() {
+    this.previous = undefined;
+    this.pacer = new FramePacer();
+  }
   setActive(value) {
     const active = value === true;
     if (active !== this.active) {
-      this.previous = undefined;
-      this.pacer = new FramePacer();
+      this.resetClock();
     }
     this.active = active;
   }

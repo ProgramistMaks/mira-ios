@@ -11,6 +11,7 @@ import { PlantedStance } from './stance.mjs';
 import { BodyController, ArticulationRig, BODY_CATALOG } from './body.mjs';
 import { SecondaryPhysics } from './secondary-physics.mjs';
 import { HairDetail } from './hair-detail.mjs';
+import { RenderCadence } from './frame-pacer.mjs';
 import { AnimationTimeline } from './animation-timeline.mjs';
 
 declare global {
@@ -18,6 +19,8 @@ declare global {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
       setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
+      renderDisplayFrame(timestamp: number): void; releaseDisplayClock(): void;
+      frameStats?: {fps: number; p95ms: number};
       configureChoreography(id: string): void; dance(): void; choreographyCatalog: typeof CHOREOGRAPHY;
       replayGesture(): void; configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
@@ -33,7 +36,14 @@ const body = new BodyController(crypto.getRandomValues(new Uint32Array(1))[0]);
 let choreography: ChoreographyRig | undefined;
 let choreographyMode = 'auto';
 let resetPhysics: (() => void) | undefined;
-let frameRate = 60;
+let frameRate = 120;
+let nativeTick: ((timestamp: number) => void) | undefined;
+let releaseNativeClock: (() => void) | undefined;
+const cadence = new RenderCadence();
+function resetCadence() {
+  cadence.reset();
+  if (window.companion) window.companion.frameStats = undefined;
+}
 let active = true;
 let phase = 'idle';
 let reduced = false;
@@ -41,6 +51,7 @@ const speechSamples = new SpeechSamples();
 const timeline = new AnimationTimeline();
 const syncVisibility = () => {
   const visible = active && !document.hidden;
+  if (visible !== timeline.active) resetCadence();
   timeline.setActive(visible);
   speechSamples.setActive(visible);
 };
@@ -51,6 +62,8 @@ let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   choreographyCatalog: CHOREOGRAPHY,
+  renderDisplayFrame(timestamp) { if (Number.isFinite(timestamp) && active && !document.hidden) nativeTick?.(timestamp); },
+  releaseDisplayClock() { releaseNativeClock?.(); },
   configureChoreography(id) { choreographyMode = id; choreography?.configure(id); },
   dance() { choreography?.react('dance'); },
   variantCount: VARIANT_COUNT,
@@ -64,7 +77,11 @@ window.companion = {
     active = value === true;
     syncVisibility();
   },
-  setFrameRate(fps) { if (Number.isInteger(fps) && fps >= 1 && fps <= 240) frameRate = fps; },
+  setFrameRate(fps) {
+    if (Number.isInteger(fps) && fps >= 1 && fps <= 240 && fps !== frameRate) {
+      frameRate = fps; resetCadence();
+    }
+  },
   setSpeech(level, capturedAt, sequence) { speechSamples.receive(level, capturedAt, sequence); },
   setViewport(width, height) {
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
@@ -73,6 +90,7 @@ window.companion = {
   setState(next, reduceMotion) {
     if (!['idle', 'listening', 'thinking', 'speaking'].includes(next)) return;
     if (phase !== next) speechSamples.reset();
+    if (reduced !== reduceMotion) resetCadence();
     phase = next; reduced = reduceMotion; window.companion.phase = phase;
     acting.setPhase(phase); acting.update(0, reduced);
   },
@@ -205,7 +223,7 @@ async function main() {
   let displayedVariant = -1;
   let mouth = 0, elapsed = 0;
   acting.update(0, reduced); acting.trigger('greeting'); authored.react('greeting');
-  renderer.setAnimationLoop(timestamp => {
+  const renderFrame = (timestamp: number) => {
     // A cap is a target, not a claim about measured device performance.
     const cap = reduced ? Math.min(frameRate, 30) : frameRate;
     if (contextLost || renderer.getContext().isContextLost()) return;
@@ -217,7 +235,8 @@ async function main() {
     const pose = body.update(acting.update(delta, reduced, audioLevel), delta, reduced, {phase, automatic:!useAuthored && acting.settings.variant < 0 && acting.settings.enabled, directReaction:['greeting','touch'].includes(acting.clip)});
     if (detail.mode !== body.detail) { detail.set(body.detail); bodyStatus(); }
     secondary.configure(body, reduced);
-    document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
+    const motionID = reduced ? 'reduced' : acting.clip;
+    if (document.documentElement.dataset.motion !== motionID) document.documentElement.dataset.motion = motionID;
     if (displayedVariant !== acting.variant) {
       displayedVariant = acting.variant;
       document.documentElement.dataset.variation = String(displayedVariant);
@@ -255,8 +274,29 @@ async function main() {
     for (const [channel, name] of expressiveChannels) if (name) avatar.expressionManager?.setValue(name, pose[channel]);
     avatar.update(delta);
     renderer.render(scene, camera);
+    const sample = cadence.sample(performance.now());
+    if (sample) {
+      window.companion.frameStats = sample;
+      window.webkit?.messageHandlers.avatar.postMessage({type:'cadence', fps:String(sample.fps), p95:String(sample.p95ms)});
+    }
     if (!window.companion.ready) { window.companion.ready = true; report('ready'); }
-  });
+  };
+  let nativeClock = false;
+  nativeTick = timestamp => {
+    if (!nativeClock) {
+      nativeClock = true;
+      renderer.setAnimationLoop(null);
+      timeline.resetClock(); resetCadence();
+    }
+    renderFrame(timestamp);
+  };
+  releaseNativeClock = () => {
+    if (!nativeClock) return;
+    nativeClock = false;
+    timeline.resetClock(); resetCadence();
+    renderer.setAnimationLoop(renderFrame);
+  };
+  renderer.setAnimationLoop(renderFrame);
 }
 
 main().catch(error => {

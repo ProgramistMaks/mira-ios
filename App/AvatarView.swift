@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import QuartzCore
 import Combine
 
 struct AvatarView: UIViewRepresentable {
@@ -22,6 +23,7 @@ struct AvatarView: UIViewRepresentable {
     let frameRate: Int
     let active: Bool
     @Binding var screenMaximumFPS: Int
+    @Binding var lastRenderRate: Int?
     @Binding var ready: Bool
     @Binding var error: String?
 
@@ -60,6 +62,7 @@ struct AvatarView: UIViewRepresentable {
         coordinator.mouthSubscription?.cancel()
         coordinator.mouthBridge?.reset()
         coordinator.parent.voice.setSceneActive(false)
+        (view as? AvatarWebView)?.setDisplayRate(0)
         (view as? AvatarWebView)?.onScreenRateChange = nil
         view.stopLoading()
     }
@@ -85,6 +88,7 @@ struct AvatarView: UIViewRepresentable {
                 view.reload(); return
             }
             let visible = loaded && parent.ready && parent.active
+            (view as? AvatarWebView)?.setDisplayRate(visible && !parent.reduceMotion ? parent.frameRate : 0)
             mouthBridge?.setState(ready: loaded && parent.ready, active: parent.active)
             parent.voice.setSceneActive(visible)
             guard loaded else { return }
@@ -124,6 +128,10 @@ struct AvatarView: UIViewRepresentable {
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: String], message.frameInfo.isMainFrame else { return }
+            if body["type"] == "cadence", let fps = Int(body["fps"] ?? ""), (0...300).contains(fps) {
+                if parent.lastRenderRate != fps { parent.lastRenderRate = fps }
+                return
+            }
             if body["type"] == "ready" {
                 parent.ready = true; parent.error = nil
                 (message.webView as? AvatarWebView)?.syncViewport(force: true)
@@ -135,6 +143,8 @@ struct AvatarView: UIViewRepresentable {
             }
         }
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            (webView as? AvatarWebView)?.setDisplayRate(0)
+            parent.lastRenderRate = nil
             loaded = false; lastCommand = nil; parent.ready = false; mouthBridge?.reset(); parent.voice.setSceneActive(false)
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -146,6 +156,7 @@ struct AvatarView: UIViewRepresentable {
             parent.error = "Не удалось открыть сцену персонажа."
         }
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            (webView as? AvatarWebView)?.setDisplayRate(0)
             loaded = false; lastCommand = nil; parent.ready = false; mouthBridge?.reset()
             parent.voice.setSceneActive(false); webView.reload()
         }
@@ -156,11 +167,57 @@ struct AvatarView: UIViewRepresentable {
     }
 }
 
+@MainActor
+private final class AvatarDisplayTarget: NSObject {
+    weak var view: AvatarWebView?
+    @objc func tick(_ link: CADisplayLink) { view?.drawDisplayFrame(link) }
+}
+
 private final class AvatarWebView: WKWebView {
+    private let displayTarget = AvatarDisplayTarget()
+    private var displayLink: CADisplayLink?
+    private var preferredRate = 0
+    private var frameInFlight = false
+
+    func setDisplayRate(_ requested: Int) {
+        let rate = min(requested, window?.screen.maximumFramesPerSecond ?? 0)
+        let preferred = rate > 60 ? rate : 0
+        guard preferred != preferredRate else { return }
+        preferredRate = preferred
+        if preferred == 0 {
+            displayLink?.invalidate()
+            displayLink = nil
+            frameInFlight = false
+            evaluateJavaScript("window.companion?.releaseDisplayClock()", completionHandler: nil)
+            return
+        }
+        displayTarget.view = self
+        let link = displayLink ?? CADisplayLink(target: displayTarget, selector: #selector(AvatarDisplayTarget.tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: Float(min(80, preferred)), maximum: Float(preferred), preferred: Float(preferred))
+        if displayLink == nil {
+            displayLink = link
+            link.add(to: .main, forMode: .common)
+        }
+    }
+
+    func drawDisplayFrame(_ link: CADisplayLink) {
+        guard link === displayLink, !frameInFlight else { return }
+        frameInFlight = true
+        let milliseconds = link.targetTimestamp * 1000
+        evaluateJavaScript("window.companion?.renderDisplayFrame(\(milliseconds))") { [weak self, weak link] _, _ in
+            guard let self, let link, link === self.displayLink else { return }
+            self.frameInFlight = false
+        }
+    }
+
     private var previousSize: CGSize = .zero
     private var previousScreenRate: Int?
     var onScreenRateChange: ((Int) -> Void)?
-    override func didMoveToWindow() { super.didMoveToWindow(); syncScreenRate() }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil { setDisplayRate(0) }
+        syncScreenRate()
+    }
     override func layoutSubviews() { super.layoutSubviews(); syncScreenRate(); syncViewport() }
     private func syncScreenRate() {
         guard let screen = window?.screen else { return }

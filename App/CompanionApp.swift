@@ -36,6 +36,7 @@ struct CompanionView: View {
     @State private var controlsHeight: CGFloat = 200
     @State private var frameRate = 60
     @State private var screenMaximumFPS = 60
+    @State private var lastRenderRate: Int?
     @AppStorage("expressionsEnabled") private var expressionsEnabled = true
     @AppStorage("expressionEmotion") private var expressionEmotion = "auto"
     @AppStorage("expressionIntensity") private var expressionIntensity = 0.7
@@ -139,7 +140,7 @@ struct CompanionView: View {
             } message: { Text(store.error ?? "") }
             .tint(palette.accent).miraSheet()
         }
-        .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice, screenMaximumFPS: screenMaximumFPS).tint(palette.accent).miraSheet() }
+        .sheet(isPresented: $showSettings, onDismiss: didDismissSheet) { SettingsView(store: store, voice: voice, screenMaximumFPS: screenMaximumFPS, lastRenderRate: lastRenderRate).tint(palette.accent).miraSheet() }
         .sheet(item: Binding(get: { showChat ? nil : store.proposedCommand }, set: { store.proposedCommand = $0 }), onDismiss: didDismissSheet) { proposal in
             CommandsView(store: store, proposal: proposal).tint(palette.accent).miraSheet()
         }
@@ -257,7 +258,7 @@ struct CompanionView: View {
                        physicsWind: physicsWind, physicsSoftness: physicsSoftness, hairDetail: hairDetail, voice: voice, reduceMotion: reduceMotion,
                        frameRate: frameRate,
                        active: scenePhase == .active && !showSettings && !showCommands && !showChat && store.proposedCommand == nil && store.proposedRoutine == nil,
-                       screenMaximumFPS: $screenMaximumFPS,
+                       screenMaximumFPS: $screenMaximumFPS, lastRenderRate: $lastRenderRate,
                        ready: $store.characterReady, error: $store.characterError)
             if !store.characterReady && store.characterError == nil {
                 ProgressView("Загружаю персонажа…").tint(palette.accent).allowsHitTesting(false)

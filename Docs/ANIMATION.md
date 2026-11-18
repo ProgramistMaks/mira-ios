@@ -36,3 +36,11 @@ Full-body update: independent phalanges/thumbs, shoulders, neck/pelvis, active l
 IK, eye/mouth tests, spring tuning and optional denser hair are documented in
 [FULL-BODY.md](FULL-BODY.md). The default stance remains planted; deliberate
 foot lifts are enabled by the body demonstration/manual layer.
+
+## High-refresh playback
+
+On iOS a visible scene requesting more than 60 fps uses a CADisplayLink with a preferred frame rate clamped to the active screen. The first native tick takes ownership of WebGL rendering. A busy WebView skips the next native tick, keeping at most one call outstanding. On release, browser animation callbacks resume with a new time origin. Lower refresh settings, Reduce Motion, Low Power Mode and thermal limits retain their caps. The settings screen shows the last measured rate of WebGL frames submitted over two seconds. Panel scanout, sustained performance and thermal behavior require an iPhone measurement.
+
+Staged gestures cache the local neutral pose. Both animation and spring physics reuse calculations for unchanged parameters. Shape-preserving interpolation carries the hand through intermediate keys, while the shoulder anticipates the reach and the fingers settle after it. In the temple gesture, knee flexion absorbs each accent while the feet stay planted.
+
+A reproducible high-refresh recording uses `MOTION_REVIEW_FPS=120 MOTION_REVIEW_VIEW=front node Scripts/review-authored-motion.mjs`. Each exported frame advances the production renderer by 1/120 s. Offline export timing is independent of the host monitor.

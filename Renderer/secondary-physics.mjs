@@ -30,15 +30,20 @@ export class SecondaryPhysics {
     this.accumulator-=steps*step;
     for(let i=0;i<steps;i++){
       this.time+=step;
-      for(const e of this.entries){
-        const s=e.joint.settings;
-        // Keep authored body/unsupported accessory springs unchanged.
-        const soft=e.category==='other'?.5:this.softness;
-        s.stiffness=e.stiffness*(1.4-soft*.8);s.dragForce=Math.min(.85,Math.max(.05,e.drag+(soft-.5)*.12));
-        const wind=(e.category==='hair'?1:e.category==='skirt'?.3:e.category==='sleeves'?.2:0)*this.wind;
-        e.force.copy(e.direction).multiplyScalar(e.gravity);
-        e.force.x+=wind*.16*(.7+.3*Math.sin(this.time*1.3));e.force.z+=wind*.05*Math.sin(this.time*.7);
-        s.gravityPower=e.force.length();s.gravityDir.copy(s.gravityPower>1e-8?e.force.normalize():e.direction);
+      if(this.wind!==0 || this.lastWind!==this.wind || this.lastSoftness!==this.softness){
+        const windX=this.wind*.16*(.7+.3*Math.sin(this.time*1.3));
+        const windZ=this.wind*.05*Math.sin(this.time*.7);
+        for(const e of this.entries){
+          const s=e.joint.settings;
+          // Keep authored body/unsupported accessory springs unchanged.
+          const soft=e.category==='other'?.5:this.softness;
+          s.stiffness=e.stiffness*(1.4-soft*.8);s.dragForce=Math.min(.85,Math.max(.05,e.drag+(soft-.5)*.12));
+          const exposure=e.category==='hair'?1:e.category==='skirt'?.3:e.category==='sleeves'?.2:0;
+          e.force.copy(e.direction).multiplyScalar(e.gravity);
+          e.force.x+=exposure*windX;e.force.z+=exposure*windZ;
+          s.gravityPower=e.force.length();s.gravityDir.copy(s.gravityPower>1e-8?e.force.normalize():e.direction);
+        }
+        this.lastWind=this.wind;this.lastSoftness=this.softness;
       }
       this.originalUpdate(step);
     }

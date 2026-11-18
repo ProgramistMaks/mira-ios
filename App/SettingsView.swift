@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var store: CompanionStore
     @ObservedObject var voice: VoiceService
     var screenMaximumFPS: Int = 60
+    var lastRenderRate: Int?
     @AppStorage("animationFrameRate") private var requestedFrameRate = 120
     @Environment(\.dismiss) private var dismiss
     @State private var key = ""
@@ -166,6 +167,9 @@ struct SettingsView: View {
                     Text(rate <= screenMaximumFPS ? "До \(rate) кадров/с" : "До \(rate) кадров/с · недоступно")
                         .tag(rate).disabled(rate > screenMaximumFPS)
                 }
+            }
+            if let lastRenderRate {
+                LabeledContent("Последний замер на сцене", value: "\(lastRenderRate) кадров/с")
             }
             Text("Экран: до \(screenMaximumFPS) Гц. Предел анимации: до \(min(requestedFrameRate, screenMaximumFPS)) кадров/с. Фактическая плавность зависит от системы и нагрузки. Энергосбережение, сильный нагрев и уменьшение движения снижают предел до 30 кадров/с.")
                 .font(.footnote).foregroundStyle(.secondary)

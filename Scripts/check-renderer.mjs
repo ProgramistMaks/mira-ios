@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { speechProbeBundle, checkSpeech } from './check-speech.mjs';
+import { speechProbeBundle, checkSpeech, checkDisplayClock } from './check-speech.mjs';
 import { encodeVariant, VARIANT_COUNT } from '../Renderer/expression-library.mjs';
 
 const root = new URL('../Resources/Web/', import.meta.url);
@@ -54,6 +54,7 @@ try {
   await checkSpeech(browser, address, speechProbe);
   await page.goto(address);
   await page.waitForFunction(() => window.companion?.ready === true, undefined, { timeout: 30000 });
+  await checkDisplayClock(page);
   const arms=await page.evaluate(async () => (await import('/check-arms.js')).checkArms());
   assert.ok(arms.minPalmTurn>1,JSON.stringify(arms));
   assert.ok(arms.minWristFlex>.3,JSON.stringify(arms));
