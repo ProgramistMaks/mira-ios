@@ -129,3 +129,49 @@ test('the temple gesture absorbs the accent through the knees with both feet pla
   assert.ok(foot.distanceTo(point('leftFoot'))<.001);
   assert.ok(other.distanceTo(point('rightFoot'))<.001);
 });
+
+test('opening greeting raises both wrists, releases one arm and holds the other beside the face',()=>{
+  rig.configure('auto');
+  rig.react('greeting');
+  assert.equal(rig.clip,'welcome');
+  advance(.55);
+  const top=point('head');
+  for(const side of ['left','right']) assert.ok(point(side+'Hand').y>top.y+.055);
+  advance(.62);
+  assert.ok(point('rightHand').y<top.y-.10);
+  advance(.65);
+  assert.ok(point('rightHand').distanceTo(point('head'))<.13);
+  assert.ok(point('rightHand').y-point('leftHand').y>.15);
+  const held=point('rightHand').sub(point('head'));
+  advance(1.3);
+  assert.ok(point('rightHand').sub(point('head')).distanceTo(held)<.012);
+  rig.configure('wave');
+  assert.equal(rig.clip,'wave');
+});
+
+test('dance gathers the wrists at the sternum before the side accent, with a wide stance',()=>{
+  hold('dance',.7);
+  const chest=bone('chest');
+  const hand=side=>chest.worldToLocal(bone(side+'Hand').getWorldPosition(new Vector3())).divideScalar(height);
+  const left=hand('left'), right=hand('right');
+  assert.ok(left.distanceTo(right)<.09);
+  assert.ok(left.y>right.y && right.y>0);
+  assert.ok(point('rightFoot').distanceTo(point('leftFoot'))>.32);
+  advance(.33);
+  assert.ok(hand('left').y<0 && hand('right').y<0);
+  advance(.40);
+  assert.ok(hand('left').x<-.11 && hand('right').x<-.06);
+});
+
+test('breath continues across gesture changes and stops with Reduce Motion',()=>{
+  hold('heart',.7);
+  const cycle=rig.breathCycle;
+  rig.configure('palms');
+  rig.update(1/120);
+  assert.ok(Math.abs(rig.breathCycle-cycle)<.003);
+  const start=rig.inhale;
+  advance(.5);
+  assert.ok(Math.abs(start-rig.inhale)>.015);
+  rig.update(1/120,{reduced:true});
+  assert.equal(rig.inhale,0);
+});

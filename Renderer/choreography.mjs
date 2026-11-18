@@ -1,12 +1,12 @@
 import {Quaternion, Vector3} from 'three';
 import pack from './motions/authored.json' with {type:'json'};
-import {SHOTS, at, sampleHand, danceHands} from './staged-gestures.mjs';
+import {SHOTS, at, sampleHand, danceHands, welcomeHands} from './staged-gestures.mjs';
 
 const titles = {
   idle:'Перенос веса', ...Object.fromEntries(Object.entries(SHOTS).map(([id,shot])=>[id,shot.title])),
   dance:'Танец', walk:'Ходьба',
 };
-export const CHOREOGRAPHY = Object.entries(titles).map(([id,title])=>({id,title}));
+export const CHOREOGRAPHY = Object.entries(titles).filter(([id])=>!SHOTS[id]?.automaticOnly).map(([id,title])=>({id,title}));
 const pools = {
   idle:['idle','stretch','temples','cheek','fold','palms','nod'],
   listening:['heart','nod','fold','cheek','shrug','idle','palms'],
@@ -14,7 +14,7 @@ const pools = {
   speaking:['palms','options','point','heart','nod','no','shrug','temples','cheek'],
 };
 const fingerCurl = {open:[.14,.045,.1,.16,.22],soft:[.22,.18,.29,.39,.47],
-  loose:[.24,.43,.56,.64,.71],index:[.10,.025,.94,1.03,1.08]};
+  loose:[.24,.43,.56,.64,.71],curled:[.39,1.12,1.22,1.25,1.27],index:[.10,.025,.94,1.03,1.08]};
 const sides = ['left','right'];
 const smooth = t => {t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t);};
 const depth = n => n.parent ? 1+depth(n.parent) : 0;
@@ -47,16 +47,18 @@ export class ChoreographyRig {
     this.parent=new Quaternion(); this.inverseParent=new Quaternion(); this.rootQ=new Quaternion(); this.v=new Vector3(); this.v2=new Vector3();
     this.mode='auto'; this.clip='idle'; this.age=0; this.fade=1;
     this.history=[]; this.nextDance=45+random()*45; this.elapsed=0; this.silence=1;
+    this.breathCycle=0; this.inhale=0;
     this.phase='idle'; this.enabled=false; this.holdUntil=3.6; this.direct=false;
   }
   bind(stance, targets, articulation) { Object.assign(this,{stance,targets,articulation}); }
   configure(id) {
-    if(id!=='auto' && !Object.hasOwn(titles,id)) id='auto';
+    if(id!=='auto' && (!Object.hasOwn(titles,id) || SHOTS[id]?.automaticOnly)) id='auto';
     if(id===this.mode) return;
     this.mode=id;
     this.begin(id==='auto'?'idle':id);
   }
   get duration() { return SHOTS[this.clip]?.duration ?? (this.clip==='dance'?6 : this.clip==='walk'?4 : 4.8); }
+  get title() {return titles[this.clip];}
   begin(id, direct=false) {
     this.clip=id; this.age=0; this.fade=0; this.direct=direct;
     this.fromPosition.copy(this.hips.position);
@@ -68,7 +70,7 @@ export class ChoreographyRig {
   react(kind) {
     if(this.mode!=='auto' && kind!=='dance') return;
     if(kind==='dance'){this.begin('dance',true);this.holdUntil=12;}
-    else if(kind==='greeting')this.begin('wave',true);
+    else if(kind==='greeting')this.begin('welcome',true);
     else if(kind==='touch')this.begin(this.clip==='temples'?'heart':'temples',true);
   }
   choose(phase) {
@@ -84,6 +86,7 @@ export class ChoreographyRig {
     dt=Math.max(0, Math.min(.05,dt));
     if(reduced){
       if(this.clip!=='idle')this.begin('idle');
+      this.breathCycle=0;this.inhale=0;
       this.age=0;this.fade+=dt;this.wasReduced=true;this.renderPose();return;
     }
     if(this.wasReduced){this.wasReduced=false;this.begin(this.mode==='auto'?'idle':this.mode);}
@@ -97,6 +100,10 @@ export class ChoreographyRig {
     if(this.mode==='auto' && (this.age>=this.holdUntil || (changed&&!this.direct&&this.age>.55))){
       this.begin(this.choose(state));
     }
+    const period=this.clip==='dance'||this.clip==='walk'?3.2:phase==='speaking'?4.2:4.9;
+    this.breathCycle=(this.breathCycle+dt/period)%1;
+    const b=this.breathCycle;
+    this.inhale=b<.38?smooth(b/.38):1-smooth((b-.38)/.62);
     this.age+=dt;this.fade+=dt;this.renderPose();
   }
   renderPose() {
@@ -113,6 +120,7 @@ export class ChoreographyRig {
     }
     if(this.stance && source==='idle')this.stage(shot);
     if(source==='dance' && this.stance)this.stageDance();
+    if(source==='walk')this.breathe();
     // Crossfade *after* solving both arms and the support foot so their
     // transition starts at the actual previous displayed pose.
     const blend=smooth(this.fade/.4);
@@ -155,6 +163,11 @@ export class ChoreographyRig {
       });
     }
   }
+  breathe() {
+    const ribcage=this.nodes.upperChest ?? this.nodes.chest;
+    ribcage?.rotateX(.029*this.inhale);
+    this.nodes.neck?.rotateX(-.014*this.inhale);
+  }
   stageDance() {
     const t=this.age, beat=t%2;
     const lead=Math.floor(t/2)%2===0?'left':'right';
@@ -171,7 +184,7 @@ export class ChoreographyRig {
     const pose={hipsSide:(lead==='left'?-1:1)*(.021*tap-.011*leadLift),
       hipsDrop:.014+.013*lift(.33,.7)+.011*lift(1.12,1.57),
       hipsYaw:(lead==='left'?-1:1)*.052*open,
-      [lead+'FootSide']:.017+.052*open,[follow+'FootSide']:.017-.026*tap,
+      [lead+'FootSide']:.119+.052*open,[follow+'FootSide']:.119-.026*tap,
       [lead+'FootForward']:.020*open,[follow+'FootForward']:-.012*tap,
       [lead+'FootLift']:.038*leadLift,[follow+'FootLift']:.025*heel,
       [lead+'Knee']:.28*leadLift,[follow+'Knee']:.42*heel,
@@ -180,13 +193,17 @@ export class ChoreographyRig {
     // Counterbalance the open step. The chest turns into the step and the
     // head follows on the weight transfer, keeping the eyes near the horizon.
     const side=lead==='left'?-1:1;
-    this.nodes.chest?.rotateY(-side*.12*open);
+    const gather=Math.floor(t/2)%3===0 ? rise(.18,.55)-rise(.8,1.05) : 0;
+    const sweep=Math.floor(t/2)%3===0 ? rise(1.07,1.39)-rise(1.68,1.97) : 0;
+    this.nodes.chest?.rotateY(side*(-.12*open+.18*gather-.25*sweep));
+    this.nodes.chest?.rotateX(.075*gather-.055*sweep);
     this.nodes.spine?.rotateZ(side*(.045*tap-.025*leadLift));
     this.nodes.neck?.rotateY(side*.035*tap);
     this.nodes.head?.rotateZ(-side*.036*tap);
     const hands=danceHands(t);
     this.fillFingers(pose,hands);
     this.articulation.apply(pose,hands);
+    this.breathe();
     this.targets.apply({},hands);
   }
   stage(shot) {
@@ -208,6 +225,7 @@ export class ChoreographyRig {
       leftFootForward:.012,rightFootForward:-.014,leftFootLift:foot*.038,leftKnee:foot*.45,leftFootPitch:foot*.15,
       leftShoulderLift:leftLead*(shot?.shoulder??.075),rightShoulderLift:rightLead*(shot?.shoulder??.075),
       leftShoulderForward:leftLead*.09,rightShoulderForward:rightLead*.09};
+    if(this.clip==='welcome') welcomeHands(t,hands,pose);
     this.stance.apply(pose);
     this.fillFingers(pose,hands);
     this.articulation.apply(pose);
@@ -216,6 +234,7 @@ export class ChoreographyRig {
     this.nodes.chest?.rotateY(turn*.55); this.nodes.chest?.rotateZ(lean*.25);
     this.nodes.neck?.rotateX(pitch*.25+.04*at(shot?.dip,t-.08));this.nodes.head?.rotateX(pitch*.75);
     this.nodes.head?.rotateZ((shot?.lean??0)*headBeat);this.nodes.head?.rotateY(turn*.5+at(shot?.yaw,t));
+    this.breathe();
     this.targets.apply({},hands);
   }
 }

@@ -12,6 +12,7 @@ const fps=Number(process.env.MOTION_REVIEW_FPS ?? 15);
 assert.ok([15,30,60,120].includes(fps));
 const simulationHz=Math.max(30,fps);
 const frontOnly=process.env.MOTION_REVIEW_VIEW==='front';
+const portrait=process.env.MOTION_REVIEW_VIEW==='portrait';
 const width=frontOnly?480:256, height=frontOnly?672:384;
 let source=await readFile('Renderer/avatar.ts','utf8');
 const startLoop='  renderer.setAnimationLoop(renderFrame);\n}';
@@ -21,7 +22,12 @@ source=source.replace(startLoop,`  let reviewTime = 0;
   composite.width=${frontOnly?width:width*2}; composite.height=${height};
   const ctx=composite.getContext('2d')!;
   const sideCamera=camera.clone();
+  const reviewTargetY=center.y+height*${portrait ? .31 : 0};
   (window as any).nativeReview = {step: (capture: boolean) => {
+    if (${portrait}) {
+      camera.position.set(0,reviewTargetY,height*.23/Math.tan(THREE.MathUtils.degToRad(camera.fov/2)));
+      camera.lookAt(0,reviewTargetY,0);
+    }
     reviewTime += 1000/${simulationHz};
     window.companion.renderDisplayFrame(reviewTime);
     if(!capture)return null;
@@ -29,7 +35,7 @@ source=source.replace(startLoop,`  let reviewTime = 0;
     ctx.drawImage(renderer.domElement,0,0,${width},${height});
     if (!${frontOnly}) {
       sideCamera.copy(camera);sideCamera.position.applyAxisAngle(new THREE.Vector3(0,1,0),.72);
-      sideCamera.lookAt(0,center.y,0);renderer.render(scene,sideCamera);
+      sideCamera.lookAt(0,reviewTargetY,0);renderer.render(scene,sideCamera);
       ctx.drawImage(renderer.domElement,${width},0,${width},${height});
     }
     return composite.toDataURL('image/jpeg',.94).split(',')[1];
@@ -49,7 +55,15 @@ try{
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>window.companion?.ready,{timeout:30000});
  await page.evaluate(([w,h,rate])=>{window.companion.setFrameRate(rate);window.companion.setViewport(w,h);window.companion.configurePerformance({variant:-1});},[width,height,simulationHz]);
  for(const id of (process.env.MOTION_CLIPS?.split(',') ?? CHOREOGRAPHY.map(c=>c.id))){
-  const duration=await page.evaluate(id=>{window.companion.configureChoreography(id);window.companion.replayGesture();return window.nativeReview.rig.duration;},id);
+  const duration=await page.evaluate(id=>{
+    if(id==='welcome') {
+      window.companion.configureChoreography('auto');
+      window.nativeReview.rig.react('greeting');
+    } else {
+      window.companion.configureChoreography(id);window.companion.replayGesture();
+    }
+    return window.nativeReview.rig.duration;
+  },id);
   const encoder=spawn('ffmpeg',['-loglevel','error','-y','-f','image2pipe','-vcodec','mjpeg','-framerate',String(fps),'-i','pipe:0','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',out+'/'+id+'.mp4'],{stdio:['pipe','ignore','inherit']});
   const exited=once(encoder,'close');
   for(let f=0;f<Math.ceil((duration+.15)*simulationHz);f++){

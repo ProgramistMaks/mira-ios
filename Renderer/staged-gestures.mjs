@@ -46,6 +46,10 @@ export function at(keys,t) {
   return keys.at(-1)[1];
 }
 export const SHOTS = {
+  welcome: {title:'Приветствие', automaticOnly:true, duration:4.55,
+    right:track(hand('chest',[0,0,.061],[-.26,.96,0],[0,0,1]),[0,.23,.52,3.70,4.12,4.54]),
+    left:track(hand('chest',[0,0,.064],[-.35,.91,0],[0,0,1],'loose'),[0,.18,.49,.96,1.20,1.55]),
+    lean:.075,turn:-.09,bow:.065},
   wave: {title:'Приветственный взмах', duration:3.35, right:track(hello,[0,.22,.67,2.19,2.58,3.3]),
     left:track(low,[.1,.38,.8,2.1,2.6,3.25],[0,.12,.45,.45,.24,0]), lean:-.065,turn:.08,
     wrist:curve([0,0],[.6,0],[.9,.36],[1.18,-.3],[1.52,.27],[1.83,-.21],[2.12,.04],[2.32,0]),
@@ -77,11 +81,34 @@ export const SHOTS = {
   skip: {title:'Игривый шаг',duration:2.75,left:track(low,[0,.2,.69,1.42,1.92,2.61],[0,.1,.75,.67,.3,0]),
     lean:.105,turn:.09,foot:curve([0,0],[.32,0],[.65,1],[1.1,.85],[1.55,0],[2.75,0])},
 };
-// The source dance supplies the footwork. Three asymmetric arm phrases land
-// on successive beats; the hand drops back into the source before it changes lane.
+// The video opens with the hands already overhead. Ease into that pose from
+// the current stance, then drop the elbows and bring only one hand to the cheek.
+const welcomeX=curve([0,.07],[.55,.07],[.76,.102],[.94,.118],[1.17,.13],[1.53,.079],[1.79,.079],[3.70,.079],[4.26,.135]);
+const welcomeY=curve([0,.260],[.55,.260],[.76,.230],[.94,.147],[1.16,-.021],[1.39,.042],[1.71,.153],[3.70,.153],[4.26,-.015]);
+const leftWelcomeY=curve([0,.263],[.52,.263],[.71,.240],[.92,.155],[1.17,.008],[1.45,-.12]);
+const raisedShoulders=curve([0,0],[.45,1],[.66,1],[.98,.32],[1.21,0]);
+const relaxedWrist=curve([0,0],[.57,0],[.86,.75],[1.13,1],[1.51,0]);
+export function welcomeHands(time,hands,pose) {
+  for (const [side,path] of Object.entries(hands)) {
+    if (!path) continue;
+    path.position[0]+=at(welcomeX,time);
+    path.position[1]+=at(side==='left'?leftWelcomeY:welcomeY,time);
+    const curl=at(relaxedWrist,time);
+    path.fingers=[path.fingers[0]+.56*curl,path.fingers[1]-1.42*curl,.8*curl];
+    pose[side+'ShoulderLift']=at(raisedShoulders,time)*.24;
+  }
+}
+// The first phrase gathers both forearms at the sternum, releases and then
+// accents one side. Each wrist takes a separate height and arrival time.
+const gatherHands = [
+  {x:curve([0,.19],[.21,.16],[.58,.064],[.74,.064],[1.04,.106],[1.32,.19],[1.62,.095],[2,.12]),
+   y:curve([0,-.08],[.24,-.045],[.58,.069],[.78,.069],[1.05,-.041],[1.32,.070],[1.62,.124],[2,-.04])},
+  {x:curve([0,.18],[.28,.14],[.66,-.013],[.83,-.010],[1.1,.073],[1.39,-.085],[1.68,-.032],[2,.09]),
+   y:curve([0,-.09],[.28,-.075],[.66,.032],[.83,.032],[1.10,-.058],[1.39,.045],[1.68,.086],[2,-.05])},
+];
 const danceLanes = [
-  {left: track(offer, [0,.18,.61,1.16,1.52,1.91]),
-   right: track(low, [0,.26,.67,1.21,1.54,1.96],[0,.1,.66,.62,.26,0])},
+  {left: track(hand('chest',[0,0,.101],[-.52,.72,.45],[0,0,-1],'curled'),[0,.12,.36,1.63,1.82,1.98]),
+   right: track(hand('chest',[0,0,.128],[-.68,.59,.43],[0,0,-1],'curled'),[0,.16,.42,1.69,1.84,1.995])},
   {right: track(hello, [0,.13,.53,1.08,1.52,1.94]),
    left: track(offer, [.14,.35,.76,1.27,1.59,1.98],[0,.14,.8,.69,.28,0])},
   {right: track(temple, [0,.22,.65,1.28,1.61,1.96]),
@@ -92,8 +119,15 @@ export function danceHands(t) {
   const local = t % 2;
   const lane = danceLanes[phrase];
   const mirror = Math.floor(t / 6) % 2 === 1;
-  return {left: sampleHand(mirror ? lane.right : lane.left, local),
-    right: sampleHand(mirror ? lane.left : lane.right, local)};
+  const left=sampleHand(lane.left,local), right=sampleHand(lane.right,local);
+  if (phrase===0) {
+    for (const [i,hand] of [left,right].entries()) {
+      if (!hand) continue;
+      hand.position[0]+=at(gatherHands[i].x,local);
+      hand.position[1]+=at(gatherHands[i].y,local);
+    }
+  }
+  return mirror?{left:right,right:left}:{left,right};
 }
 for (const shot of [...Object.values(SHOTS), ...danceLanes]) {
   for (const side of ['left','right']) {

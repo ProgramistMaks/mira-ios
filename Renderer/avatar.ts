@@ -9,6 +9,7 @@ import { ArmRig } from './arms.mjs';
 import { VARIANT_COUNT } from './expression-library.mjs';
 import { PlantedStance } from './stance.mjs';
 import { BodyController, ArticulationRig, BODY_CATALOG } from './body.mjs';
+import { VitaSecondary } from './vita-secondary.mjs';
 import { SecondaryPhysics } from './secondary-physics.mjs';
 import { HairDetail } from './hair-detail.mjs';
 import { RenderCadence } from './frame-pacer.mjs';
@@ -125,8 +126,9 @@ async function main() {
   const gltf = await loader.loadAsync('character.vrm');
   const avatar = gltf.userData.vrm as VRM | undefined;
   if (!avatar) throw new Error('No VRM avatar');
-  VRMUtils.rotateVRM0(avatar);
   VRMUtils.removeUnnecessaryVertices(avatar.scene);
+  const details = new VitaSecondary(avatar);
+  VRMUtils.rotateVRM0(avatar);
   VRMUtils.combineSkeletons(avatar.scene);
   VRMUtils.combineMorphs(avatar);
   avatar.scene.traverse(object => { object.frustumCulled = false; });
@@ -188,7 +190,7 @@ async function main() {
     pointer = undefined;
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     if (tap && active && hitCharacter(event) && !reduced) {
-      acting.trigger('touch'); authored.react('touch');
+      acting.trigger('touch'); authored.react('touch'); details.listenCue();
     }
   });
   renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; });
@@ -200,7 +202,7 @@ async function main() {
   const armTargets = new ArmTargets(avatar.scene, bone, height, armSign);
   const articulation = new ArticulationRig(bone, armSign);
   const secondary = new SecondaryPhysics(avatar.springBoneManager);
-  resetPhysics = () => secondary.reset();
+  resetPhysics = () => {secondary.reset(); details.rebase();};
   const detail = new HairDetail(avatar.scene);
   const bodyStatus = () => {
     window.companion.bodyStatus = { joints: articulation.entries.length, physics: secondary.counts,
@@ -222,7 +224,8 @@ async function main() {
   for (let i = 0; i < 12; i++) avatar.update(1 / 120);
   let displayedVariant = -1;
   let mouth = 0, elapsed = 0;
-  acting.update(0, reduced); acting.trigger('greeting'); authored.react('greeting');
+  let previousPhase = phase;
+  acting.update(0, reduced); acting.trigger('greeting'); authored.react('greeting'); details.listenCue();
   const renderFrame = (timestamp: number) => {
     // A cap is a target, not a claim about measured device performance.
     const cap = reduced ? Math.min(frameRate, 30) : frameRate;
@@ -254,7 +257,7 @@ async function main() {
       if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
       armTargets.apply(pose);
     } else authored.update(delta, {phase, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
-    window.companion.bodyStatus.behavior = useAuthored ? CHOREOGRAPHY.find(item=>item.id===authored.clip)?.title : body.behaviorLabel;
+    window.companion.bodyStatus.behavior = useAuthored ? authored.title : body.behaviorLabel;
     window.companion.bodyStatus.choreography = {clip: authored.clip, mode: authored.mode, enabled: authored.enabled};
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
@@ -272,6 +275,10 @@ async function main() {
     }
     avatar.expressionManager?.setValue('happy', pose.smile);
     for (const [channel, name] of expressiveChannels) if (name) avatar.expressionManager?.setValue(name, pose[channel]);
+    const natural = useAuthored && acting.settings.enabled && !reduced;
+    if (natural && phase === 'listening' && phase !== previousPhase) details.listenCue();
+    previousPhase = phase;
+    details.update(delta, phase, natural ? authored.inhale : 0, natural && body.physics);
     avatar.update(delta);
     renderer.render(scene, camera);
     const sample = cadence.sample(performance.now());

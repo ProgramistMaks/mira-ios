@@ -30,8 +30,12 @@ there is no full-body contact or self-collision solver.
 
 ## Physics and mesh
 
-The existing VRM asset has 18 spring groups / 80 simulated joints: hair 50, skirt
-18, sleeves 8, other 4 (authored bust chains). Original collider memberships are
+The existing VRM asset has 18 spring groups and 80 simulated joints, including
+50 for hair, 18 for the skirt, 8 for sleeves and 4 for the chest. A flex point on
+each of Vita's two ear meshes lets the tip lag behind turns and footfalls while the
+base stays attached to the head. The chest and top expand together during a breath.
+The original chest joints absorb changes of direction and settle during holds.
+Original collider memberships are
 retained. A single VRM update hook advances springs at 120 Hz with at most six
 steps per rendered frame, bounded wind and softness settings. This is simulation
 frequency, not a claim of 120 rendered FPS. Hidden time is not replayed. Physics

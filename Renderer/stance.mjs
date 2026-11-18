@@ -33,7 +33,7 @@ class PlantedLeg {
     const a = this.upperLength, b = this.lowerLength;
     const worldScale = this.root.getWorldScale(new Vector3()).y;
     const kneeLift = (a + b - Math.sqrt(a*a + b*b + 2*a*b*Math.cos(knee))) / Math.max(1e-8, worldScale);
-    this.offset.set((side === 'left' ? -1 : 1) * bounded(pose, side + 'FootSide', .07),
+    this.offset.set((side === 'left' ? -1 : 1) * bounded(pose, side + 'FootSide', .18),
       Math.max(0, bounded(pose, side + 'FootLift', .1)), bounded(pose, side + 'FootForward', .09) * this.forward).multiplyScalar(height);
     this.offset.y += kneeLift;
     this.footTilt.setFromEuler(this.footEuler.set(-this.forward * bounded(pose, side + 'FootPitch', .4), 0, bounded(pose, side + 'FootRoll', .2)));
