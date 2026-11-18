@@ -71,6 +71,7 @@ const defaults = () => ({
     startLogin: false,
     startListening: false,
     bubbles: true,
+    ttsEnabled: true,
     speechRate: 1,
     speechVolume: 1,
     sensitivity: 0.012,

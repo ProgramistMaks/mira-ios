@@ -175,7 +175,11 @@
       </main>
       <footer>
         <span class="profile"><b id="initial">М</b><span id="profile">Мой компьютер</span></span>
-        <div class="service" id="services"></div>
+        <div class="service" id="services" role="group" aria-label="Состояние разговора">
+          <button id="serviceAI" data-go="ai"><span data-i="sparkles"></span>ИИ</button>
+          <button id="serviceMic" aria-pressed="false"><span data-i="mic"></span>Речь</button>
+          <button id="serviceVoice" aria-pressed="true"><span data-i="volume-2"></span>Голос</button>
+        </div>
         <span id="time"></span>
       </footer>
     </div>

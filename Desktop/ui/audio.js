@@ -44,6 +44,7 @@ export class Voice {
     this.enabled = false;
     this.testing = false;
     this.turnId = 0;
+    this.replyEpoch = 0;
     this.captureId = 0;
   }
   async devices() {
@@ -131,8 +132,8 @@ export class Voice {
       });
     };
   }
-  async start(test = false) {
-    this.stop(false);
+  async start(test = false, keepOutput = false) {
+    this.stop(false, keepOutput);
     const e = this.epoch;
     this.testing = test;
     this.enabled = !test;
@@ -163,7 +164,7 @@ export class Voice {
       this.onStatus(test ? 'Проверка микрофона' : 'Слушаю. Можно говорить.', 'listening');
     } catch (err) {
       if (e === this.epoch) {
-        this.stop();
+        this.stop(!keepOutput, keepOutput);
         throw err;
       }
     }
@@ -232,13 +233,17 @@ export class Voice {
   }
   async turn(bytes) {
     const e = this.epoch,
-      turn = ++this.turnId;
+      turn = ++this.turnId,
+      reply = ++this.replyEpoch;
     const active = () => e === this.epoch && turn === this.turnId;
     this.busy = true;
+    this.transcribing = true;
     this.onStatus('Распознаю фразу…', 'thinking');
     try {
       const text = await call('transcribe', { bytes, localOnly: this.localOnly() });
-      if (!active() || !text.trim()) return;
+      if (!active()) return;
+      this.transcribing = false;
+      if (!text.trim()) return;
       this.onStatus('Думаю…', 'thinking');
       let result;
       try {
@@ -250,11 +255,13 @@ export class Voice {
           ? 'Для свободного разговора выбери модель во вкладке ИИ. Я уже могу записывать заметки, ставить таймер и искать в интернете.'
           : 'Сейчас не удалось получить ответ. Я снова слушаю.';
       }
-      if (active() && result) await this.speak(result);
+      // Turning off input after transcription still lets this reply finish aloud.
+      if (reply === this.replyEpoch && result) await this.speak(result);
     } catch (err) {
       if (active()) this.onError(err);
     } finally {
       if (active()) {
+        this.transcribing = false;
         this.busy = false;
         this.reset();
         this.onStatus('Слушаю. Можно говорить.', 'listening');
@@ -262,12 +269,14 @@ export class Voice {
     }
   }
   async speak(text, fishPreview) {
+    if (this.settings?.ttsEnabled === false) return;
     this.hush();
     const id = this.audioEpoch;
     this.playing = true;
     this.onStatus('Отвечаю…', 'speaking');
     try {
       const ctx = await this.context();
+      if (id !== this.audioEpoch) return;
       const data = await call('speech', { text, continuous: this.enabled, fishPreview });
       if (id !== this.audioEpoch) return;
       const b = await ctx.decodeAudioData(new Uint8Array(data).buffer);
@@ -303,12 +312,19 @@ export class Voice {
       output.disconnect();
       meter.disconnect();
       src.disconnect();
+    } catch (err) {
+      if (id === this.audioEpoch) throw err;
     } finally {
       if (id === this.audioEpoch) {
         this.hush();
         this.onStatus(this.enabled ? 'Слушаю. Можно говорить.' : '', this.enabled ? 'listening' : 'idle');
       }
     }
+  }
+  silence() {
+    if (!this.playing) return;
+    this.hush();
+    this.onStatus(this.enabled ? 'Слушаю. Можно говорить.' : '', this.enabled ? 'listening' : 'idle');
   }
   hush() {
     this.audioEpoch++;
@@ -328,14 +344,18 @@ export class Voice {
     this.overlapQuiet = 0;
     mouth(0);
   }
-  stop(cancel = true) {
+  stop(cancel = true, keepOutput = false) {
     this.epoch++;
     this.enabled = false;
     this.testing = false;
     this.captureId++;
     this.turnId++;
     this.busy = false;
-    this.hush();
+    this.transcribing = false;
+    if (!keepOutput) {
+      this.replyEpoch++;
+      this.hush();
+    }
     this.tail = null;
     this.reset();
     this.proc?.disconnect();
@@ -345,7 +365,7 @@ export class Voice {
     this.stream = null;
     this.onMeter?.(0, '');
     if (cancel) call('stop').catch(() => {});
-    this.onStatus('', 'idle');
+    this.onStatus(this.playing ? 'Отвечаю…' : '', this.playing ? 'speaking' : 'idle');
   }
   async decode(data) {
     const ctx = await this.context();

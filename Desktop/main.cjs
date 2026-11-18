@@ -80,6 +80,7 @@ let main,
   bot,
   job,
   voiceJob,
+  recognitionJob,
   timer,
   closing = false,
   overlayLock = false,
@@ -106,6 +107,51 @@ const push = (data) => {
   }
   for (const w of [main, overlay]) if (w && !w.isDestroyed()) w.webContents.send('update', data);
 };
+let modelCalls = 0;
+let activityVersion = 0;
+let aiKeyRevision = 0;
+let lastModelCheck;
+function modelConfig() {
+  const s = store.data.settings;
+  return s.provider === 'local' ? s.model : JSON.stringify([s.base, s.cloudModel, aiKeyRevision]);
+}
+function modelStatus() {
+  return {
+    active: modelCalls > 0,
+    version: activityVersion,
+    health: lastModelCheck?.config === modelConfig() ? lastModelCheck.health : 'unknown',
+  };
+}
+function publishActivity() {
+  activityVersion++;
+  push({ type: 'modelActivity', ...modelStatus() });
+}
+async function trackModel(work, selected, signal) {
+  const config = modelConfig();
+  if (++modelCalls === 1) publishActivity();
+  try {
+    const result = await work();
+    if (selected && config === modelConfig() && !signal?.aborted)
+      lastModelCheck = { config, health: 'ready' };
+    return result;
+  } catch (error) {
+    if (selected && config === modelConfig() && !signal?.aborted)
+      lastModelCheck = { config, health: 'error' };
+    throw error;
+  } finally {
+    if (--modelCalls === 0) publishActivity();
+  }
+}
+function modelRequest(method, ...args) {
+  const s = store.data.settings;
+  const [base, , model] = args;
+  const selected = s.provider === 'local' ? model === s.model : base === s.base && model === s.cloudModel;
+  return trackModel(
+    () => method(...args),
+    selected,
+    args.find((arg) => arg instanceof AbortSignal),
+  );
+}
 const changed = () => {
   store.save();
   push({ type: 'refresh' });
@@ -131,6 +177,7 @@ function saveSecret(k, v) {
       throw Error('Защищённое хранилище системы недоступно');
     store.data.secrets[k] = safeStorage.encryptString(String(v).trim()).toString('base64');
   } else delete store.data.secrets[k];
+  if (k === 'ai') aiKeyRevision++;
   store.save();
 }
 function show() {
@@ -433,6 +480,8 @@ function cancel() {
   job = null;
   voiceJob?.abort();
   voiceJob = null;
+  recognitionJob?.abort();
+  recognitionJob = null;
   decoding?.reject(Error('Отменено'));
   decoding = null;
   push({ type: 'stopAudio' });
@@ -746,7 +795,8 @@ async function execute(spec, remote = false) {
             const original = await clipboard.readText();
             if (!original.trim()) throw Error('Скопируй текст в буфер обмена');
             const { base, key, model } = await chatConnection();
-            const result = await network.ai(
+            const result = await modelRequest(
+              network.ai,
               base,
               key,
               model,
@@ -877,7 +927,7 @@ function searchWeb(query, signal) {
 async function chatConnection(vision = false) {
   const s = store.data.settings;
   if (s.provider === 'local') {
-    const c = await models.connection(s.model, vision);
+    const c = await trackModel(() => models.connection(s.model, vision), true);
     return { base: c.base, key: c.key, model: c.id };
   }
   return { base: s.base, key: secret('ai'), model: s.cloudModel };
@@ -887,7 +937,8 @@ async function draftCommand(text, signal) {
     text,
     async (messages, schema) => {
       const { base, key, model } = await chatConnection();
-      return network.ai(
+      return modelRequest(
+        network.ai,
         base,
         key,
         model,
@@ -1069,7 +1120,8 @@ async function answer(text, chat, signal, remote = false, spokenReply = false, o
     if (s.provider !== 'local' || models.list().some((x) => x.id === s.model && x.installed)) {
       try {
         const { base, key, model } = await chatConnection();
-        const report = await network.ai(
+        const report = await modelRequest(
+          network.ai,
           base,
           key,
           model,
@@ -1194,7 +1246,15 @@ async function converse(text, chat, signal, remote, spokenReply, onText) {
   if (connector) {
     const config = { ...connector, token: secret('mcp-' + connector.id) };
     const listed = await network.mcp(config, 'tools/list', {}, signal);
-    const call = await network.selectTool(base, key, model, messages, listed.tools || [], signal);
+    const call = await modelRequest(
+      network.selectTool,
+      base,
+      key,
+      model,
+      messages,
+      listed.tools || [],
+      signal,
+    );
     if (call.text) return { text: call.text };
     const choice = await dialog.showMessageBox(main, {
       type: 'question',
@@ -1217,7 +1277,8 @@ async function converse(text, chat, signal, remote, spokenReply, onText) {
       JSON.stringify(outcome.structuredContent || {});
     if (outcome.isError) throw Error(result.slice(0, 700));
     return {
-      text: await network.ai(
+      text: await modelRequest(
+        network.ai,
         base,
         key,
         model,
@@ -1235,7 +1296,7 @@ async function converse(text, chat, signal, remote, spokenReply, onText) {
   }
   return {
     generated: true,
-    text: await network.ai(base, key, model, messages, signal, localOptions, onText),
+    text: await modelRequest(network.ai, base, key, model, messages, signal, localOptions, onText),
   };
 }
 function streamToChat(chatId, requestId) {
@@ -1447,7 +1508,7 @@ const actions = {
       throw Error('Выбери скачанную модель во вкладке «ИИ».');
     const local = await models.connection(model);
     return commandLibrary.suggestPhrases(apps, (messages) =>
-      network.ai(local.base, local.key, local.id, messages, AbortSignal.timeout(120000), {
+      modelRequest(network.ai, local.base, local.key, local.id, messages, AbortSignal.timeout(120000), {
         temperature: 0,
         max_tokens: 1500,
         response_format: { type: 'json_object' },
@@ -1721,6 +1782,7 @@ const actions = {
   },
   state: () => ({
     ...store.public(),
+    modelActivity: modelStatus(),
     mail: mail.widget(),
     outfits,
     widgetNames: require('./core.cjs').widgetNames,
@@ -1872,6 +1934,7 @@ const actions = {
       'startLogin',
       'startListening',
       'bubbles',
+      'ttsEnabled',
     ])
       if (k in input) s[k] = !!input[k];
     if (!s.name || !s.city) throw Error('Укажите имя и город');
@@ -1884,6 +1947,10 @@ const actions = {
     else {
       store.data.settings = s;
       changed();
+    }
+    if (input.ttsEnabled === false) {
+      voiceJob?.abort();
+      push({ type: 'stopAudio' });
     }
     if (overlay && ('overlayAnchor' in input || 'overlayHeight' in input)) {
       const bounds = overlayBounds(screen.getDisplayMatching(overlay.getBounds()), s);
@@ -1957,6 +2024,7 @@ const actions = {
     changed();
     if (removed) await chatMedia.remove(removed.messages.flatMap((m) => m.attachments || []));
   },
+  stopRecognition: () => recognitionJob?.abort(),
   speech: async ({ text, continuous, fishPreview }) => {
     voiceJob?.abort();
     const own = new AbortController();
@@ -1992,9 +2060,9 @@ const actions = {
     }
   },
   transcribe: async ({ bytes, localOnly }) => {
-    voiceJob?.abort();
+    recognitionJob?.abort();
     const own = new AbortController();
-    voiceJob = own;
+    recognitionJob = own;
     try {
       if (!localOnly && store.data.settings.stt === 'speechAPI') {
         try {
@@ -2011,7 +2079,7 @@ const actions = {
       }
       return await speech.transcribe(engines, bytes, own.signal);
     } finally {
-      if (voiceJob === own) voiceJob = null;
+      if (recognitionJob === own) recognitionJob = null;
     }
   },
   fishFavorite: ({ id, title, author, languages, sample }) => {

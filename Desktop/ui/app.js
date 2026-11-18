@@ -58,6 +58,7 @@ const voice = new Voice(
     return next.reply;
   },
   (msg, p) => {
+    renderServices();
     clearTimeout(wakeTimer);
     if (voice.testing) return;
     if (voice.enabled && msg === 'Слушаю. Можно говорить.') {
@@ -494,6 +495,68 @@ function renderChat() {
       )
       .join('') || '<p class="empty">Разговоры сохраняются здесь.</p>';
 }
+let modelActivity = { active: false, version: -1 };
+function syncModelActivity(activity) {
+  if (activity && activity.version >= modelActivity.version) modelActivity = activity;
+}
+function service(id, status, title, pressed) {
+  const button = $(id);
+  button.dataset.state = status;
+  button.title = title;
+  button.setAttribute('aria-label', button.textContent.trim() + '. ' + title);
+  if (pressed !== undefined) button.setAttribute('aria-pressed', String(pressed));
+}
+function renderServices() {
+  if (!state) return;
+  const s = state.settings;
+  $('#services').dataset.reduced = String(s.reduced);
+  const aiReady =
+    s.provider === 'local'
+      ? state.models.some((m) => m.id === s.model && m.installed)
+      : Boolean(
+          s.cloudModel &&
+            (state.keys.includes('ai') ||
+              ['localhost', '127.0.0.1', '[::1]'].includes(new URL(s.base).hostname)),
+        );
+  let aiState = aiReady ? 'pending' : 'off';
+  let aiLabel = aiReady ? 'Модель настроена' : 'Требуется настройка модели';
+  if (modelActivity.active) {
+    aiState = 'active';
+    aiLabel = 'Модель обрабатывает запрос';
+  } else if (modelActivity.health === 'error') {
+    aiState = 'error';
+    aiLabel = 'Не удалось получить ответ от модели';
+  } else if (modelActivity.health === 'ready') {
+    aiState = 'on';
+    aiLabel = 'Модель готова';
+  }
+  service('#serviceAI', aiState, aiLabel + ' · Настройки ИИ');
+  let micState = 'off';
+  let micLabel = '';
+  if (voice.recording || voice.transcribing) {
+    micState = 'active';
+    micLabel = voice.transcribing ? 'Распознаю фразу' : 'Слышу тебя';
+  } else if (voice.enabled) {
+    micState = voice.stream ? 'on' : 'pending';
+    micLabel = voice.stream ? 'Микрофон включён' : 'Подключаю микрофон';
+  }
+  service(
+    '#serviceMic',
+    micState,
+    (micLabel ? micLabel + ' · ' : '') +
+      (voice.enabled ? 'Выключить прослушивание' : 'Включить прослушивание'),
+    voice.enabled,
+  );
+  const enabled = s.ttsEnabled !== false;
+  const ready = s.voice !== 'fish' || (state.keys.includes('fish') && s.fishVoice);
+  service(
+    '#serviceVoice',
+    voice.playing ? 'active' : !enabled ? 'off' : ready ? 'on' : 'pending',
+    (voice.playing ? 'Озвучиваю · ' : enabled && !ready ? 'Настрой Fish Audio · ' : '') +
+      (enabled ? 'Выключить озвучку' : 'Включить озвучку'),
+    enabled,
+  );
+}
 function render() {
   if (state) syncCat((state.pluginIds || []).includes('cat'), state.settings.reduced);
   syncMotionTimer();
@@ -533,28 +596,8 @@ function render() {
   $('#initial').textContent = (state.settings.user || 'М')[0].toUpperCase();
   $('#profile').textContent = state.settings.user || 'Мой компьютер';
   $('#time').textContent = clock.format(new Date());
-  const ready =
-    state.settings.provider === 'local'
-      ? state.models.some((m) => m.id === state.settings.model && m.installed)
-      : Boolean(state.keys.includes('ai') || /^http:\/\/(localhost|127\.0\.0\.1)/.test(state.settings.base));
-  $('#services').innerHTML = [
-    [ready, 'ИИ'],
-    [true, 'Речь'],
-    [state.settings.voice !== 'fish' || state.keys.includes('fish'), 'Голос'],
-  ]
-    .map(
-      ([b, t], i) =>
-        '<button data-go="' +
-        (i ? 'voice' : 'ai') +
-        '" title="' +
-        (b ? 'Настроено' : 'Требуется настройка') +
-        '"><i class="' +
-        (b ? 'on' : '') +
-        '"></i>' +
-        t +
-        '</button>',
-    )
-    .join('');
+  syncModelActivity(state.modelActivity);
+  renderServices();
   cards();
   drawWidget();
   syncOrganizer(state);
@@ -641,16 +684,19 @@ async function send(input, voiceMode = false) {
     phase(voice.enabled ? 'listening' : 'idle', state.settings.reduced);
   }
 }
-async function toggleVoice(standby = false) {
+async function toggleVoice(standby = false, fromFooter = false) {
   if (voice.enabled && !standby) {
-    voice.stop();
+    if (fromFooter) {
+      voice.stop(false, true);
+      await call('stopRecognition');
+    } else voice.stop();
     return;
   }
   waitingForName = standby;
   standbyMode = standby;
   waitingForCommand = false;
-  nav('home');
-  await voice.start();
+  if (!fromFooter) nav('home');
+  await voice.start(false, fromFooter);
 }
 function newChat() {
   if (sending) return;
@@ -1273,6 +1319,7 @@ async function handle(action, id) {
       await refreshAudioDevices();
       return;
     case 'audition':
+      if (state.settings.ttsEnabled === false) return toast('Включи озвучку кнопкой «Голос» внизу.');
       await voice.speak('Привет! Я рядом. Давай немного поговорим.');
       return;
     case 'keyFish':
@@ -1346,6 +1393,7 @@ async function handle(action, id) {
       await refresh();
       return;
     case 'fishPreview': {
+      if (state.settings.ttsEnabled === false) return toast('Включи озвучку кнопкой «Голос» внизу.');
       if (!cache.previewId && (voice.busy || voice.playing)) {
         toast('Сначала дождись окончания реплики');
         return;
@@ -2330,6 +2378,23 @@ $('#attachment').onclick = (e) => {
     drawAttachments();
   }
 };
+$('#serviceMic').onclick = () => toggleVoice(false, true).catch(err);
+$('#serviceVoice').onclick = async () => {
+  const button = $('#serviceVoice');
+  button.disabled = true;
+  try {
+    const enabled = state.settings.ttsEnabled === false;
+    state.settings.ttsEnabled = enabled;
+    if (!enabled && voice.playing) voice.silence();
+    renderServices();
+    await saveSettings({ ttsEnabled: enabled });
+  } catch (e) {
+    await refresh();
+    err(e);
+  } finally {
+    button.disabled = false;
+  }
+};
 $('#mic').onclick = $('#voiceStart').onclick = () => toggleVoice().catch(err);
 $('#voiceEnd').onclick = () => voice.stop();
 $('#composeOptions').onclick = () => {
@@ -2380,6 +2445,11 @@ document.addEventListener('keydown', (e) => {
   }
 });
 window.desk.on(async (e) => {
+  if (e.type === 'modelActivity') {
+    syncModelActivity(e);
+    renderServices();
+    return;
+  }
   if (e.type === 'chatText') {
     if (!sending || e.requestId !== streamId || e.chatId !== current) return;
     const scroller = $('#messages'),
@@ -2438,7 +2508,7 @@ window.desk.on(async (e) => {
       return;
     }
     if (e.type === 'stopAudio') {
-      voice.hush();
+      voice.silence();
       return;
     }
     if (e.type === 'say') {

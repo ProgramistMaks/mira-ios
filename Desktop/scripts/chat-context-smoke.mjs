@@ -18,6 +18,10 @@ const server = http.createServer(async (req, res) => {
   const parts = [];
   for await (const chunk of req) parts.push(chunk);
   requests.push(JSON.parse(Buffer.concat(parts)));
+  if (requests.at(-1).messages.at(-1).content === 'Проверь ошибку') {
+    res.writeHead(503).end();
+    return;
+  }
   if (
     requests.at(-1).messages.at(-1).content === 'Проверь поток' ||
     requests.at(-1).messages.at(-1).content === 'Останови выдачу'
@@ -52,6 +56,11 @@ try {
   p.on('pageerror', (e) => errors.push(e.message));
   const state = () => p.evaluate(() => window.desk.call('state'));
   await p.locator('#introSkip').click();
+  const ai = p.locator('#serviceAI');
+  await expect(ai).toHaveAttribute('data-state', 'off');
+  await ai.click();
+  await expect(p.locator('#area')).toHaveAttribute('data-page', 'ai');
+  await p.locator('[data-go=home]').first().click();
   await p.evaluate(
     (port) =>
       window.desk.call('settings', {
@@ -151,14 +160,23 @@ try {
   await input.fill('Проверь поток');
   await input.press('Enter');
   await expect(p.locator('#liveReply')).toHaveText('Первая часть');
+  await expect(ai).toHaveAttribute('data-state', 'active');
   finishStream();
   await expect.poll(async () => (await state()).chats[0].messages.at(-1).text).toBe('Первая часть и вторая.');
   await expect(p.locator('#send')).toHaveAttribute('title', 'Отправить');
+  await expect(ai).toHaveAttribute('data-state', 'on');
   await input.fill('Останови выдачу');
   await input.press('Enter');
   await expect(p.locator('#liveReply')).toHaveText('Первая часть');
   await p.locator('#send').click();
   await expect.poll(async () => (await state()).chats[0].messages.at(-1).stopped).toBe(true);
+  await expect(ai).toHaveAttribute('data-state', 'on');
+  await input.fill('Проверь ошибку');
+  await input.press('Enter');
+  await expect(ai).toHaveAttribute('data-state', 'error');
+  await input.fill('Продолжаем');
+  await input.press('Enter');
+  await expect(ai).toHaveAttribute('data-state', 'on');
   assert.deepEqual(errors, []);
   console.log(
     'Seven slash actions listed; keyboard selection, per-chat reasoning, XLS/XLSX/ODS, source drop, images, stored preview, screenshot confirmation and deletion passed.',

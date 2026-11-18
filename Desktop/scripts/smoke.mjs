@@ -107,7 +107,21 @@ try {
       subtree: true,
     });
   });
-  await p.locator('#voiceStart').click();
+  const micControl = p.locator('#serviceMic');
+  const outputControl = p.locator('#serviceVoice');
+  await expect(micControl).toHaveAttribute('aria-pressed', 'false');
+  await expect(outputControl).toHaveAttribute('aria-pressed', 'true');
+  await p.evaluate(() => {
+    window.servicesSeen = [];
+    for (const id of ['serviceAI', 'serviceMic', 'serviceVoice']) {
+      const el = document.getElementById(id);
+      new MutationObserver(() => window.servicesSeen.push([id, el.dataset.state, el.title])).observe(el, {
+        attributes: true,
+        attributeFilter: ['data-state'],
+      });
+    }
+  });
+  await micControl.click();
   await p.waitForFunction(
     () => window.voicePhases.includes('Отвечаю…') && window.voicePhases.at(-1) === 'Слушаю. Можно говорить.',
     null,
@@ -119,8 +133,45 @@ try {
     JSON.stringify(state.chats.map((c) => c.messages)),
   );
   assert.ok(state.chats.some((c) => c.messages.some((m) => m.text === 'Записала в заметки.')));
-  await p.locator('#voiceEnd').click();
+  const seen = await p.evaluate(() => window.servicesSeen);
+  assert.ok(
+    seen.some(
+      ([id, status, title]) => id === 'serviceMic' && status === 'active' && title.includes('Распознаю'),
+    ),
+  );
+  assert.ok(seen.some(([id, status]) => id === 'serviceVoice' && status === 'active'));
+  assert.ok(!seen.some(([id, status]) => id === 'serviceAI' && status === 'active'));
+  await expect(micControl).toHaveAttribute('aria-pressed', 'true');
+  await micControl.click();
+  await expect(micControl).toHaveAttribute('data-state', 'off');
+  await expect(outputControl).toHaveAttribute('aria-pressed', 'true');
+  await outputControl.click();
+  await expect(outputControl).toHaveAttribute('aria-pressed', 'false');
+  await p.reload();
+  await expect(outputControl).toHaveAttribute('aria-pressed', 'false');
   await p.locator('[data-go=voice]').first().click();
+  await micControl.click();
+  await expect(micControl).toHaveAttribute('data-state', 'on');
+  await expect(p.locator('#area')).toHaveAttribute('data-page', 'voice');
+  await p.waitForFunction(
+    async () =>
+      (await window.desk.call('state')).notes.filter((n) => /купить молоко/i.test(n.text)).length >= 2,
+    null,
+    { timeout: 90000 },
+  );
+  await expect(outputControl).toHaveAttribute('data-state', 'off');
+  await outputControl.click();
+  await expect(outputControl).toHaveAttribute('aria-pressed', 'true');
+  await p.locator('[data-go=voice]').first().click();
+  await p.getByRole('button', { name: 'Проверить голос', exact: true }).click();
+  await expect(outputControl).toHaveAttribute('data-state', 'active');
+  await micControl.click();
+  await expect(micControl).toHaveAttribute('aria-pressed', 'false');
+  await expect(outputControl).toHaveAttribute('data-state', 'active');
+  await outputControl.click();
+  await expect(outputControl).toHaveAttribute('data-state', 'off');
+  await expect(p.locator('#voiceBar')).toBeHidden();
+  await outputControl.click();
   await p.locator('[data-act=testMic]').click();
   await expect(p.locator('#micReading')).toContainText('дБ');
   await expect(p.locator('[data-act=testMic]')).toContainText('Завершить');
