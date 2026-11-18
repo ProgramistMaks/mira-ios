@@ -19,7 +19,12 @@ const nodes=Object.values(mapping).map(n=>gltf.scene.getObjectByName(n));if(node
 const inverseRest=nodes.map(n=>n.getWorldQuaternion(new T.Quaternion()).invert());
 const hips=nodes[0],origin=hips.getWorldPosition(new T.Vector3()),scale=origin.y;
 const clips={};const q=new T.Quaternion(),v=new T.Vector3();
-for(const [id,name]of Object.entries({idle:'Idle_Loop',dance:'Dance_Loop',walk:'Walk_Loop'})){
+const takes = {
+ idle:'Idle_Loop', dance:'Dance_Loop', walk:'Walk_Loop', jog:'Jog_Fwd_Loop', sprint:'Sprint_Loop',
+ chairIn:'Sitting_Enter', chairIdle:'Sitting_Idle_Loop', chairOut:'Sitting_Exit',
+ jumpStart:'Jump_Start', jumpAir:'Jump_Loop', jumpLand:'Jump_Land',
+};
+for(const [id,name]of Object.entries(takes)){
  mixer.stopAllAction();const clip=gltf.animations.find(c=>c.name===name);const action=mixer.clipAction(clip).setLoop(T.LoopOnce,1);action.clampWhenFinished=true;action.play();
  const frames=Math.round(clip.duration*30)+1,rotations=[],positions=[];
  for(let f=0;f<frames;f++){
@@ -32,7 +37,7 @@ for(const [id,name]of Object.entries({idle:'Idle_Loop',dance:'Dance_Loop',walk:'
    rotations.push(...q.toArray().map(x=>+x.toFixed(6)));
   }
  }
- clips[id]={duration:clip.duration,fps:30,frames,positions,rotations};
+ clips[id]={take:name,duration:clip.duration,fps:30,frames,positions,rotations};
 }
 const out={version:1,source:{name:'Quaternius Universal Animation Library Standard 3.0',url:'https://quaternius.itch.io/universal-animation-library',license:'CC0-1.0',sha256:createHash('sha256').update(bytes).digest('hex')},bones:Object.keys(mapping),clips};
 await mkdir('Renderer/motions',{recursive:true});await writeFile('Renderer/motions/authored.json',JSON.stringify(out));console.log(JSON.stringify({bones:out.bones.length,clips:Object.fromEntries(Object.entries(clips).map(([k,c])=>[k,{frames:c.frames,seconds:c.duration}]))}));

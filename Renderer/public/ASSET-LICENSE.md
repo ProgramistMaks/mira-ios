@@ -29,6 +29,10 @@ The default natural mode now uses retargeted CC0 clips from **Quaternius Univers
 Animation Library Standard 3.0** (Quaternius; animator Gonzalo Furnier credited by
 the pack author). https://quaternius.itch.io/universal-animation-library
 
+Additional takes are used for jogging, sprinting, chair seating and jumping.
+Astra's Nayu catalogue references several of the same Quaternius takes.
+Mira's motion tracks are converted from the public Quaternius Standard release.
+
 CC0 1.0: https://creativecommons.org/publicdomain/zero/1.0/
 Full provenance and reproducible conversion: `Renderer/motions/LICENSE.md` and
 `Scripts/import-authored-motion.mjs`. These are authored game animations, not

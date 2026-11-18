@@ -275,11 +275,14 @@ async function main() {
       if (neck) neck.rotation.set(pose.neckX, pose.neckY, pose.neckZ);
       if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
       armTargets.apply(pose);
-    } else authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+    } else {
+      authored.setSeated(seated);
+      authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+    }
     framingOffset = useAuthored && !reduced ? authored.viewOffset : 0;
     camera.position.y = center.y + height * (.03 + restingFrame + framingOffset);
     seatWeight = THREE.MathUtils.damp(seatWeight, seated ? 1 : 0, 7, delta);
-    if (seatWeight > .001) {
+    if (seatWeight > .001 && (!useAuthored || reduced || !acting.settings.enabled)) {
       for (const side of ['left','right'] as const) {
         avatar.humanoid.getNormalizedBoneNode(`${side}UpperLeg`)?.rotateX(armSign * 1.35 * seatWeight);
         avatar.humanoid.getNormalizedBoneNode(`${side}LowerLeg`)?.rotateX(-armSign * 1.50 * seatWeight);
@@ -287,7 +290,9 @@ async function main() {
       }
     }
     window.companion.bodyStatus.behavior = useAuthored ? authored.title : body.behaviorLabel;
-    window.companion.bodyStatus.choreography = {clip: authored.clip, mode: authored.mode, enabled: authored.enabled, time: authored.age};
+    window.companion.bodyStatus.choreography = {
+      clip: authored.clip, track: authored.track, mode: authored.mode, enabled: authored.enabled, time: authored.age,
+    };
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {

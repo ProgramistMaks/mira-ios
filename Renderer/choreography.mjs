@@ -6,6 +6,9 @@ import {guideHands,referencePose} from './reference-poses.mjs';
 const titles = {
   idle:'Перенос веса', ...Object.fromEntries(Object.entries(SHOTS).map(([id,shot])=>[id,shot.title])),
   dance:'Танец', walk:'Ходьба',
+  jog:'Бег трусцой', sprint:'Быстрый бег',
+  chair:'Садится на стул и встаёт', chairIdle:'Сидит на стуле', jump:'Прыжок и приземление',
+  airborne:'В воздухе', landing:'Приземление',
 };
 export const CHOREOGRAPHY = Object.entries(titles).filter(([id])=>!SHOTS[id]?.automaticOnly).map(([id,title])=>({id,title}));
 const pools = {
@@ -14,6 +17,24 @@ const pools = {
   thinking:['cheek','fold','options','no','shrug','point','temples','nod'],
   speaking:['palms','options','point','heart','nod','no','shrug','temples','cheek'],
 };
+const sourceSequences = {
+  jog: [{ id:'jog', loop:true }],
+  sprint: [{ id:'sprint', loop:true }],
+  chair: [{ id:'chairIn' }, { id:'chairIdle', loop:true, hold:2.8 }, { id:'chairOut' }],
+  chairIdle: [{ id:'chairIdle', loop:true }],
+  jump: [{ id:'jumpStart' }, { id:'jumpAir', hold:.6 }, { id:'jumpLand' }],
+  airborne: [{ id:'jumpAir', loop:true }],
+  landing: [{ id:'jumpLand' }],
+  desktopChair: [{ id:'chairIn' }, { id:'chairIdle', loop:true }],
+  chairRise: [{ id:'chairOut' }],
+};
+function segmentAt(sequence, time) {
+  for (const [index, action] of sequence.entries()) {
+    const hold = action.hold ?? pack.clips[action.id].duration;
+    if (time < hold || index === sequence.length - 1) return { ...action, time };
+    time -= hold;
+  }
+}
 const fingerCurl = {open:[.14,.045,.1,.16,.22],soft:[.22,.18,.29,.39,.47],
   loose:[.24,.43,.56,.64,.71],curled:[.39,1.12,1.22,1.25,1.27],index:[.10,.025,.94,1.03,1.08]};
 const sides = ['left','right'];
@@ -50,6 +71,7 @@ export class ChoreographyRig {
     this.viewOffset=0;this.priorViewOffset=0;
     this.mode='auto'; this.clip='idle'; this.age=0; this.fade=1;
     this.history=[]; this.elapsed=0; this.silence=1;
+    this.seated=false; this.track=null;
     this.breathCycle=0; this.inhale=0;
     this.phase='idle'; this.enabled=false; this.holdUntil=3.6; this.direct=false;
   }
@@ -58,17 +80,22 @@ export class ChoreographyRig {
     if(id!=='auto' && (!Object.hasOwn(titles,id) || SHOTS[id]?.automaticOnly)) id='auto';
     if(id===this.mode) return;
     this.mode=id;
-    this.begin(id==='auto'?'idle':id);
+    if (!this.seated && this.clip !== 'chairRise') this.begin(id==='auto'?'idle':id);
   }
-  get duration() { return SHOTS[this.clip]?.duration ?? (this.clip==='dance'?6 : this.clip==='walk'?4 : 4.8); }
-  get title() {return titles[this.clip];}
-  begin(id, direct=false) {
-    const dt=this.enabled && !this.wasReduced ? this.previousDt : 0;
-    this.enabled=true;
-    this.priorViewOffset=this.viewOffset;
-    this.clip=id; this.age=0; this.fade=0; this.direct=direct;
-    this.targets?.resetTwist();
-    this.stance?.beginTransfer(dt>0);
+  setSeated(value) {
+    if (this.seated === value) return;
+    this.seated = value;
+    this.begin(value ? 'desktopChair' : 'chairRise', true);
+  }
+  get desktopSeating() { return this.clip === 'desktopChair' || this.clip === 'chairRise'; }
+  get duration() {
+    const sequence = sourceSequences[this.clip];
+    if (sequence) return sequence.reduce((time, action) => time + (action.hold ?? pack.clips[action.id].duration), 0);
+    return SHOTS[this.clip]?.duration ?? (this.clip==='dance'?6 : this.clip==='walk'?4 : 4.8);
+  }
+  get title() { return this.clip==='chairRise'?'Встаёт со стула':titles[this.clip] ?? titles.chairIdle; }
+  prepareTransition(dt) {
+    this.fade=0;
     this.fromPosition.copy(this.hips.position);
     this.hipVelocity.subVectors(this.fromPosition,this.previousPosition)
       .multiplyScalar(dt>0?1/dt:0).clampLength(0,this.scale*2);
@@ -85,12 +112,21 @@ export class ChoreographyRig {
         }
       }
     }
-    this.holdUntil=id==='idle'?9+this.random()*8:Math.max(this.duration,3+this.random()*3);
+  }
+  begin(id, direct=false) {
+    const dt=this.enabled && !this.wasReduced ? this.previousDt : 0;
+    this.enabled=true;
+    this.priorViewOffset=this.viewOffset;
+    this.clip=id; this.age=0; this.direct=direct; this.track=null;
+    this.targets?.resetTwist();
+    this.stance?.beginTransfer(dt>0 && !sourceSequences[id]);
+    this.prepareTransition(dt);
+    this.holdUntil=id==='chairRise'?this.duration:id==='idle'?9+this.random()*8:Math.max(this.duration,3+this.random()*3);
     this.history=[...this.history.filter(old=>old!==id),id].slice(-4);
   }
-  replay() { this.begin(this.mode==='auto'?this.clip:this.mode,true); }
+  replay() { if (!this.desktopSeating) this.begin(this.mode==='auto'?this.clip:this.mode,true); }
   react(kind) {
-    if(this.mode!=='auto' && kind!=='dance') return;
+    if(this.desktopSeating || (this.mode!=='auto' && kind!=='dance')) return;
     if(kind==='dance'){this.begin('dance',true);this.holdUntil=12;}
     else if(kind==='greeting')this.begin('welcome',true);
     else if(kind==='arrival')this.begin('arrival',true);
@@ -103,7 +139,7 @@ export class ChoreographyRig {
     return candidates[Math.floor(this.random()*candidates.length)];
   }
   update(dt,{phase='idle',audio=0,reduced=false,playbackDelta=NaN}={}) {
-    if(!this.enabled)this.begin(this.mode==='auto'?'idle':this.mode);
+    if(!this.enabled)this.begin(this.seated?'desktopChair':this.mode==='auto'?'idle':this.mode);
     dt=Math.max(0, Math.min(.05,dt));
     const clipStep=Number.isFinite(playbackDelta)?Math.max(0,Math.min(1.5,playbackDelta)):dt;
     if(reduced){
@@ -112,16 +148,19 @@ export class ChoreographyRig {
       this.age=0;this.fade+=dt;this.wasReduced=true;
       this.stance?.beginTransfer(false);this.renderPose(0);return;
     }
-    if(this.wasReduced){this.wasReduced=false;this.begin(this.mode==='auto'?'idle':this.mode);}
+    if(this.wasReduced){this.wasReduced=false;this.begin(this.seated?'desktopChair':this.mode==='auto'?'idle':this.mode);}
     this.elapsed+=clipStep;this.silence=audio>.025?0:this.silence+clipStep;
     const state=phase==='speaking'&&this.silence>.8?'listening':phase;
     const changed=state!==this.phase;
     this.phase=state;
-    if(this.mode!=='auto' && this.direct && this.clip!==this.mode && this.age>=this.holdUntil) {
-      this.begin(this.mode);
-    }
-    if(this.mode==='auto' && (this.age>=this.holdUntil || (changed&&!this.direct&&this.age>.55))){
-      this.begin(changed && state==='idle'?'idle':this.choose(state));
+    if (!this.seated) {
+      if (this.clip==='chairRise' && this.age>=this.holdUntil)
+        this.begin(this.mode==='auto'?'idle':this.mode);
+      else if(this.mode!=='auto' && this.direct && this.clip!==this.mode && this.age>=this.holdUntil)
+        this.begin(this.mode);
+      else if(this.mode==='auto' && !this.desktopSeating &&
+          (this.age>=this.holdUntil || (changed&&!this.direct&&this.age>.55)))
+        this.begin(changed && state==='idle'?'idle':this.choose(state));
     }
     const period=this.clip==='dance'||this.clip==='walk'?3.2:phase==='speaking'?4.2:4.9;
     this.breathCycle=(this.breathCycle+dt/period)%1;
@@ -130,6 +169,10 @@ export class ChoreographyRig {
     this.age+=clipStep;this.fade+=clipStep;this.renderPose(dt);
   }
   renderPose(dt) {
+    const sequence = sourceSequences[this.clip];
+    const segment = sequence ? segmentAt(sequence, this.age) : null;
+    if (segment && this.track && this.track !== segment.id) this.prepareTransition(this.previousDt);
+    this.track = segment?.id;
     this.previousDt=dt;
     this.previousPosition.copy(this.hips.position);
     for(const entry of this.entries)entry.previous.copy(entry.node.quaternion);
@@ -137,14 +180,14 @@ export class ChoreographyRig {
     const targetView=at(shot?.view,this.age);
     this.viewOffset=this.wasReduced ? 0 : this.clip==='arrival' ? targetView :
       this.priorViewOffset+(targetView-this.priorViewOffset)*smooth(this.fade/.4);
-    const source=(this.clip==='walk'||this.clip==='dance')?this.clip:'idle';
+    const source=segment?.id ?? ((this.clip==='walk'||this.clip==='dance')?this.clip:'idle');
     // All staged gestures share frame zero of the retargeted idle clip.
     // Store it in local bone space so it remains valid on a rotated turntable.
     if (shot && this.stageBase) {
       this.hips.position.copy(this.stageBase.position);
       for (let i=0;i<this.entries.length;i++) this.entries[i].node.quaternion.copy(this.stageBase.rotations[i]);
     } else {
-      this.sampleSource(source,shot?0:this.age);
+      this.sampleSource(source,segment?.time ?? (shot?0:this.age),segment?.loop ?? !segment);
       if (shot) this.stageBase = {position:this.hips.position.clone(),rotations:this.entries.map(e=>e.node.quaternion.clone())};
     }
     if(this.stance && source==='idle')this.stage(shot);
@@ -153,7 +196,7 @@ export class ChoreographyRig {
     this.stance?.sampleLanding();
     // Crossfade *after* solving both arms and the support foot so their
     // transition starts at the actual previous displayed pose.
-    const blend=smooth(this.fade/(this.clip==='arrival'?.12:.4));
+    const blend=smooth(this.fade/(this.clip==='arrival'?.12:sequence?.length>1?.24:.4));
     if(blend<1) {
       // Carry the displayed velocity through an interruption, then let it die
       // away. Replaying from a static snapshot stalls a moving hand for a frame.
@@ -166,8 +209,8 @@ export class ChoreographyRig {
     }
     this.stance?.transferFeet(this.fade);
   }
-  sampleSource(id,t) {
-    const c=pack.clips[id],frame=Math.min(c.frames-1,(t%c.duration)*c.fps);
+  sampleSource(id,t,loop=true) {
+    const c=pack.clips[id],frame=Math.min(c.frames-1,(loop?t%c.duration:t)*c.fps);
     const i=Math.floor(frame),j=Math.min(c.frames-1,i+1),u=frame-i;
     this.root.getWorldQuaternion(this.rootQ);
     this.v.fromArray(c.positions,i*3).lerp(this.v2.fromArray(c.positions,j*3),u)

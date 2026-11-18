@@ -39,7 +39,8 @@ const point = name => bone(name).getWorldPosition(new Vector3()).divideScalar(he
 test('all menu clips produce finite, moving, different trajectories on Vita', () => {
   const ids = CHOREOGRAPHY.map(entry => entry.id);
   const samples = new Set();
-  assert.equal(new Set(ids).size,19);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const name of ['jog', 'sprint', 'chair', 'chairIdle', 'jump', 'airborne', 'landing']) assert.ok(ids.includes(name));
   for (const id of ids) {
     hold(id,.1);
     const trajectory = [], names = ['leftHand','rightHand','leftFoot','rightFoot','head'];
@@ -452,4 +453,37 @@ test('breath continues across gesture changes and stops with Reduce Motion',()=>
   assert.ok(Math.abs(start-rig.inhale)>.015);
   rig.update(1/120,{reduced:true});
   assert.equal(rig.inhale,0);
+});
+
+test('seating follows enter, idle, and exit and preserves the configured gesture', () => {
+  rig.configure('fold');
+  advance(.5);
+  const standing = point('hips').y;
+  rig.setSeated(true);
+  advance(.7);
+  assert.equal(rig.track, 'chairIn');
+  advance(1);
+  assert.equal(rig.track, 'chairIdle');
+  assert.ok(point('hips').y < standing - .12, 'the pelvis should lower to chair height');
+  rig.configure('jog');
+  advance(.7, { phase:'listening' });
+  assert.equal(rig.track, 'chairIdle');
+  rig.setSeated(false);
+  advance(.45);
+  assert.equal(rig.track, 'chairOut');
+  advance(1);
+  assert.equal(rig.clip, 'jog');
+});
+
+test('the jump plays takeoff and air before landing and does not restart while held', () => {
+  hold('jump', .7);
+  assert.equal(rig.track, 'jumpStart');
+  advance(.75);
+  assert.equal(rig.track, 'jumpAir');
+  advance(.8);
+  assert.equal(rig.track, 'jumpLand');
+  advance(2);
+  const landing = point('hips');
+  advance(.5);
+  assert.ok(landing.distanceTo(point('hips')) < 1e-5);
 });
