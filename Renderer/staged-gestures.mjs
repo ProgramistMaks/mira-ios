@@ -143,9 +143,11 @@ export function sampleHand(lane,t,swing=0,wrist=0) {
   const fingerWeight=at(lane.envelope,t-.065);
   // Lead the hand around the ribcage while reaching. The outward path on
   // release has a different depth, and both arcs settle at the held pose.
-  const approach=t<lane.times[2]?Math.sin(Math.PI*weight)*.022:0;
-  // The returning elbow opens away from the ribs before the hand drops.
-  const release=t>lane.times[3]?Math.sin(Math.PI*(1-weight))*.035:0;
+  // Follow the phase clock: a supporting hand may settle at partial weight.
+  // The arc has zero position and velocity where it joins the held pose.
+  const arc=(start,end)=>t>start && t<end ? Math.sin(Math.PI*(t-start)/(end-start))**2 : 0;
+  const approach=.022*arc(lane.times[0],lane.times[2]);
+  const release=.035*arc(lane.times[3],lane.times[5]);
   const [x,y,z] = g.fingers;
   const fingers=wrist ? [x*Math.cos(wrist)+y*Math.sin(wrist),y*Math.cos(wrist)-x*Math.sin(wrist),z] : g.fingers;
   return {...g,weight,fingerWeight,fingers,position:[g.position[0]+swing+release+approach,g.position[1]-.3*approach,g.position[2]+release*.45+approach*.7]};

@@ -169,18 +169,119 @@ test('dance gathers the wrists at the sternum before the side accent, with a wid
   assert.ok(point('leftHand').y-swept>.015);
 });
 
-test('the trailing foot closes on a loaded leg and clears the ground before reopening',()=>{
-  hold('dance',1.33);
-  const lead=point('leftFoot'),trail=point('rightFoot'),hips=point('hips');
-  advance(.16);
-  assert.ok(point('rightFoot').y-trail.y>.025);
-  advance(.16);
+test('the closing step clears the ground, then sets down the toe before the heel',()=>{
+  hold('dance',1.30);
+  const lead=point('leftFoot'),hips=point('hips');
+  advance(.15);
+  const airborne=point('rightToes');
+  advance(.15);
+  const toe=point('rightToes'),ankle=point('rightFoot');
+  const padRotation=bone('rightToes').getWorldQuaternion(new Quaternion());
+  assert.ok(airborne.y-toe.y>.010,'toe never cleared the floor');
+  advance(.08);
+  assert.ok(point('rightToes').distanceTo(toe)<.0005,'forefoot slipped during heel placement');
+  assert.ok(padRotation.angleTo(bone('rightToes').getWorldQuaternion(new Quaternion()))<.002);
+  assert.ok(ankle.y-point('rightFoot').y>.006,'heel did not settle after the toe landed');
   assert.ok(lead.distanceTo(point('leftFoot'))<.001);
-  assert.ok(Math.abs(point('rightFoot').y-trail.y)<.001);
   assert.ok(point('rightFoot').distanceTo(lead)<.12);
   assert.ok(point('hips').x-hips.x>.06);
-  advance(.85);
+  advance(.82);
   assert.ok(point('rightFoot').distanceTo(point('leftFoot'))>.29);
+});
+
+test('returning from a wide stance steps each foot across while the other bears weight',()=>{
+  for(const hz of [30,120]){
+    hold('dance',6);
+    const toes=()=>['leftToes','rightToes'].map(point);
+    const start=toes(),highest=[0,0],slide=[0,0];
+    let previous=start;
+    rig.configure('idle');
+    for(let i=0;i<hz*.6;i++){
+      rig.update(1/hz);
+      const feet=toes(),lift=feet.map((p,j)=>p.y-start[j].y);
+      assert.ok(Math.min(...lift)<.001,'both feet are airborne');
+      feet.forEach((p,j)=>{
+        highest[j]=Math.max(highest[j],lift[j]);
+        if(Math.max(p.y,previous[j].y)-start[j].y<.003)
+          slide[j]+=Math.hypot(p.x-previous[j].x,p.z-previous[j].z);
+      });
+      previous=feet;
+    }
+    for(let j=0;j<2;j++){
+      assert.ok(highest[j]>.025,'foot travels without a step');
+      assert.ok(slide[j]<.001,'planted shoe skates');
+      assert.ok(Math.abs(previous[j].x-start[j].x)>.07);
+      assert.ok(Math.abs(previous[j].y-start[j].y)<.001);
+    }
+  }
+});
+
+test('interrupting a step carries the airborne foot and Reduce Motion ends the transfer',()=>{
+  hold('dance',6);rig.configure('idle');
+  advance(.10);
+  const ankle=point('rightFoot'),support=point('leftFoot');
+  rig.configure('fold');rig.update(1/120);
+  assert.ok(point('rightFoot').distanceTo(ankle)<.018);
+  assert.ok(point('leftFoot').distanceTo(support)<.001);
+  rig.update(1/120,{reduced:true});
+  assert.equal(rig.stance.transferring,false);
+  advance(.6,{reduced:true});
+  const still=point('rightFoot');
+  advance(.15,{reduced:true});
+  assert.ok(point('rightFoot').distanceTo(still)<1e-6);
+  rig.update(1/120);
+});
+
+test('both hands keep a continuous elbow plane and palm orientation during the greeting',()=>{
+  for(const hz of [30,60,120,240]){
+    rig.configure('auto');rig.react('greeting');
+    const previous={};
+    for(let tick=1;tick<=hz*4;tick++){
+      rig.update(1/hz);
+      for(const side of ['left','right']){
+        const elbow=point(side+'LowerArm'),palm=bone(side+'Hand').getWorldQuaternion(new Quaternion());
+        const last=previous[side],time=tick/hz;
+        if(last && time>.45){
+          assert.ok(palm.angleTo(last.palm)*hz<28,side+' palm turned abruptly at '+time);
+          const resting=side==='left' && time>2 && time<3.3;
+          assert.ok(elbow.distanceTo(last.elbow)*hz<(resting?.72:2.35),side+' elbow jumped at '+time);
+          if(resting){
+            const fingers=point('leftIndexDistal').sub(point('leftHand')).normalize();
+            assert.ok(fingers.y<-.85 && Math.abs(fingers.x)<.36,'relaxed hand points sideways');
+          }
+        }
+        previous[side]={elbow,palm};
+      }
+    }
+  }
+});
+
+test('partial reaches leave their hold continuously and retain their speed on interruption',async()=>{
+  const {SHOTS,sampleHand}=await import('./staged-gestures.mjs');
+  for(const lane of [SHOTS.shrug.right,SHOTS.heart.left,SHOTS.skip.left]){
+    for(const time of [lane.times[2],lane.times[3]]){
+      const before=new Vector3(...sampleHand(lane,time-.0001).position);
+      const after=new Vector3(...sampleHand(lane,time+.0001).position);
+      assert.ok(before.distanceTo(after)<.00001);
+    }
+  }
+  const dt=1/120;
+  rig.configure('palms');rig.replay();
+  for(let i=1;i<232;i++)rig.update(dt);
+  const a=point('leftHand');rig.update(dt);const b=point('leftHand');
+  const incoming=b.clone().sub(a);
+  rig.configure('cheek');rig.update(dt);
+  const outgoing=point('leftHand').sub(b);
+  assert.ok(incoming.length()>.005);
+  assert.ok(outgoing.distanceTo(incoming)<incoming.length()*.3);
+
+  rig.configure('dance');rig.replay();
+  for(let i=0;i<169;i++)rig.update(dt);
+  const foot=point('rightFoot');rig.update(dt);const takeoff=point('rightFoot');
+  const stride=takeoff.clone().sub(foot);
+  rig.configure('fold');rig.update(dt);
+  assert.ok(stride.length()>.006);
+  assert.ok(point('rightFoot').sub(takeoff).distanceTo(stride)<.3*stride.length());
 });
 
 test('visible wrists and elbows follow intermediate source frames on Vita',()=>{

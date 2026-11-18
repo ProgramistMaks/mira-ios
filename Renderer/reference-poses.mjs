@@ -6,7 +6,8 @@ import {Quaternion,Vector3} from 'three';
 // from the shoulder midpoint, in projected shoulder-to-hip lengths (right, up).
 // Then torso lean, shoulder slope and head roll in degrees, followed by fitted
 // wrist and elbow-pole depths for each side, positive toward the viewer,
-// and the estimated shoulder and head turns in degrees.
+// and the estimated shoulder and head turns in degrees. The fastest takes
+// also store fitted lateral and vertical elbow-pole coordinates per arm.
 const tracks=Object.fromEntries(Object.entries(rows).map(([id,frames])=>[id,
   Array.from({length:frames[0].length-1},(_,i)=>frames.map(row=>[row[0],row[i+1]]))]));
 // Application time of source frame zero, blend-in and blend-out intervals.
@@ -18,6 +19,20 @@ const timing={
   idle:[.4,0,.69],
 };
 const ramp=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
+// Finger direction and palm roll during the opening drop and one-handed return.
+// Degrees from fingers-up, positive toward the performing side.
+const welcomeHands={
+  left:[[0,-18],[12,-12],[18,28],[24,136],[30,161],[43,165],[114,163]],
+  right:[[0,-18],[12,-12],[18,-42],[24,-139],[29,-115],[36,-49],[43,-19],[98,-20],[110,-117],[114,-145]],
+  leftRoll:[[0,-48],[18,-39],[23,-14],[29,25],[43,65],[114,65]],
+  rightRoll:[[0,-48],[18,-35],[28,8],[43,17],[98,15],[114,-29]],
+};
+function directPalm(hand,angle,roll){
+  const tilt=angle*Math.PI/180, bank=roll*Math.PI/180;
+  const x=Math.sin(tilt),y=Math.cos(tilt);
+  hand.fingers=[x,y,0];
+  hand.palm=[y*Math.sin(bank),-x*Math.sin(bank),Math.cos(bank)];
+}
 export function referencePose(id,time){
   if(!tracks[id])return;
   const mirror=id==='dance' && Math.floor(time/6)%2===1;
@@ -33,9 +48,12 @@ export function referencePose(id,time){
     frame=last-Math.abs((frame-first)%(2*span)-span);
   }
   const v=curves.map(c=>at(c,frame));
-  const hand=(i,d)=>({x:v[i],y:v[i+1],elbowX:v[i+2],elbowY:v[i+3],z:v[d],elbowZ:v[d+1]});
-  const left=hand(0,11),right=hand(4,13);
-  if(id==='palms'){
+  const hand=(i,d,pole)=>({x:v[i],y:v[i+1],elbowX:v[pole]??v[i+2],elbowY:v[pole+1]??v[i+3],z:v[d],elbowZ:v[d+1]});
+  const left=hand(0,11,17),right=hand(4,13,19);
+  if(id==='welcome'){
+    directPalm(left,at(welcomeHands.left,frame),at(welcomeHands.leftRoll,frame));
+    directPalm(right,at(welcomeHands.right,frame),at(welcomeHands.rightRoll,frame));
+  }else if(id==='palms'){
     const reach=ramp((frame-38)/8);
     left.fingers=[.06+.55*reach,.99-.28*reach,.06];
     right.fingers=[.14,.98,.06];

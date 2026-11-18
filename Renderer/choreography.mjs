@@ -31,7 +31,7 @@ export class ChoreographyRig {
       const node=bone(name);
       if (!node) return [];
       return [{name,index,node,rest:this.inverseBasis.clone().multiply(node.getWorldQuaternion(new Quaternion())),
-        from:node.quaternion.clone(),localRest:node.quaternion.clone()}];
+        from:node.quaternion.clone(),previous:node.quaternion.clone(),axis:new Vector3(),speed:0,localRest:node.quaternion.clone()}];
     }).sort((a,b)=>depth(a.node)-depth(b.node));
     const byNode=new Map(this.entries.map(entry=>[entry.node,entry]));
     for (const entry of this.entries) {
@@ -44,6 +44,7 @@ export class ChoreographyRig {
     this.origin=this.hips.position.clone();
     this.scale=this.hips.getWorldPosition(new Vector3()).y;
     this.fromPosition=this.origin.clone();
+    this.previousPosition=this.origin.clone();this.hipVelocity=new Vector3();this.previousDt=0;
     this.q=new Quaternion(); this.a=new Quaternion(); this.b=new Quaternion();
     this.parent=new Quaternion(); this.inverseParent=new Quaternion(); this.rootQ=new Quaternion(); this.v=new Vector3(); this.v2=new Vector3();
     this.mode='auto'; this.clip='idle'; this.age=0; this.fade=1;
@@ -61,11 +62,27 @@ export class ChoreographyRig {
   get duration() { return SHOTS[this.clip]?.duration ?? (this.clip==='dance'?6 : this.clip==='walk'?4 : 4.8); }
   get title() {return titles[this.clip];}
   begin(id, direct=false) {
+    const dt=this.enabled && !this.wasReduced ? this.previousDt : 0;
     this.enabled=true;
     this.clip=id; this.age=0; this.fade=0; this.direct=direct;
     this.targets?.resetTwist();
+    this.stance?.beginTransfer(dt>0);
     this.fromPosition.copy(this.hips.position);
-    for(const entry of this.entries) entry.from.copy(entry.node.quaternion);
+    this.hipVelocity.subVectors(this.fromPosition,this.previousPosition)
+      .multiplyScalar(dt>0?1/dt:0).clampLength(0,this.scale*2);
+    for(const entry of this.entries){
+      entry.from.copy(entry.node.quaternion);
+      entry.speed=0;
+      if(dt>0){
+        this.q.copy(entry.previous).invert().multiply(entry.from);
+        entry.axis.set(this.q.x,this.q.y,this.q.z);
+        const length=entry.axis.length();
+        if(length>1e-8){
+          entry.axis.multiplyScalar((this.q.w<0?-1:1)/length);
+          entry.speed=Math.min(16,2*Math.atan2(length,Math.abs(this.q.w))/dt);
+        }
+      }
+    }
     this.holdUntil=id==='idle'?9+this.random()*8:Math.max(this.duration,3+this.random()*3);
     this.history=[...this.history.filter(old=>old!==id),id].slice(-4);
   }
@@ -87,12 +104,13 @@ export class ChoreographyRig {
     return candidates[Math.floor(this.random()*candidates.length)];
   }
   update(dt,{phase='idle',audio=0,reduced=false}={}) {
-    if(!this.enabled){this.enabled=true;this.begin(this.mode==='auto'?'idle':this.mode);}
+    if(!this.enabled)this.begin(this.mode==='auto'?'idle':this.mode);
     dt=Math.max(0, Math.min(.05,dt));
     if(reduced){
       if(this.clip!=='idle')this.begin('idle');
       this.breathCycle=0;this.inhale=0;
-      this.age=0;this.fade+=dt;this.wasReduced=true;this.renderPose();return;
+      this.age=0;this.fade+=dt;this.wasReduced=true;
+      this.stance?.beginTransfer(false);this.renderPose(0);return;
     }
     if(this.wasReduced){this.wasReduced=false;this.begin(this.mode==='auto'?'idle':this.mode);}
     this.elapsed+=dt;this.silence=audio>.025?0:this.silence+dt;
@@ -109,9 +127,12 @@ export class ChoreographyRig {
     this.breathCycle=(this.breathCycle+dt/period)%1;
     const b=this.breathCycle;
     this.inhale=b<.38?smooth(b/.38):1-smooth((b-.38)/.62);
-    this.age+=dt;this.fade+=dt;this.renderPose();
+    this.age+=dt;this.fade+=dt;this.renderPose(dt);
   }
-  renderPose() {
+  renderPose(dt) {
+    this.previousDt=dt;
+    this.previousPosition.copy(this.hips.position);
+    for(const entry of this.entries)entry.previous.copy(entry.node.quaternion);
     const shot=SHOTS[this.clip];
     const source=(this.clip==='walk'||this.clip==='dance')?this.clip:'idle';
     // All staged gestures share frame zero of the retargeted idle clip.
@@ -126,13 +147,21 @@ export class ChoreographyRig {
     if(this.stance && source==='idle')this.stage(shot);
     if(source==='dance' && this.stance)this.stageDance();
     if(source==='walk')this.breathe();
+    this.stance?.sampleLanding();
     // Crossfade *after* solving both arms and the support foot so their
     // transition starts at the actual previous displayed pose.
     const blend=smooth(this.fade/.4);
     if(blend<1) {
-      this.hips.position.lerp(this.fromPosition,1-blend);
-      for(const e of this.entries)e.node.quaternion.slerp(e.from,1-blend);
+      // Carry the displayed velocity through an interruption, then let it die
+      // away. Replaying from a static snapshot stalls a moving hand for a frame.
+      const coast=this.wasReduced?0:this.fade*Math.exp(-this.fade/.08);
+      this.hips.position.lerp(this.v.copy(this.fromPosition).addScaledVector(this.hipVelocity,coast),1-blend);
+      for(const e of this.entries){
+        this.a.copy(e.from).multiply(this.q.setFromAxisAngle(e.axis,e.speed*coast));
+        e.node.quaternion.slerp(this.a,1-blend);
+      }
     }
+    this.stance?.transferFeet(this.fade);
   }
   sampleSource(id,t) {
     const c=pack.clips[id],frame=Math.min(c.frames-1,(t%c.duration)*c.fps);
@@ -194,17 +223,23 @@ export class ChoreographyRig {
       [lead+'FootSide']:.119+.052*open,[follow+'FootSide']:.119-.026*tap,
       [lead+'FootForward']:.020*open,[follow+'FootForward']:-.012*tap,
       [lead+'FootLift']:.038*leadLift,[follow+'FootLift']:.025*heel,
+      leftHeelRoll:0,rightHeelRoll:0,leftToeContact:1,rightToeContact:1,
       [lead+'Knee']:.28*leadLift,[follow+'Knee']:.42*heel,
       [lead+'FootPitch']:.12*leadLift,[follow+'FootPitch']:.18*heel};
     // After the accent the trailing foot closes under the body. The lead
     // stays down until contact; the next phrase opens from that same stance.
     const closing=Math.floor(t/6)%2===0?'right':'left';
-    const enter=smooth((phrase-1.33)/.32), leave=smooth((phrase-2.06)/.40);
+    const enter=smooth((phrase-1.30)/.29), leave=smooth((phrase-2.06)/.40);
     const close=enter-leave;
     const swing=Math.sin(Math.PI*enter)**2+Math.sin(Math.PI*leave)**2;
     pose[closing+'FootSide']-=.243*close;
-    pose[closing+'FootLift']+=.036*swing;
-    pose[closing+'FootPitch']+=.18*swing;
+    // The toe lands before the heel. During the short roll on either side
+    // of the flight, the forefoot remains in contact with the floor.
+    const roll=smooth((phrase-1.22)/.18)-smooth((phrase-1.50)/.18)
+      +smooth((phrase-2.00)/.16)-smooth((phrase-2.32)/.17);
+    pose[closing+'FootLift']+=.014*swing;
+    pose[closing+'HeelRoll']=.32*roll;
+    pose[closing+'ToeContact']=1-swing;
     pose.hipsSide+=(closing==='right'?-1:1)*.085*close;
     if(accent)pose.hipsSide+=(lead==='left'?-1:1)*.061*(rise(.29,.65)-rise(.85,1.13));
     this.stance.apply(pose);
