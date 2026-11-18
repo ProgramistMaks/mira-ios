@@ -1454,7 +1454,7 @@ function configureMotionOutput(port) {
     main?.webContents.setBackgroundThrottling(micMode === 'off');
     store.data.motionPort = 0;
     changed();
-    push({ type: 'notice', message: e.message });
+    push({ type: 'notice', error: true, message: e.message });
   });
   main.webContents.setBackgroundThrottling(!port && micMode === 'off');
 }
@@ -1617,6 +1617,7 @@ const actions = {
     if (op === 'save') return editor.save(p.root, { name, text, revision });
     throw Error('Неизвестное действие редактора');
   },
+  copyError: ({ message }) => clipboard.writeText(String(message)),
   messageCopy: async ({ id, index }) => {
     const msg = store.data.chats.find((c) => c.id === id)?.messages[index];
     if (msg) await clipboard.writeText(msg.text);
@@ -1935,6 +1936,9 @@ const actions = {
       'startListening',
       'bubbles',
       'ttsEnabled',
+      'disableBlur',
+      'windowButtonBackground',
+      'minimizeToTray',
     ])
       if (k in input) s[k] = !!input[k];
     if (!s.name || !s.city) throw Error('Укажите имя и город');
@@ -2046,7 +2050,11 @@ const actions = {
       } catch (e) {
         if (own.signal.aborted || fishPreview || !continuous || store.data.settings.voice === 'builtin')
           throw e;
-        push({ type: 'notice', message: 'Выбранный голос недоступен. Отвечаю встроенным голосом.' });
+        push({
+          type: 'notice',
+          error: true,
+          message: 'Выбранный голос недоступен. Отвечаю встроенным голосом.',
+        });
         return await speech.speak(
           engines,
           { ...store.data, settings: { ...store.data.settings, voice: 'builtin' } },
@@ -2074,7 +2082,7 @@ const actions = {
           );
         } catch (e) {
           if (own.signal.aborted) throw e;
-          push({ type: 'notice', message: 'Сервис распознавания недоступен. Распознаю на ПК.' });
+          push({ type: 'notice', error: true, message: 'Сервис распознавания недоступен. Распознаю на ПК.' });
         }
       }
       return await speech.transcribe(engines, bytes, own.signal);
@@ -2519,7 +2527,8 @@ function init() {
   main.on('close', (e) => {
     if (!closing) {
       e.preventDefault();
-      main.hide();
+      if (store.data.settings.minimizeToTray) main.hide();
+      else setImmediate(() => app.quit());
     }
   });
   tray = new Tray(nativeImage.createFromPath(path.join(ui, 'icon.png')).resize({ width: 24, height: 24 }));
@@ -2529,7 +2538,7 @@ function init() {
   try {
     globalKeys();
   } catch (e) {
-    setTimeout(() => push({ type: 'notice', message: errorText(e) }), 1800);
+    setTimeout(() => push({ type: 'notice', error: true, message: errorText(e) }), 1800);
   }
   timer = setInterval(tick, 1200);
   tick();

@@ -56,10 +56,21 @@ export const select = (label, id, options, current) =>
 export const box = (title, icon, body) =>
   '<article class="box"><h3>' + ico(icon) + esc(title) + '</h3>' + body + '</article>';
 let toastTimer;
+function errorMessage(error) {
+  return String(error?.message || error).replace(/^Error invoking remote method 'desk': (?:Error: )?/, '');
+}
+export function recordError(error) {
+  const message = errorMessage(error);
+  window.dispatchEvent(new CustomEvent('mira-error', { detail: message }));
+  return message;
+}
+export function reportError(error) {
+  toast(recordError(error));
+}
 export function toast(message) {
   const el = $('#toast');
   if (!el) return;
-  el.textContent = String(message).replace(/^Error invoking remote method 'desk': (?:Error: )?/, '');
+  el.textContent = errorMessage(message);
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 4500);

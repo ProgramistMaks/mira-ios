@@ -1,4 +1,4 @@
-import { $, call, esc, ico, toast } from './shared.js';
+import { $, call, esc, ico, reportError } from './shared.js';
 import { noteDocument, noteLabel, noteTag, sortedNotes, taskListOf } from './note-format.mjs';
 
 const dialog = $('#organizer'),
@@ -164,7 +164,7 @@ function saveNote() {
     body = readNodes($('#noteBody'));
   } catch (e) {
     writeError = e;
-    toast(e.message);
+    reportError(e);
     return;
   }
   Object.assign(n, { title, body, text: [title, $('#noteBody').innerText].filter(Boolean).join('\n') });
@@ -176,7 +176,7 @@ function saveNote() {
     .catch((e) => {
       if (generation === serial) {
         writeError = e;
-        toast(e.message);
+        reportError(e);
       }
     })
     .finally(() => {
@@ -291,7 +291,7 @@ function taskInput(id) {
         taskPane();
       }
     } catch (e) {
-      toast(e.message);
+      reportError(e);
       done = false;
     }
   }
@@ -402,7 +402,7 @@ async function action(op, id) {
         data = await call('state');
         paint();
       } catch (e) {
-        toast(e.message);
+        reportError(e);
         finished = false;
       }
     };
@@ -442,14 +442,14 @@ dialog.addEventListener('mousedown', (e) => {
 dialog.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (b?.dataset.format) format(b.dataset.format);
-  if (b?.dataset.org) action(b.dataset.org, b.dataset.id).catch((e) => toast(e.message));
+  if (b?.dataset.org) action(b.dataset.org, b.dataset.id).catch(reportError);
 });
 dialog.addEventListener('cancel', (e) => {
   e.preventDefault();
-  action('close').catch((err) => toast(err.message));
+  action('close').catch(reportError);
 });
 $('#orgPlace').onchange = (e) =>
-  call('screenWidget', { id: mode, mode: e.target.value }).catch((err) => toast(err.message));
+  call('screenWidget', { id: mode, mode: e.target.value }).catch(reportError);
 
 function updateFormatState() {
   const body = $('#noteBody'),

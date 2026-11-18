@@ -1,4 +1,4 @@
-import { $, esc, field, select, ico, call } from './shared.js';
+import { $, esc, field, select, ico, call, recordError } from './shared.js';
 import { themeList } from './pages.js';
 
 const choice = (label, id, list, current) => select(label, id, list, current);
@@ -240,7 +240,7 @@ export function openSetup(state, finished) {
       dialog.close();
       await finished();
     } catch (e) {
-      $('#introError').textContent = e.message;
+      $('#introError').textContent = recordError(e);
     } finally {
       busy = false;
       $('#introNext').disabled = false;

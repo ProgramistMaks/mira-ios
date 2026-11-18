@@ -3575,3 +3575,223 @@ body[data-theme='cream'] #agenda {
   color: var(--muted);
   margin-top: 0.5em;
 }
+
+.footerEnd,
+#journalButton,
+.journalHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#journalButton {
+  anchor-name: --journal;
+  color: var(--ink);
+  padding: 2px 5px;
+  border-radius: 6px;
+}
+#journalButton svg,
+#journalPanel svg {
+  width: 14px;
+  height: 14px;
+}
+#journalCount {
+  background: var(--ink);
+  color: var(--panel);
+  border-radius: 9px;
+  padding: 0 4px;
+}
+#journalPanel {
+  position: fixed;
+  position-anchor: --journal;
+  inset: auto anchor(right) calc(anchor(top) + 5px) auto;
+  margin: 0;
+  width: min(280px, 92vw);
+  max-height: min(240px, 70vh);
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 8px 28px #0002;
+  overflow: hidden;
+}
+#journalPanel:popover-open {
+  display: flex;
+  flex-direction: column;
+}
+.journalHead {
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+#journalList {
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#journalList li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 6px;
+  padding: 8px 10px;
+}
+#journalList li + li {
+  border-top: 1px solid var(--line);
+}
+#journalList span {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+#journalList time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell:has(#homeBackdrop:not([hidden]))::before {
+  content: none;
+}
+#homeBackdrop {
+  position: absolute;
+  z-index: -1;
+  inset: 28px 0 12px;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--paper);
+}
+#homeBackdrop[data-mode='cozy'] {
+  background:
+    radial-gradient(
+      ellipse at 75% 72%,
+      color-mix(in srgb, var(--stage) calc(var(--lamp) * var(--glow-alpha, 55%)), transparent),
+      transparent 66%
+    ),
+    var(--paper);
+}
+#homeBackdrop[data-mode='cozy']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--muted);
+  opacity: calc(var(--texture) * 0.6);
+}
+#homeBackdrop[data-pattern='sketch']::before {
+  mask: url(sketch.png) repeat 50% 20% / 440px 370px;
+}
+#homeBackdrop[data-pattern='dots']::before {
+  mask-image: radial-gradient(circle at center, black 1px, transparent 1.5px);
+  mask-size: 15px 15px;
+}
+#homeBackdrop[data-pattern='grain']::before {
+  mask-image: url(grain.svg);
+  mask-size: 150px 150px;
+}
+#homeBackdrop[data-pattern='stars']::before {
+  mask: url(stars.svg) repeat center / 96px 78px;
+}
+#homeBackdrop[data-pattern='none']::before {
+  display: none;
+}
+#homeBackdrop > :is(img, video) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+#homeBackdrop:has(> :is(img, video))::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, color-mix(in srgb, var(--paper) 68%, transparent), transparent 85%);
+}
+#backgroundControls fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0 0 12px;
+}
+#backgroundControls h4 {
+  margin: 8px 0;
+}
+.uploadBackground {
+  position: relative;
+  cursor: pointer;
+}
+.uploadBackground input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.uploadBackground:focus-within {
+  outline: 2px solid var(--accent);
+}
+.wallGallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wallTile {
+  position: relative;
+  width: 112px;
+}
+.wallTile button:first-child {
+  display: grid;
+  padding: 0;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.wallTile button[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+}
+.wallTile :is(img, video) {
+  width: 100%;
+  height: 62px;
+  object-fit: cover;
+}
+.wallTile span {
+  text-align: left;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 6px;
+}
+.wallTile button:last-child {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  padding: 3px;
+  display: grid;
+  background: var(--panel);
+  border-radius: 5px;
+}
+.wallTile button:last-child svg {
+  width: 14px;
+  height: 14px;
+}
+
+body[data-no-blur='true'][data-glass='true'] :is(.box, .editPanel, .slimCard, #tabs) {
+  background: var(--panel);
+  backdrop-filter: none;
+}
+body[data-no-blur='true'] :is(dialog, #organizer, #agenda)::backdrop {
+  backdrop-filter: none;
+}
+body[data-window-buttons='true'] .window button {
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  margin-inline: 3px;
+  background: color-mix(in srgb, var(--muted) 14%, var(--paper));
+}
+body[data-window-buttons='true'] .window button:hover {
+  background: var(--line);
+}
+body[data-window-buttons='true'] .window button:last-child:hover {
+  background: #bd4953;
+}

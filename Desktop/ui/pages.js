@@ -1,3 +1,4 @@
+import { backgroundControls } from './backgrounds.js';
 import { $, esc, ico, opt, btn, box, field, select, timerTime, timeLabel } from './shared.js';
 import { occursOn } from './calendar-dates.mjs';
 import { sortedNotes, noteLabel, taskListOf } from './note-format.mjs';
@@ -1610,7 +1611,8 @@ export function settings(s, c) {
     box(
       'Оформление',
       'palette',
-      '<div class="swatches">' +
+      backgroundControls() +
+        '<div class="swatches">' +
         themeList
           .map(
             ([id, label]) =>
@@ -1640,6 +1642,9 @@ export function settings(s, c) {
           ],
           a.glass ? 'on' : 'off',
         ) +
+        onOff('Отключить размытие', 'disableBlur', a.disableBlur) +
+        onOff('Подложка под кнопками окна', 'windowButtonBackground', a.windowButtonBackground) +
+        onOff('Сворачивать в трей при закрытии', 'minimizeToTray', a.minimizeToTray) +
         select(
           'Частота анимации',
           'fps',

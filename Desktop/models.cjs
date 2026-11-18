@@ -218,6 +218,7 @@ class LocalModels {
       .catch((e) =>
         this.notify({
           type: 'downloadEnd',
+          error: !abort.signal.aborted,
           message: abort.signal.aborted ? 'Загрузка приостановлена' : e.message,
         }),
       )

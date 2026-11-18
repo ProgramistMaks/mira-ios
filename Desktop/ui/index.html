@@ -12,6 +12,7 @@
   </head>
   <body data-theme="cream">
     <div class="shell">
+      <div id="homeBackdrop" aria-hidden="true" hidden></div>
       <header class="titlebar">
         <div class="brand"><img src="icon.png" alt="" /><b>Мира</b><span>для ПК</span></div>
         <div class="window">
@@ -180,7 +181,17 @@
           <button id="serviceMic" aria-pressed="false"><span data-i="mic"></span>Речь</button>
           <button id="serviceVoice" aria-pressed="true"><span data-i="volume-2"></span>Голос</button>
         </div>
-        <span id="time"></span>
+        <div class="footerEnd">
+          <button id="journalButton" hidden popovertarget="journalPanel" title="Журнал ошибок" aria-label="Журнал ошибок" aria-expanded="false" aria-controls="journalPanel">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.3 4.1a2 2 0 0 1 3.4 0l8.1 14a2 2 0 0 1-1.7 3H3.9a2 2 0 0 1-1.7-3zM12 9v5m0 2v1"/></svg>
+            <span id="journalCount" hidden></span>
+          </button>
+          <span id="time"></span>
+        </div>
+        <section id="journalPanel" popover aria-labelledby="journalTitle">
+          <div class="journalHead"><strong id="journalTitle">Ошибки (0/20)</strong><button id="journalClear" title="Очистить всё" aria-label="Очистить всё" data-i="x"></button></div>
+          <ul id="journalList"></ul>
+        </section>
       </footer>
     </div>
     <aside id="drawer" hidden>

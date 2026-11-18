@@ -1,3 +1,5 @@
+import './error-journal.js';
+import { updateBackdrop } from './backgrounds.js';
 import { address, followUpDelay } from './wake.mjs';
 import { syncCat } from './cat.js';
 import {
@@ -10,6 +12,8 @@ import {
   field,
   select,
   toast,
+  reportError as err,
+  recordError,
   timeLabel,
   timerTime,
   avatar,
@@ -85,7 +89,7 @@ const voice = new Voice(
     $('#voiceStart').innerHTML = ico('mic') + (voice.enabled ? 'Завершить разговор' : 'Включить микрофон');
     phase(p, state?.settings.reduced || false);
   },
-  (e) => toast(e.message),
+  err,
   () => waitingForName,
 );
 let meterAt = 0;
@@ -571,11 +575,17 @@ function render() {
         : 'cream'
       : look.theme;
   document.body.dataset.glass = String(!!look.glass);
+  document.body.dataset.noBlur = String(look.disableBlur);
+  document.body.dataset.windowButtons = String(look.windowButtonBackground);
+  const closeButton = $('.window [data-win="close"]');
+  closeButton.title = look.minimizeToTray ? 'Свернуть в трей' : 'Выйти из Миры';
+  closeButton.setAttribute('aria-label', closeButton.title);
   document.body.dataset.character = String(look.showAvatar);
   document.body.style.setProperty('--glow-alpha', (look.glow ?? 55) + '%');
   if (look.accent) document.body.style.setProperty('--accent', look.accent);
   else document.body.style.removeProperty('--accent');
   $('#area').dataset.page = page;
+  updateBackdrop(page === 'home', look.reduced);
   $('#content').hidden = page === 'home';
   document
     .querySelectorAll('[data-go]')
@@ -630,9 +640,6 @@ function modal(title, html) {
 }
 function closeModal() {
   if ($('#modal').open) $('#modal').close();
-}
-function err(e) {
-  toast(e.message || e);
 }
 async function send(input, voiceMode = false) {
   if (sending) return;
@@ -1441,7 +1448,9 @@ async function handle(action, id) {
         }
       } catch (e) {
         if (cache.fishRequest === serial) {
-          cache.fishError = 'Не удалось открыть библиотеку Fish Audio. Проверь подключение и повтори поиск.';
+          cache.fishError = recordError(
+            'Не удалось открыть библиотеку Fish Audio. Проверь подключение и повтори поиск.',
+          );
           cache.fishList = [];
           cache.fishPage = 1;
           cache.fishMore = false;
@@ -2101,9 +2110,18 @@ document.addEventListener('change', (e) => {
     quiet: { quiet: v === 'on' },
     interruptReplies: { interruptReplies: v === 'on' },
     ...Object.fromEntries(
-      ['island', 'islandPin', 'hideCapture', 'startHidden', 'startLogin', 'startListening', 'bubbles'].map(
-        (k) => [k, { [k]: v === 'on' }],
-      ),
+      [
+        'island',
+        'islandPin',
+        'hideCapture',
+        'startHidden',
+        'startLogin',
+        'startListening',
+        'bubbles',
+        'disableBlur',
+        'windowButtonBackground',
+        'minimizeToTray',
+      ].map((k) => [k, { [k]: v === 'on' }]),
     ),
     ...Object.fromEntries(
       ['speechRate', 'speechVolume', 'sensitivity', 'silence', 'wakeWindow'].map((k) => [
@@ -2481,7 +2499,8 @@ window.desk.on(async (e) => {
       return;
     }
     if (e.type === 'downloadEnd' || e.type === 'notice') {
-      toast(e.message);
+      if (e.error) err(e.message);
+      else toast(e.message);
       return;
     }
     if (e.type === 'standby') {

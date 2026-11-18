@@ -1,4 +1,4 @@
-import { $, call, esc, ico, toast } from './shared.js';
+import { $, call, esc, ico, reportError } from './shared.js';
 import { calendarStart, localKey, occursOn } from './calendar-dates.mjs';
 
 const dialog = $('#agenda'),
@@ -246,7 +246,7 @@ dialog.addEventListener('submit', async (e) => {
     }
     paint();
   } catch (err) {
-    toast(err.message);
+    reportError(err);
   } finally {
     saving = false;
   }
@@ -284,8 +284,8 @@ dialog.addEventListener('click', async (e) => {
     draft = null;
     paint();
   } catch (err) {
-    toast(err.message);
+    reportError(err);
   }
 });
 $('#calendarPlace').onchange = (e) =>
-  call('screenWidget', { id: 'events', mode: e.target.value }).catch((err) => toast(err.message));
+  call('screenWidget', { id: 'events', mode: e.target.value }).catch(reportError);

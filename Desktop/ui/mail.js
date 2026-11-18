@@ -1,4 +1,4 @@
-import { $, call, esc, ico, toast } from './shared.js';
+import { $, call, esc, ico, recordError } from './shared.js';
 const dlg = $('#mailDialog'),
   body = $('#mailBody'),
   tools = $('#mailActions');
@@ -499,7 +499,7 @@ async function operate(op, id) {
   try {
     await run(op, id);
   } catch (e) {
-    status(e.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+    status(recordError(e));
   } finally {
     busy = false;
     dlg.removeAttribute('aria-busy');
