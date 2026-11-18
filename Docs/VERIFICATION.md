@@ -1,5 +1,11 @@
 # Verification — 2026-11-17
 
+## High-refresh playback, 2026-11-18
+
+Native commit `2a782d1` passed 66 renderer tests, TypeScript checking and Swift source parsing. Chromium advanced Vita through 120 distinct animation steps on 120 injected display callbacks, then resumed browser scheduling after a pause. The private site passed 13 controller and contract tests. FFprobe reported 120/1 fps for the recorded 13.5-second clip. All 1,620 decoded frames had distinct checksums. These measurements cover offline rendering and clock integration. Device presentation cadence remains unverified.
+
+GitHub stopped the single package-only build before any steps ran due to an account payment issue or spending limit. [Build 44274749308](https://github.com/ProgramistMaks/mira-ios/actions/runs/44274749308).
+
 ## Vita choreography, 2026-11-18
 
 Native commit `74a17a5` passed 62 renderer tests, TypeScript checking, Swift source parsing and five IPA package guard tests. All 16 clips were recorded from the app’s WebGL renderer with Vita in front and three-quarter views. The revised dance includes an alternating support-foot regression. [Reference study](MOTION-REFERENCE-STUDY.md).
