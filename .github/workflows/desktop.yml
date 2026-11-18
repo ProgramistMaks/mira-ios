@@ -1,0 +1,54 @@
+name: Windows desktop
+on:
+  push:
+    branches: [desktop/windows]
+    paths:
+      - Desktop/**
+      - Renderer/**
+      - Scripts/build-renderer.mjs
+      - package-lock.json
+      - .github/workflows/desktop.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: npm ci --prefix Desktop
+      - run: npm run check
+      - run: npm test
+      - run: node --test Desktop/tests/desktop.test.cjs
+      - run: npm run build
+      - uses: actions/cache@v4
+        with:
+          path: build/desktop-cache
+          key: windows-desktop-engines-v1-${{ hashFiles('Desktop/scripts/package.py') }}
+      - name: Build and verify portable package
+        run: python Desktop/scripts/package.py
+      - name: Test packaged Windows app including microphone and offline speech
+        env:
+          MIRA_EVIDENCE: build/desktop-evidence
+        run: node Desktop/scripts/smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mira-Windows-x64
+          path: build/desktop/Mira-Windows-x64.zip
+          compression-level: 0
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-test-screens
+          path: build/desktop-evidence/
+          if-no-files-found: ignore

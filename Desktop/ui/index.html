@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'"
+    />
+    <title>Мира</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body data-theme="cream">
+    <div class="shell">
+      <header class="titlebar">
+        <div class="brand"><img src="icon.png" alt="" /><b>Мира</b><span>для ПК</span></div>
+        <div class="window">
+          <button data-win="min" aria-label="Свернуть" data-i="minus"></button
+          ><button data-win="max" aria-label="Развернуть" data-i="square"></button
+          ><button data-win="close" aria-label="Свернуть в трей" data-i="x"></button>
+        </div>
+      </header>
+      <div class="toolbar">
+        <nav id="tabs" aria-label="Разделы"></nav>
+        <button
+          id="topOverlay"
+          class="plain"
+          title="Персонаж поверх окон"
+          aria-label="Персонаж поверх окон"
+          data-i="pin"
+        ></button>
+      </div>
+      <div class="rail">
+        <button data-go="home" title="Разговор" aria-label="Разговор" data-i="message-circle"></button
+        ><button
+          data-go="desk"
+          title="Рабочий стол"
+          aria-label="Рабочий стол"
+          data-i="layout-dashboard"
+        ></button
+        ><span></span
+        ><button id="historyBtn" title="История чатов" aria-label="История чатов" data-i="history"></button
+        ><button id="newChat" title="Новый чат" aria-label="Новый чат" data-i="square-pen"></button><i></i
+        ><button
+          data-go="settings"
+          title="Настройки"
+          aria-label="Настройки"
+          data-i="sliders-horizontal"
+        ></button>
+      </div>
+      <main id="area" data-page="home">
+        <section id="home">
+          <div id="hero">
+            <div id="welcome">
+              <div class="today" id="today"></div>
+              <h1>Твоя <em id="heroName">Мира</em><span class="shine">✦</span></h1>
+              <p id="hello"></p>
+            </div>
+            <div id="chatBox" hidden>
+              <div class="chatTitle">
+                <span class="tiny">Разговор</span>
+                <h2 id="chatTitle"></h2>
+              </div>
+              <div id="messages" aria-live="polite"></div>
+            </div>
+            <div id="compose">
+              <div id="attachment" hidden></div>
+              <form id="messageForm">
+                <button
+                  type="button"
+                  id="attach"
+                  title="Добавить текстовый файл"
+                  aria-label="Добавить файл"
+                  data-i="paperclip"
+                ></button
+                ><textarea
+                  id="prompt"
+                  rows="1"
+                  placeholder="Спроси или дай команду…"
+                  aria-label="Сообщение"
+                ></textarea
+                ><button
+                  type="button"
+                  id="mic"
+                  aria-label="Голосовой разговор"
+                  title="Голосовой разговор"
+                  data-i="mic"
+                ></button
+                ><button id="send" title="Отправить" aria-label="Отправить" data-i="arrow-up"></button>
+              </form>
+              <div class="quick">
+                <button id="voiceStart" data-icon="audio-lines">Разговор голосом</button
+                ><button id="focusQuick" data-icon="timer">Режим учёбы</button
+                ><button id="searchQuick" data-icon="globe">Найти в сети</button>
+              </div>
+              <div id="voiceBar" hidden>
+                <b class="pulse"></b><span id="voiceStatus"></span
+                ><button id="voiceEnd" aria-label="Завершить разговор" data-i="circle-stop"></button>
+              </div>
+            </div>
+          </div>
+          <div class="homeFoot">
+            <div class="subhead">
+              <h2>Сегодня</h2>
+              <button class="text" data-go="desk">Рабочий стол <i data-i="arrow-up-right"></i></button>
+            </div>
+            <div id="todayCards" class="todayCards"></div>
+          </div>
+        </section>
+        <div id="scene" aria-label="Трёхмерный персонаж">
+          <div class="orbit"></div>
+          <span class="sceneSpark" aria-hidden="true">✧</span
+          ><iframe title="Вита" id="avatar" src="/renderer/index.html"></iframe>
+          <div class="sceneNav">
+            <button id="nameplate" data-go="model">
+              <b></b><span>Вита</span><i data-i="chevron-right"></i></button
+            ><button id="dance" title="Потанцевать" aria-label="Потанцевать" data-i="music-2"></button>
+          </div>
+        </div>
+        <section id="content" hidden></section>
+      </main>
+      <footer>
+        <span class="profile"><b id="initial">М</b><span id="profile">Мой компьютер</span></span>
+        <div class="service" id="services"></div>
+        <span id="time"></span>
+      </footer>
+    </div>
+    <aside id="drawer" hidden>
+      <div class="subhead">
+        <h3>История чатов</h3>
+        <button data-dismiss="drawer" class="plain" aria-label="Закрыть" data-i="x"></button>
+      </div>
+      <div id="history"></div>
+    </aside>
+    <dialog id="modal">
+      <div class="subhead">
+        <h2 id="modalTitle"></h2>
+        <button class="plain" data-dismiss="modal" aria-label="Закрыть" data-i="x"></button>
+      </div>
+      <div id="modalBody"></div>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+Vita (β Ver AvatarSample_3), VRoid Project / pixiv Inc. CC0. Resources and authorship are documented in resources/app/renderer/ASSET-LICENSE.md. Three.js and three-vrm notices are adjacent to avatar.js.
+Electron 45.3.4 (MIT), Chromium and bundled third parties: LICENSE and LICENSES.chromium.html in the application folder.
+Rubik font (SIL OFL), Lucide icons (ISC/MIT): resources/app/ui contains their license texts.
+llama.cpp b12503 and whisper.cpp b5454, Georgi Gerganov and contributors (MIT). Whisper base model: OpenAI Whisper (MIT), ggml quantization from ggerganov/whisper.cpp.
+Piper 2023.11.14-2, Michael Hansen and contributors (MIT), https://github.com/rhasspy/piper/tree/2023.11.14-2 . Its phonemizer uses eSpeak NG (GPLv3+), https://github.com/espeak-ng/espeak-ng . ONNX Runtime, Microsoft (MIT), https://github.com/microsoft/onnxruntime .
+Russian voice ruslan, Piper Voices: https://huggingface.co/rhasspy/piper-voices/tree/0ca208afc2a2ee102b1e961e72e0a7e4907be3d0/ru/ru_RU/ruslan/medium . The original RUSLAN speech corpus is attributed at https://ruslan-corpus.github.io/ and licensed CC BY-NC-SA 4.0, https://creativecommons.org/licenses/by-nc-sa/4.0/ . Voice weights and configuration are bundled unmodified. The model card is in resources/engines/voices/MODEL_CARD.
+Downloadable language models retain their respective authors' licenses on Hugging Face. The desktop archive does not contain those weights.
+Microsoft Visual C++ Runtime, Microsoft Corporation. Unmodified runtime libraries from Microsoft.VCLibs.x64.14.00.Desktop, https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files .

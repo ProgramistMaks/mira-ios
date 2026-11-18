@@ -20,6 +20,7 @@ declare global {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
       setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
+      setDesktopPose(seated: boolean): void; lookAtPointer(x: number, y: number): void;
       renderDisplayFrame(timestamp: number): void; releaseDisplayClock(): void;
       frameStats?: {fps: number; p95ms: number};
       configureChoreography(id: string): void; dance(): void; choreographyCatalog: typeof CHOREOGRAPHY;
@@ -48,6 +49,8 @@ function resetCadence() {
 let active = true;
 let phase = 'idle';
 let reduced = false;
+let seated = false, seatWeight = 0;
+let pointerGaze: { x: number; y: number; until: number } | undefined;
 const speechSamples = new SpeechSamples();
 const timeline = new AnimationTimeline();
 const syncVisibility = () => {
@@ -63,6 +66,10 @@ let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   choreographyCatalog: CHOREOGRAPHY,
+  setDesktopPose(value) { seated = value; },
+  lookAtPointer(x, y) {
+    if (Number.isFinite(x) && Number.isFinite(y)) pointerGaze = {x: THREE.MathUtils.clamp(x,-1,1), y: THREE.MathUtils.clamp(y,-1,1), until:performance.now()+950};
+  },
   renderDisplayFrame(timestamp) { if (Number.isFinite(timestamp) && active && !document.hidden) nativeTick?.(timestamp); },
   releaseDisplayClock() { releaseNativeClock?.(); },
   configureChoreography(id) { choreographyMode = id; choreography?.configure(id); },
@@ -257,13 +264,25 @@ async function main() {
       if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
       armTargets.apply(pose);
     } else authored.update(delta, {phase, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+    seatWeight = THREE.MathUtils.damp(seatWeight, seated ? 1 : 0, 7, delta);
+    if (seatWeight > .001) {
+      for (const side of ['left','right'] as const) {
+        avatar.humanoid.getNormalizedBoneNode(`${side}UpperLeg`)?.rotateX(armSign * 1.35 * seatWeight);
+        avatar.humanoid.getNormalizedBoneNode(`${side}LowerLeg`)?.rotateX(-armSign * 1.50 * seatWeight);
+        avatar.humanoid.getNormalizedBoneNode(`${side}Foot`)?.rotateX(armSign * .12 * seatWeight);
+      }
+    }
     window.companion.bodyStatus.behavior = useAuthored ? authored.title : body.behaviorLabel;
     window.companion.bodyStatus.choreography = {clip: authored.clip, mode: authored.mode, enabled: authored.enabled};
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {
-      avatar.lookAt.autoUpdate = !(faceTest || pose.naturalGaze);
-      if (faceTest || pose.naturalGaze) { avatar.lookAt.yaw = pose.eyeYaw; avatar.lookAt.pitch = pose.eyePitch; }
+      const gaze = !reduced && pointerGaze && pointerGaze.until > performance.now() ? pointerGaze : undefined;
+      avatar.lookAt.autoUpdate = !(faceTest || pose.naturalGaze || gaze);
+      if (gaze) {
+        avatar.lookAt.yaw = THREE.MathUtils.damp(avatar.lookAt.yaw, -gaze.x*15, 8, delta);
+        avatar.lookAt.pitch = THREE.MathUtils.damp(avatar.lookAt.pitch, -gaze.y*9, 8, delta);
+      } else if (faceTest || pose.naturalGaze) { avatar.lookAt.yaw = pose.eyeYaw; avatar.lookAt.pitch = pose.eyePitch; }
     }
     avatar.expressionManager?.setValue('blink', faceTest ? 0 : pose.naturalGaze ? pose.naturalBlink : face.blink);
     avatar.expressionManager?.setValue('blinkLeft', faceTest ? pose.blinkLeft : 0);

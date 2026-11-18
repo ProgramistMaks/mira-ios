@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self'; object-src 'none'"
+    />
+    <title>Вита на рабочем столе</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        font: 12px system-ui;
+      }
+      iframe {
+        border: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+      }
+      nav {
+        position: absolute;
+        inset: auto 12% 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      body:hover nav,
+      nav:focus-within {
+        opacity: 1;
+      }
+      button,
+      b {
+        background: #fff8eaeb;
+        border: 1px solid #d8caba;
+        color: #523e49;
+        border-radius: 20px;
+        padding: 5px 9px;
+      }
+      button {
+        cursor: pointer;
+      }
+      b {
+        -webkit-app-region: drag;
+        cursor: move;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe id="avatar" src="/renderer/index.html" title="Персонаж"></iframe>
+    <nav>
+      <b title="Перетащи, чтобы переместить">⠿</b><button id="open">Мира</button
+      ><button id="more" title="Настройки персонажа">•••</button>
+    </nav>
+    <script type="module" src="overlay.js"></script>
+  </body>
+</html>
