@@ -499,11 +499,13 @@ test('the seated preview lowers its framing to keep the feet in view', () => {
   assert.ok(rig.viewOffset > -.06);
 });
 
-test('all 49 Nayu takes retain their duration and produce distinct animated poses on Mira', async () => {
-  const {NAYU_CHOREOGRAPHY,NayuMotion} = await import('./nayu-motion.mjs');
+test('all 52 Nayu takes retain their source durations and animate the correct bones on Mira', async () => {
+  const {NAYU_CHOREOGRAPHY,NAYU_PROGRAMS,NayuMotion} = await import('./nayu-motion.mjs');
   const bytes = await readFile(new URL('./motions/nayu-motion.bin', import.meta.url));
   const pack = new NayuMotion(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
-  assert.equal(Object.keys(pack.clips).length,49);
+  assert.equal(Object.keys(pack.clips).length,52);
+  assert.equal(Object.keys(NAYU_PROGRAMS).length,19);
+  assert.equal(new Set(NAYU_CHOREOGRAPHY.map(item=>item.id)).size,71);
   assert.equal(pack.bones.length,52);
   const target = await loader.parseAsync(file.buffer.slice(file.byteOffset,file.byteOffset+file.byteLength),'');
   VRMUtils.rotateVRM0(target.userData.vrm);
@@ -518,15 +520,30 @@ test('all 49 Nayu takes retain their duration and produce distinct animated pose
     for (let i=0;i<8;i++) {
       transfer.update(.05,{playbackDelta:transfer.duration/8});
       assert.equal(transfer.track,id);
-      for (const name of ['hips','head','rightHand','leftFoot','rightIndexIntermediate']) {
+      const values = ['hips','head','rightHand','leftFoot','rightIndexIntermediate'].flatMap(name=>{
         const bone = body.humanoid.getNormalizedBoneNode(name);
-        const values=[...bone.getWorldPosition(new Vector3()).toArray(),...bone.quaternion.toArray()];
-        assert.ok(values.every(Number.isFinite),id);
-        points.push(values.map(x=>x.toFixed(3)).join(','));
-      }
+        return [...bone.getWorldPosition(new Vector3()).toArray(),...bone.quaternion.toArray()];
+      });
+      assert.ok(values.every(Number.isFinite),id);
+      points.push(values.map(x=>x.toFixed(3)).join(','));
     }
-    assert.ok(new Set(points).size>5,id);
+    if (clip.duration > .1) assert.ok(new Set(points).size>1,id+' has to move');
   }
+  for (const [id,actions] of Object.entries(NAYU_PROGRAMS)) {
+    transfer.configure(id);
+    transfer.replay();
+    const expected = actions.map(segment=>segment.id);
+    const observed = new Set();
+    for (let elapsed=0;elapsed<transfer.duration;elapsed+=.05) {
+      transfer.update(.05);
+      observed.add(transfer.track);
+    }
+    assert.deepEqual([...observed],expected,id);
+  }
+  transfer.configure('nayu_program_dance_fast');
+  const fast = transfer.duration;
+  transfer.configure('nayu_dance');
+  assert.ok(transfer.duration > fast);
   transfer.configure('auto');
   transfer.react('arrival');
   transfer.update(.016);

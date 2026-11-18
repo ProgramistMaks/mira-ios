@@ -935,9 +935,11 @@ export function model(s, c) {
           ) +
           ((c.catalog?.nayuClips || []).length
             ? '<div class="row">' +
-              select('Исходные анимации Astra', 'nayuClip',
-                c.catalog.nayuClips.map(clip=>[clip.id,clip.title]),
-                c.gesture?.startsWith('nayu_') ? c.gesture : 'nayu_welcome') +
+              '<label class="field">Исходные анимации Astra<select id="nayuClip">' +
+              [true,false].map(sequence=>'<optgroup label="' + (sequence ? 'Полные последовательности' : 'Отдельные клипы') + '">' +
+                c.catalog.nayuClips.filter(clip=>Boolean(clip.sequence)===sequence)
+                  .map(clip=>opt(clip.id,clip.title,c.nayuSelection || 'nayu_welcome')).join('') + '</optgroup>').join('') +
+              '</select></label>' +
               btn('Проиграть клип', 'playNayuClip', 'play') + '</div>'
             : '') +
           '<div class="clipList">' +

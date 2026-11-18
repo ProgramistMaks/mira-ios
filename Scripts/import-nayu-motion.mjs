@@ -1,6 +1,6 @@
 // Convert the permitted, extracted Nayu motion files into model-independent tracks.
 // Usage: node Scripts/import-nayu-motion.mjs /path/to/extracted-nayu-pack
-import { readFile, writeFile } from 'node:fs/promises';
+import { access, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { AnimationMixer, LoopOnce, Quaternion, Vector3 } from 'three';
@@ -9,7 +9,15 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 const root = process.argv[2];
 if (!root) throw Error('Provide the extracted Nayu motion directory');
-const { clips } = JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8'));
+const { clips, states } = JSON.parse(await readFile(path.join(root, 'manifest.json'), 'utf8'));
+for (const [name,file,loop] of [
+  ['idle_lean','clips/idle_lean.fbx',false],
+  ['idle_shy','clips/idle_shy.fbx',false],
+  ['drag_pose','clips/drag.fbx',true],
+]) {
+  if (!clips.some(clip=>clip.file===file) && await access(path.join(root,file)).then(()=>true,()=>false))
+    clips.push({name,file,loop});
+}
 const fbxBones = { hips:'Hips', spine:'Spine', chest:'Chest', upperChest:'Upper_Chest', neck:'Neck', head:'Head' };
 const mixamoBones = { hips:'mixamorigHips', spine:'mixamorigSpine', chest:'mixamorigSpine1', upperChest:'mixamorigSpine2', neck:'mixamorigNeck', head:'mixamorigHead' };
 const glbBones = { hips:'pelvis', spine:'spine_01', chest:'spine_02', upperChest:'spine_03', neck:'neck_01', head:'Head' };
@@ -39,7 +47,7 @@ const nativeBones = Object.fromEntries(Object.entries(fbxBones).map(([bone,name]
 Object.assign(nativeBones,{upperChest:'Chest',leftFoot:'FootL001',rightFoot:'FootR001',leftToes:'FootL002',rightToes:'FootR002'});
 const bones = Object.keys(fbxBones);
 const stride = 16 + 20*bones.length;
-const index = { version: 1, bones, clips: {} };
+const index = { version: 1, bones, clips: {}, states: {} };
 const buffers = [];
 let offset = 0;
 const identity = new Quaternion();
@@ -114,6 +122,25 @@ for (const clip of clips) {
   };
   offset += frames.length;
   buffers.push(frames);
+}
+const known = clip=>Object.hasOwn(index.clips,clip);
+for (const [name,state] of Object.entries(states || {})) {
+  if (!state || typeof state!=='object') continue;
+  const variants = (state.variants || []).filter(variant=>known(variant.clip)).map(variant=>{
+    const blend = variant.blend;
+    const points = (blend?.points || []).filter(point=>known(point.clip))
+      .map(({clip,at})=>({clip,at}));
+    return {
+      clip:variant.clip, start:known(variant.start)?variant.start:undefined,
+      end:known(variant.end)?variant.end:undefined, weight:variant.weight ?? 1,
+      ...(points.length ? {blend:{parameter:blend.param, points, maxRate:blend.max_rate}} : {}),
+    };
+  });
+  index.states[name] = {
+    clip:known(state.clip)?state.clip:undefined,
+    start:known(state.start)?state.start:undefined, end:known(state.end)?state.end:undefined,
+    variants,
+  };
 }
 await writeFile('Renderer/motions/nayu.json',JSON.stringify(index));
 await writeFile('Renderer/motions/nayu-motion.bin',Buffer.concat(buffers));

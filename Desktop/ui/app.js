@@ -2452,6 +2452,7 @@ document.addEventListener('change', (e) => {
     const preset = pages.providerPresets.find((p) => p[0] === v);
     $('#cloudModel').value = preset?.[2] || '';
   }
+  if (e.target.id === 'nayuClip') cache.nayuSelection = v;
   if (e.target.id === 'gesture') {
     cache.gesture = v;
     avatar()?.configureChoreography(v);

@@ -89,13 +89,16 @@ export class ChoreographyRig {
   }
   get desktopSeating() { return this.clip === 'desktopChair' || this.clip === 'chairRise'; }
   sequence(id) { return this.nayu?.sequences[id] ?? sourceSequences[id]; }
+  segmentDuration(action) {
+    return (action.cycles||1)*this.trackDuration(action.id)/(action.rate||1);
+  }
   trackDuration(id) {
     const motion = this.nayu?.clips[id] || pack.clips[id];
     return motion.duration/(motion.speed||1);
   }
   segmentAt(sequence, time) {
     for (const [index,action] of sequence.entries()) {
-      const hold = action.hold ?? this.trackDuration(action.id);
+      const hold = action.hold ?? this.segmentDuration(action);
       if (time<hold || index===sequence.length-1) return { ...action,time };
       time-=hold;
     }
@@ -103,7 +106,7 @@ export class ChoreographyRig {
   get fullBodyPreview() { return Boolean(this.sequence(this.clip)) && !this.desktopSeating; }
   get duration() {
     const sequence = this.sequence(this.clip);
-    if (sequence) return sequence.reduce((time, action) => time + (action.hold ?? this.trackDuration(action.id)), 0);
+    if (sequence) return sequence.reduce((time, action) => time + (action.hold ?? this.segmentDuration(action)), 0);
     return SHOTS[this.clip]?.duration ?? (this.clip==='dance'?6 : this.clip==='walk'?4 : 4.8);
   }
   get title() { return this.clip==='chairRise'?'Встаёт со стула':titles[this.clip] ?? nayuTitles[this.clip] ?? titles.chairIdle; }
@@ -148,9 +151,13 @@ export class ChoreographyRig {
   }
   choose(phase) {
     if(this.nayu && (phase==='idle'||phase==='listening')) {
-      const candidates = NAYU_IDLE.filter(id=>!this.history.includes(id));
-      if(candidates.includes('nayu_idle_breathe') && this.random()<.55) return 'nayu_idle_breathe';
-      return candidates[Math.floor(this.random()*candidates.length)];
+      const candidates = NAYU_IDLE.filter(({id})=>!this.history.includes(id));
+      let draw = this.random()*candidates.reduce((total, item)=>total+item.weight,0);
+      for (const item of candidates) {
+        draw-=item.weight;
+        if (draw<0) return item.id;
+      }
+      return candidates.at(-1)?.id || 'nayu_idle_breathe';
     }
     if(phase==='idle' && this.clip!=='idle')return 'idle';
     const candidates=pools[phase].filter(id=>!this.history.includes(id));
@@ -210,7 +217,7 @@ export class ChoreographyRig {
         if (entry.node !== this.hips) entry.node.position.copy(entry.localPosition);
       }
     } else {
-      this.sampleSource(source,segment?.time ?? (shot?0:this.age),segment?.loop ?? Boolean(!segment || this.nayu?.clips[source]?.loop));
+      this.sampleSource(source,segment ? segment.time*(segment.rate||1) : shot?0:this.age,segment?.loop ?? Boolean(!segment || this.nayu?.clips[source]?.loop));
       if (this.clip === 'jump' && source === 'jumpAir') {
         // The imported game clip is in-place. Add root travel only in the composite preview.
         const progress = segment.time / segment.hold;
