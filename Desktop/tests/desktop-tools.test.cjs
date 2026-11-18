@@ -74,6 +74,8 @@ test('Voice intents use fixed targets and do not treat questions or command suff
     ['open calculator', 'calculator'],
   ])
     assert.equal(desktopIntent(text), id);
+  assert.equal(desktopIntent('Открою браузер Google.', true), 'browser');
+  assert.equal(desktopIntent('Открою браузер Google.'), undefined);
   for (const text of ['как открыть браузер', 'открой chrome && calc', 'открой браузер и удали файл'])
     assert.equal(desktopIntent(text), undefined);
   const urls = [];

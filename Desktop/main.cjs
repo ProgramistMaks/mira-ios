@@ -1036,7 +1036,7 @@ async function answer(text, chat, signal, remote = false, spokenReply = false, o
     text += '\n' + files.map((f) => 'Файл ' + f.name + '\n' + f.text).join('\n');
   else if (cmd || files.length) return converse(text, chat, signal, remote, spokenReply, onText);
   const { desktopIntent, openBrowser } = require('./pc-intent.cjs');
-  const intent = desktopIntent(text);
+  const intent = desktopIntent(text, spokenReply);
   if (intent && !remote) {
     if (!['browser', 'chrome'].includes(intent)) {
       await launchSystem(intent, app, shell);

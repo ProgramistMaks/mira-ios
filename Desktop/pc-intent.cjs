@@ -19,13 +19,15 @@ const targets = new Map([
   ['проводник', 'explorer'],
   ['file explorer', 'explorer'],
 ]);
-function desktopIntent(text) {
+function desktopIntent(text, spoken = false) {
   const phrase = text
     .trim()
     .toLowerCase()
     .replace(/[.,!?]/g, '')
     .replace(/(браузер)[-–—]+(?=[а-яa-z])/g, '$1 ')
     .replace(/^(?:(?:мира|пожалуйста|please)\s+)+|\s+(?:пожалуйста|please)$/g, '');
+  // Local Russian STT can transcribe the imperative «открой» as «открою».
+  if (spoken && /^открою браузер (?:гугл|гугол|бугл|google)$/.test(phrase)) return 'browser';
   const match = /^(?:открой|открыть|запусти|запустить|open|launch)\s+(?:(?:the|мой)\s+)?(.+)$/.exec(phrase);
   if (!match) return;
   if (/^(?:браузер\s+)?(?:(?:гугл|гугол|google)\s+)?(?:хром|chrome)(?:\s+browser)?$/.test(match[1]))
