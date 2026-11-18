@@ -15,6 +15,7 @@ import { SecondaryPhysics } from './secondary-physics.mjs';
 import { HairDetail } from './hair-detail.mjs';
 import { RenderCadence } from './frame-pacer.mjs';
 import { AnimationTimeline } from './animation-timeline.mjs';
+import { InteractiveReactions } from './interactive-reactions.mjs';
 
 declare global {
   interface Window {
@@ -27,7 +28,7 @@ declare global {
       renderDisplayFrame(timestamp: number): void; releaseDisplayClock(): void;
       frameStats?: {fps: number; p95ms: number};
       configureChoreography(id: string): void; dance(): void; choreographyCatalog: typeof CHOREOGRAPHY;
-      replayGesture(): void; configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
+      replayGesture(): void; playReaction(kind: string): void; configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
 }
@@ -54,6 +55,7 @@ let phase = 'idle';
 let reduced = false;
 let seated = false, seatWeight = 0;
 let pointerGaze: { x: number; y: number; until: number } | undefined;
+let requestedReaction: string | undefined;
 const speechSamples = new SpeechSamples();
 const timeline = new AnimationTimeline();
 const syncVisibility = () => {
@@ -83,6 +85,7 @@ window.companion = {
   configureBody(settings) { body.configure(settings); },
   configurePerformance(settings) { acting.configure(settings); },
   replayGesture() { acting.replay(); choreography?.replay(); },
+  playReaction(kind) { if (kind === 'pet' || kind === 'typing') requestedReaction = kind; },
   phase,
   setActive(value) {
     if (!active && value === true) resetPhysics?.();
@@ -182,8 +185,24 @@ async function main() {
     verticalCenter = camera.projectionMatrix.elements[9];
   };
   applyResize = resize; resize(); addEventListener('resize', resize);
+  const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
+  const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
+  const reactions = desktopStage ? new InteractiveReactions(scene, head, chest, height, armSign) : undefined;
+  const headCenter = new THREE.Vector3(), headEdge = new THREE.Vector3();
+  let headZone: { x: number; y: number; rx: number; ry: number } | null = null;
+  let strokePoint: {x: number; y: number} | undefined;
+  const hitHead = (event: PointerEvent) => {
+    if (!headZone || !active || reduced || !acting.settings.enabled) return false;
+    const box = renderer.domElement.getBoundingClientRect();
+    return Math.hypot((event.clientX - box.left - headZone.x) / headZone.rx,
+      (event.clientY - box.top - headZone.y) / headZone.ry) <= 1;
+  };
+  const endStroke = () => {
+    if (strokePoint) reactions?.endStroke();
+    strokePoint = undefined;
+  };
   let rotation = 0;
-  let pointer: { id: number; x: number; startX: number; startY: number; moved: boolean } | undefined;
+  let pointer: { id: number; x: number; startX: number; startY: number; moved: boolean; head: boolean } | undefined;
   const ray = new THREE.Raycaster();
   const hitCharacter = (event: PointerEvent) => {
     const box = renderer.domElement.getBoundingClientRect();
@@ -196,30 +215,37 @@ async function main() {
     return ray.intersectObject(avatar.scene, true).some(hit => hit.object.visible);
   };
   renderer.domElement.addEventListener('pointerdown', event => {
-    if (pointer || !event.isPrimary) return;
-    pointer = { id: event.pointerId, x: event.clientX, startX: event.clientX, startY: event.clientY, moved: false };
+    if (pointer || !event.isPrimary || event.button !== 0) return;
+    const overHead = hitHead(event);
+    pointer = { id: event.pointerId, x: event.clientX, startX: event.clientX, startY: event.clientY, moved: false, head: overHead };
+    if (overHead) strokePoint = {x: event.clientX, y: event.clientY};
     renderer.domElement.setPointerCapture(event.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', event => {
+    if (event.isPrimary && (!pointer || pointer.head) && hitHead(event)) {
+      if (strokePoint) reactions?.stroke(event.clientX - strokePoint.x, event.clientY - strokePoint.y);
+      strokePoint = {x: event.clientX, y: event.clientY};
+    } else endStroke();
     if (!pointer || pointer.id !== event.pointerId) return;
     if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 8) pointer.moved = true;
-    if (!reduced) rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointer.x) * 0.006, -0.65, 0.65);
+    if (!reduced && !pointer.head) rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointer.x) * 0.006, -0.65, 0.65);
     pointer.x = event.clientX;
   });
   renderer.domElement.addEventListener('pointerup', event => {
     if (!pointer || pointer.id !== event.pointerId) return;
-    const tap = !pointer.moved;
+    const tap = !pointer.moved, headTap = pointer.head && hitHead(event);
     pointer = undefined;
+    endStroke();
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
-    if (tap && active && hitCharacter(event) && !reduced) {
+    if (tap && headTap) reactions?.preview('pet');
+    else if (tap && active && !reduced && hitCharacter(event)) {
       acting.trigger('touch'); authored.react('touch'); details.listenCue();
     }
   });
-  renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; });
-  renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; });
-  const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
+  renderer.domElement.addEventListener('pointerleave', endStroke);
+  renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; endStroke(); });
+  renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; endStroke(); });
   const stance = new PlantedStance(avatar.scene, bone, height, avatar.meta.metaVersion === '0' ? -1 : 1);
-  const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
   const arms = new ArmRig(bone, armSign);
   const armTargets = new ArmTargets(avatar.scene, bone, height, armSign);
   const articulation = new ArticulationRig(bone, armSign);
@@ -302,12 +328,20 @@ async function main() {
     window.companion.bodyStatus.choreography = {
       clip: authored.clip, track: authored.track, mode: authored.mode, enabled: authored.enabled, time: authored.age,
     };
+    if (requestedReaction) { reactions?.preview(requestedReaction); requestedReaction = undefined; }
+    const reactionDelta = Math.min(.15, timeline.playbackDelta);
+    reactions?.update(reactionDelta, phase === 'thinking', reduced || !acting.settings.enabled, armTargets, articulation);
+    window.companion.bodyStatus.reactions = reactions?.status;
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {
       const gaze = !reduced && pointerGaze && pointerGaze.until > performance.now() ? pointerGaze : undefined;
-      avatar.lookAt.autoUpdate = !(faceTest || pose.naturalGaze || gaze);
-      if (gaze) {
+      const typing = reactions?.typing ?? 0;
+      avatar.lookAt.autoUpdate = !(faceTest || pose.naturalGaze || gaze || typing > .05);
+      if (typing > .05) {
+        avatar.lookAt.yaw = THREE.MathUtils.damp(avatar.lookAt.yaw, 0, 7, delta);
+        avatar.lookAt.pitch = THREE.MathUtils.damp(avatar.lookAt.pitch, typing * 13, 7, delta);
+      } else if (gaze) {
         avatar.lookAt.yaw = THREE.MathUtils.damp(avatar.lookAt.yaw, -gaze.x*15, 8, delta);
         avatar.lookAt.pitch = THREE.MathUtils.damp(avatar.lookAt.pitch, -gaze.y*9, 8, delta);
       } else if (faceTest || pose.naturalGaze) { avatar.lookAt.yaw = pose.eyeYaw; avatar.lookAt.pitch = pose.eyePitch; }
@@ -320,7 +354,7 @@ async function main() {
     for (const [name, key] of [['ih','mouthIH'],['ou','mouthOU'],['ee','mouthEE'],['oh','mouthOH']]) {
       avatar.expressionManager?.setValue(name, faceTest && phase !== 'speaking' ? pose[key] : 0);
     }
-    avatar.expressionManager?.setValue('happy', pose.smile);
+    avatar.expressionManager?.setValue('happy', Math.max(pose.smile, (reactions?.happiness ?? 0) * .88));
     for (const [channel, name] of expressiveChannels) if (name) avatar.expressionManager?.setValue(name, pose[channel]);
     const natural = useAuthored && acting.settings.enabled && !reduced;
     if (natural && phase === 'listening' && phase !== previousPhase) details.listenCue();
@@ -336,6 +370,20 @@ async function main() {
         camera.projectionMatrix.elements[9] += (seatPoint.y + .12) * seatWeight;
       }
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      camera.updateMatrixWorld();
+      if (reactions && head) {
+        head.getWorldPosition(headCenter);
+        headCenter.y += .059 * height;
+        headEdge.copy(headCenter);
+        headEdge.x += .074 * height;
+        headCenter.project(camera);
+        headEdge.project(camera);
+        const width = nativeSize?.width ?? innerWidth, viewportHeight = nativeSize?.height ?? innerHeight;
+        const radius = Math.abs(headEdge.x - headCenter.x) * width * .5;
+        headZone = { x: (1 + headCenter.x) * width * .5, y: (1 - headCenter.y) * viewportHeight * .5, rx: radius, ry: radius * 1.14 };
+        window.companion.bodyStatus.headZone = headZone;
+        reactions.drawHearts(reactionDelta, camera);
+      }
       renderer.render(scene, camera);
     }
     const sample = cadence.sample(performance.now());

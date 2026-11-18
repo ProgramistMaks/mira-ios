@@ -114,6 +114,7 @@ let modelCalls = 0;
 let activityVersion = 0;
 let aiKeyRevision = 0;
 let updating = false;
+let avatarPhase = 'idle';
 let lastModelCheck;
 function modelConfig() {
   const s = store.data.settings;
@@ -1884,6 +1885,7 @@ const actions = {
       detail: uiLabel(detail),
     })),
     overlay: !!overlay,
+    avatarPhase,
     seated,
     seatOnTaskbar,
     version: app.getVersion(),
@@ -2535,7 +2537,11 @@ const actions = {
     if (action === 'close') main.close();
   },
   motion: ({ id, temporary }) => push({ type: 'motion', id, temporary: temporary === true }),
-  phase: ({ value }) => overlay?.webContents.send('update', { type: 'phase', value }),
+  phase: ({ value }) => {
+    if (!['idle', 'listening', 'thinking', 'speaking'].includes(value)) return;
+    avatarPhase = value;
+    overlay?.webContents.send('update', { type: 'phase', value });
+  },
   level: ({ value }) =>
     overlay?.webContents.send('update', {
       type: 'level',

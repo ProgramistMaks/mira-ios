@@ -4,6 +4,7 @@ let state,
   last,
   seq = 0,
   phase = 'idle',
+  phaseRevision = 0,
   seated = false,
   motion = 'auto',
   replayPending = false,
@@ -32,7 +33,9 @@ function ready() {
   }
 }
 async function update() {
+  const revision = phaseRevision;
   state = await call('state');
+  if (phaseRevision === revision) phase = state.avatarPhase;
   setReduced(state.settings.reduced);
   $('#open').textContent = state.settings.name;
   $('#avatar').title = state.settings.name;
@@ -59,6 +62,7 @@ window.desk.on((e) => {
     ready();
   }
   if (e.type === 'phase') {
+    phaseRevision++;
     phase = e.value;
     a?.setState(phase, !!state?.settings.reduced);
   }

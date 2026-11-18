@@ -933,6 +933,10 @@ export function model(s, c) {
             btn('По ситуации', 'playModelClip', 'orbit', '', 'auto'),
             btn('Потанцевать', 'dance', 'music-2'),
           ) +
+          acts(
+            btn('Погладить по голове', 'previewReaction', 'sparkles', '', 'pet'),
+            btn('Показать печать', 'previewReaction', 'keyboard', '', 'typing'),
+          ) +
           ((c.catalog?.nayuClips || []).length
             ? '<div class="row">' +
               '<label class="field">Исходные анимации Astra<select id="nayuClip">' +

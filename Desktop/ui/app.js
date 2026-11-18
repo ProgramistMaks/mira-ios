@@ -145,9 +145,13 @@ function setupAvatar() {
   a.configureChoreography(cache.gesture);
   a.configurePerformance({ emotion: cache.emotion || 'auto', variant: -1 });
   a.setFrameRate(state.settings.fps);
-  a.setState(voice.enabled ? 'listening' : 'idle', state.settings.reduced);
+  a.setState(sending ? 'thinking' : voice.enabled ? 'listening' : 'idle', state.settings.reduced);
   a.setMotionOutput(!!state.motionPort);
   a.setActive(sceneVisible());
+  if (cache.reactionPreview) {
+    a.playReaction(cache.reactionPreview);
+    cache.reactionPreview = null;
+  }
 }
 avatarFrame.addEventListener('load', () => {
   if (state) setupAvatar();
@@ -169,6 +173,7 @@ function renderFrame() {
   a?.setActive(visible);
   if ((visible || state.motionPort) && !a?.ready && !avatarReadyTimer) setupAvatar();
   a?.setFrameRate(state.settings.fps);
+  if (a?.ready) a.setState(a.phase, state.settings.reduced);
   $('#nameplate span').textContent = state.settings.name;
   avatarFrame.title = state.settings.name;
 }
@@ -1543,6 +1548,17 @@ async function handle(action, id) {
       cache.modelPreview = !cache.modelPreview;
       render();
       return;
+    case 'previewReaction': {
+      cache.reactionPreview = id;
+      if (!cache.modelPreview) {
+        cache.modelPreview = true;
+        render();
+      }
+      if (!avatar()?.ready) return;
+      avatar().playReaction(id);
+      cache.reactionPreview = null;
+      return;
+    }
     case 'playNayuClip':
     case 'playModelClip': {
       const clip = action === 'playNayuClip' ? val('nayuClip') : id;
