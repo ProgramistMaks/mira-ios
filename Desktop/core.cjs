@@ -22,11 +22,12 @@ const normal = (s) =>
     .trim();
 const uid = () => randomUUID();
 const widgetNames = {
-  focus: 'Фокус',
-  tasks: 'Задачи',
   notes: 'Заметки',
+  tasks: 'Задачи',
   events: 'Календарь',
-  clock: 'Часы',
+  clock: 'Дата и время',
+  reminders: 'Напоминания',
+  focus: 'Фокус',
   weather: 'Погода',
   rates: 'Курсы валют',
   music: 'Плеер',
@@ -42,7 +43,9 @@ function widgetLayout(input) {
     seen.add(row.id);
     rows.push({ id: row.id, visible: row.visible !== false });
   }
-  for (const id of Object.keys(widgetNames)) if (!seen.has(id)) rows.push({ id, visible: true });
+  for (const id of Object.keys(widgetNames))
+    if (!seen.has(id))
+      rows.push({ id, visible: ['notes', 'tasks', 'events', 'clock', 'reminders', 'system'].includes(id) });
   return rows;
 }
 const defaults = () => ({
@@ -51,6 +54,12 @@ const defaults = () => ({
     user: '',
     role: 'Дружелюбный личный компаньон. Отвечай по-русски.',
     theme: 'cream',
+    graphLines: 'round',
+    allowTypos: true,
+    phraseThreshold: 0.9,
+    routineSeconds: 0,
+    routineSteps: 0,
+    routineRepeats: 0,
     widgets: widgetLayout(),
     island: false,
     islandPin: true,
@@ -116,6 +125,7 @@ const defaults = () => ({
     },
   ],
   files: [],
+  commandGroups: [],
   avatars: [],
   voices: [],
   tools: [],
@@ -139,6 +149,7 @@ class Store {
       settings: {
         ...initial.settings,
         introDone: Boolean(disk.settings),
+        ...(disk.settings ? { allowTypos: false, routineSteps: 160, routineRepeats: 10 } : {}),
         ...disk.settings,
         widgets: widgetLayout(disk.settings?.widgets),
       },
@@ -209,7 +220,7 @@ function routine(input) {
       throw Error('Укажи имя процесса');
     if (
       ['wait', 'focus', 'repeat'].includes(b.kind) &&
-      (!Number.isInteger(+value) || +value < 1 || +value > { wait: 120, focus: 240, repeat: 10 }[b.kind])
+      (!Number.isInteger(+value) || +value < 1 || +value > { wait: 120, focus: 240, repeat: 10000 }[b.kind])
     )
       throw Error('Проверьте длительность или число повторов');
     if (b.kind === 'shutdownTimer' && (!Number.isInteger(+value) || +value < 1 || +value > 480))
@@ -254,17 +265,23 @@ function routine(input) {
     blocks,
   };
 }
-async function runRoutine(input, perform, signal) {
+async function runRoutine(input, perform, signal, limits = {}) {
   const spec = routine(input),
     repeats = new Map();
   let index = 0;
   for (let steps = 0; index < spec.blocks.length; steps++) {
     signal?.throwIfAborted();
-    if (steps >= 160) throw Error('Превышено число шагов. Проверьте связи в команде');
+    if (steps >= (limits.routineSteps || 10000))
+      throw Error('Превышено число шагов. Проверьте связи в команде');
+    if (steps && steps % 64 === 0) {
+      await new Promise((resolve) => setImmediate(resolve));
+      signal?.throwIfAborted();
+    }
     const b = spec.blocks[index];
     if (b.kind === 'repeat') {
       const count = repeats.get(index) || 1;
       if (count < +b.value) {
+        if (count >= (limits.routineRepeats || 10000)) throw Error('Превышен лимит итераций цикла');
         repeats.set(index, count + 1);
         index = b.alternate;
         continue;

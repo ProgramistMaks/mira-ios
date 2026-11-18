@@ -115,8 +115,6 @@ function nav(next) {
   page = next;
   $('#home').classList.remove('widgets-open');
   $('#panelWidgets').setAttribute('aria-expanded', 'false');
-  if (page === 'commands' && !cache.draft && state.routines.length)
-    cache.draft = structuredClone(state.routines[0]);
   $('#drawer').hidden = true;
   render();
   if (page === 'desk') refreshSystem();
@@ -160,7 +158,17 @@ $('#sectionNav').onclick = (e) => {
   const id = e.target.closest('button')?.dataset.section;
   if (id) document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'instant' });
 };
+const boardObserver = new ResizeObserver((entries) => {
+  for (const { target } of entries) {
+    const tile = target.closest('.boardTile');
+    if (!tile) continue;
+    const gap = 12;
+    const span = Math.ceil((target.offsetHeight + 2 + gap) / (4 + gap));
+    tile.style.gridRowEnd = 'span ' + span;
+  }
+});
 function renderPage() {
+  boardObserver.disconnect();
   if (page === 'home') {
     sections();
     return;
@@ -168,11 +176,17 @@ function renderPage() {
   const previous = $('#content').scrollTop;
   $('#content').classList.toggle('expandedGraph', page === 'commands' && !!cache.expanded);
   $('#content').innerHTML = pages[page](state, cache);
+  if (page === 'desk') {
+    $('#boardMenu').ontoggle = () =>
+      $('#panelWidgets').setAttribute('aria-expanded', String(!!$('#boardMenu')?.matches(':popover-open')));
+    document.querySelectorAll('.tileInner').forEach((inner) => boardObserver.observe(inner));
+  }
   if (page === 'desk' && state.music && $('#musicSlot')) {
     setMusic();
     $('#musicSlot').append(music);
   }
   sections();
+  if (page === 'commands') filterCommandList();
   $('#content').scrollTop = previous;
 }
 function setMusic() {
@@ -183,7 +197,7 @@ function setMusic() {
 }
 music.addEventListener('play', () => {
   avatar()?.dance();
-  call('motion', { id: 'dance' });
+  call('motion', { id: 'dance', temporary: true });
 });
 function cards() {
   const s = state;
@@ -191,6 +205,7 @@ function cards() {
     clock: ['clock-3', '', clock.format(new Date())],
     focus: ['timer', 'gold', timerTime(s.focus)],
     tasks: ['list-checks', 'green', s.tasks.filter((t) => !t.done).length + ' в списке'],
+    reminders: ['calendar-days', '', s.events.filter((e) => !e.fired).length + ' запланировано'],
     events: [
       'calendar-days',
       '',
@@ -400,7 +415,9 @@ async function refresh() {
 async function refreshSystem() {
   try {
     cache.sys = await call('system');
-    if (page === 'desk' && !$('dialog[open]')) renderPage();
+    const value = $('[data-tile=system] .boardValue');
+    if (value) value.textContent = cache.sys.ram + '% памяти';
+    if (cache.openWidget === 'system') drawWidget();
   } catch {}
 }
 const val = (id) => $('#' + id)?.value || '';
@@ -463,6 +480,7 @@ async function saveSettings(data) {
 }
 function loadDraft(id) {
   const r = state.routines.find((r) => r.id === id);
+  cache.commandTab = 'editor';
   cache.draft = r ? structuredClone(r) : pages.newRoutine();
   cache.node = 0;
   renderPage();
@@ -497,7 +515,41 @@ function drawWidgets() {
       btn('Сбросить', 'resetWidgets', 'rotate-ccw'),
   );
 }
+async function moveBoardTile(from, to) {
+  const layout = [...state.settings.widgets],
+    a = layout.findIndex((w) => w.id === from),
+    b = layout.findIndex((w) => w.id === to);
+  if (a < 0 || b < 0 || a === b) return;
+  layout.splice(b, 0, layout.splice(a, 1)[0]);
+  await saveSettings({ widgets: layout });
+}
+const boardContent = $('#content');
+boardContent.addEventListener('dragstart', (e) => {
+  const tile = e.target.closest('.boardTile[draggable=true]');
+  if (tile) {
+    e.dataTransfer.setData('application/x-mira-widget', tile.dataset.tile);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+});
+boardContent.addEventListener('dragover', (e) => {
+  if (
+    cache.boardEditing &&
+    e.target.closest('.boardTile') &&
+    e.dataTransfer.types.includes('application/x-mira-widget')
+  )
+    e.preventDefault();
+});
+boardContent.addEventListener('drop', (e) => {
+  const tile = e.target.closest('.boardTile'),
+    from = e.dataTransfer.getData('application/x-mira-widget');
+  if (cache.boardEditing && tile && from) {
+    e.preventDefault();
+    moveBoardTile(from, tile.dataset.tile).catch(err);
+  }
+});
 async function handle(action, id) {
+  $('#boardMenu')?.hidePopover();
+  if (action === 'add-reminders') action = 'add-events';
   if (action?.startsWith('remove-')) {
     await call('remove', { kind: action.slice(7), id });
     return;
@@ -562,7 +614,7 @@ async function handle(action, id) {
       closeModal();
       return;
     case 'resetWidgets':
-      cache.widgetDraft = Object.keys(state.widgetNames).map((id) => ({ id, visible: true }));
+      cache.widgetDraft = structuredClone(state.defaultWidgets);
       drawWidgets();
       return;
     case 'commitItem':
@@ -576,6 +628,18 @@ async function handle(action, id) {
       });
       closeModal();
       return;
+    case 'boardEdit':
+      cache.boardEditing = !cache.boardEditing;
+      renderPage();
+      return;
+    case 'boardUp':
+    case 'boardDown': {
+      const visible = state.settings.widgets.filter((w) => w.visible),
+        i = visible.findIndex((w) => w.id === id);
+      const next = visible[i + (action === 'boardUp' ? -1 : 1)];
+      if (next) await moveBoardTile(id, next.id);
+      return;
+    }
     case 'day':
       $('#home').classList.remove('widgets-open');
       $('#panelWidgets').setAttribute('aria-expanded', 'false');
@@ -631,6 +695,7 @@ async function handle(action, id) {
       await call('run', { id });
       return;
     case 'commandEditor':
+      cache.commandTab = 'editor';
       closeModal();
       nav('commands');
       return;
@@ -944,7 +1009,7 @@ async function handle(action, id) {
       return;
     case 'dance':
       avatar()?.dance();
-      await call('motion', { id: 'dance' });
+      await call('motion', { id: 'dance', temporary: true });
       return;
     case 'replay':
       avatar()?.replayGesture();
@@ -1082,6 +1147,103 @@ async function handle(action, id) {
     case 'edit':
       loadDraft(id);
       return;
+    case 'commandTab':
+      pages.captureDraft(cache.draft);
+      cache.commandTab = id;
+      renderPage();
+      $('#content').scrollTop = 0;
+      return;
+    case 'groupRoutine':
+      loadDraft('');
+      cache.draft.group = id;
+      renderPage();
+      return;
+    case 'newCommandGroup':
+      modal(
+        'Новая папка',
+        field('Название', 'commandGroup', '') + btn('Создать папку', 'saveCommandGroup', 'plus'),
+      );
+      return;
+    case 'saveCommandGroup':
+      await call('createCommandGroup', { name: val('commandGroup') });
+      closeModal();
+      await refresh();
+      return;
+    case 'saveRoutineLimits': {
+      const limits = {};
+      for (const key of ['routineSeconds', 'routineSteps', 'routineRepeats']) limits[key] = Number(val(key));
+      await saveSettings(limits);
+      toast('Пределы сохранены');
+      return;
+    }
+    case 'scanCommandApps': {
+      const items = await call('scanCommandApps');
+      modal(
+        'Приложения из меню «Пуск»',
+        items.length
+          ? '<div class="appChoices">' +
+              items
+                .map(
+                  (v) =>
+                    '<div><label><input type="checkbox" data-app-id="' +
+                    esc(v.id) +
+                    '" checked> ' +
+                    esc(v.name) +
+                    '</label><input type="text" aria-label="Фраза запуска: ' +
+                    esc(v.name) +
+                    '" maxlength="160" data-app-phrase="' +
+                    esc(v.id) +
+                    '" value="' +
+                    esc('открой ' + v.name) +
+                    '"></div>',
+                )
+                .join('') +
+              '</div>' +
+              (state.models.some((m) => m.id === state.settings.model && m.installed)
+                ? btn('Подобрать фразы локальной моделью', 'suggestAppPhrases', 'sparkles')
+                : '') +
+              btn('Создать команды', 'addAppCommands', 'check')
+          : '<p>Ярлыки приложений не найдены. Поиск использует меню «Пуск» на компьютере с Windows.</p>',
+      );
+      return;
+    }
+    case 'suggestAppPhrases': {
+      const panel = $('.appChoices');
+      const inputs = new Map(
+        [...panel.querySelectorAll('[data-app-phrase]')].map((el) => [el.dataset.appPhrase, [el, el.value]]),
+      );
+      const ids = [...panel.querySelectorAll('[data-app-id]:checked')].map((el) => el.dataset.appId);
+      const b = $('[data-act=suggestAppPhrases]');
+      b.disabled = true;
+      try {
+        const suggested = await call('suggestAppPhrases', { ids });
+        if (!panel.isConnected) return;
+        for (const [key, phrase] of Object.entries(suggested)) {
+          const [el, old] = inputs.get(key);
+          if (el.value === old) el.value = phrase;
+        }
+      } finally {
+        b.disabled = false;
+      }
+      return;
+    }
+    case 'addAppCommands': {
+      const ids = [...document.querySelectorAll('[data-app-id]:checked')].map((x) => x.dataset.appId);
+      const phrases = Object.fromEntries(
+        [...document.querySelectorAll('[data-app-phrase]')].map((el) => [el.dataset.appPhrase, el.value]),
+      );
+      const n = await call('addAppCommands', { ids, phrases });
+      closeModal();
+      await refresh();
+      toast('Добавлено команд: ' + n);
+      return;
+    }
+    case 'addBaseCommands': {
+      const n = await call('addBaseCommands');
+      await refresh();
+      toast('Добавлено команд: ' + n);
+      return;
+    }
     case 'describeCommand':
       modal(
         'Команда из описания',
@@ -1101,6 +1263,7 @@ async function handle(action, id) {
     case 'openDraft': {
       const item = state.chats.find((c) => c.id === current)?.messages[+id]?.draft;
       if (item) {
+        cache.commandTab = 'editor';
         nav('commands');
         cache.draft = structuredClone(item);
         cache.node = 0;
@@ -1528,6 +1691,9 @@ document.addEventListener('change', (e) => {
     accent: { accent: v },
     glow: { glow: +v },
     glass: { glass: v === 'on' },
+    graphLines: { graphLines: v },
+    allowTypos: { allowTypos: v === 'on' },
+    phraseThreshold: { phraseThreshold: Number(v) },
     avatarPick: { avatar: v },
     overlayHeight: { overlayHeight: +v },
     overlayAnchor: { overlayAnchor: v },
@@ -1667,6 +1833,14 @@ $('#recentChat').onclick = async () => {
   }
 };
 $('#panelWidgets').onclick = () => {
+  if (page === 'desk') {
+    const menu = $('#boardMenu');
+    if (menu) {
+      menu.togglePopover();
+      $('#panelWidgets').setAttribute('aria-expanded', String(menu.matches(':popover-open')));
+    }
+    return;
+  }
   if (page !== 'home') nav('home');
   const visible = $('#home').classList.toggle('widgets-open');
   $('#panelWidgets').setAttribute('aria-expanded', String(visible));
@@ -1801,9 +1975,12 @@ setInterval(() => {
   const now = new Date();
   $('#time').textContent = clock.format(now);
   document.querySelectorAll('[data-wall-time]').forEach((el) => (el.textContent = clock.format(now)));
-  document
-    .querySelectorAll('[data-wall-date]')
-    .forEach((el) => (el.textContent = pages.wallDate.format(now)));
+  for (const el of document.querySelectorAll('[data-wall-date]')) {
+    if (el.dataset.wallDate !== now.toDateString()) {
+      el.dataset.wallDate = now.toDateString();
+      el.innerHTML = pages.wallCalendar(now);
+    }
+  }
   document.querySelectorAll('[data-clock]').forEach((el) => (el.textContent = timerTime(state.focus)));
 }, 1000);
 setInterval(() => {
@@ -1829,8 +2006,32 @@ async function boot() {
 }
 boot().catch(err);
 
+function filterCommandList() {
+  const query = (cache.commandQuery || '').trim().toLocaleLowerCase('ru');
+  const routines = new Map(state.routines.map((r) => [r.id, r]));
+  let count = 0;
+  for (const group of document.querySelectorAll('[data-command-group]')) {
+    let visible = !query || group.dataset.commandGroup.toLocaleLowerCase('ru').includes(query);
+    for (const row of group.querySelectorAll('[data-act=edit]')) {
+      const r = routines.get(row.dataset.id);
+      row.hidden =
+        !!query && ![r.name, r.group, r.phrase].some((v) => v?.toLocaleLowerCase('ru').includes(query));
+      if (!row.hidden) {
+        visible = true;
+        count++;
+      }
+    }
+    group.hidden = !visible;
+  }
+  const empty = $('#noCommandMatches');
+  if (empty) empty.hidden = !query || count > 0;
+}
 $('#historyQuery').oninput = renderChat;
 document.addEventListener('input', (e) => {
+  if (e.target.id === 'commandQuery') {
+    cache.commandQuery = e.target.value;
+    filterCommandList();
+  }
   if (e.target.id === 'prefsQuery') {
     const q = e.target.value.trim().toLocaleLowerCase();
     for (const card of document.querySelectorAll('#content .box'))

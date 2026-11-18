@@ -111,9 +111,11 @@ try {
       .first()
       .click();
     await p.waitForFunction((name) => document.querySelector('#area').dataset.page === name, dest);
-    assert.ok((await p.locator('#content h2').first().innerText()).length);
+    if (dest === 'desk') await expect(p.locator('.deskGrid')).toBeVisible();
+    else assert.ok((await p.locator('#content h2').first().innerText()).length);
   }
   await p.locator('[data-go=commands]').first().click();
+  await p.locator('.flowSide [data-act=edit]').first().click();
   await p.locator('.flowNode[data-node]').first().waitFor();
   if (evidence) await p.screenshot({ path: path.join(evidence, 'commands.png') });
   await p.locator('[data-act=newRoutine]').click();

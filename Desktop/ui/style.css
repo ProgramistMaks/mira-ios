@@ -1669,9 +1669,16 @@ body[data-bubbles='false'] .bubble.assistant {
   background: var(--tint);
   color: var(--ink);
 }
-#area[data-page='home'] #hero:before {
-  display: block;
-  inset: 0;
+.shell {
+  position: relative;
+  isolation: isolate;
+}
+.shell::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+  inset: 28px 0 12px;
   background: var(--muted);
   mask: url(sketch.png) repeat 50% 20% / 440px 370px;
   opacity: 0.24;
@@ -2144,4 +2151,364 @@ footer {
 .wallClock small {
   text-align: right;
   color: var(--muted);
+}
+.commandTabs,
+.flowSide header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.commandTabs {
+  border-radius: 18px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.commandTabs button {
+  padding: 8px 14px;
+  border-radius: 14px;
+}
+.commandTabs [aria-current='page'] {
+  background: var(--hero);
+  box-shadow: 0 1px 4px var(--line);
+  font-weight: 750;
+}
+.commandPreferences {
+  width: min(760px, 100%);
+  margin: auto;
+}
+.commandPreferences h4 {
+  margin: 20px 0 6px;
+}
+.commandPreferences p {
+  margin-bottom: 10px;
+}
+.flowSide {
+  min-height: min(460px, 65vh);
+}
+.flowSide header h3 {
+  margin: 0 auto 0 0;
+}
+.flowSide header .cmdTool,
+.flowSide h4 button {
+  width: 27px;
+  height: 27px;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+}
+.flowSide h4 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.flowSide #commandQuery {
+  width: 100%;
+  margin: 12px 0;
+}
+.commandEmpty {
+  align-self: start;
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 22px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+  gap: 16px;
+  padding: 30px;
+  min-height: min(285px, 50vh);
+}
+.commandEmpty svg {
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+}
+.appChoices {
+  display: grid;
+  gap: 4px;
+  max-height: 55vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+.appChoices label {
+  padding: 5px;
+}
+
+#area[data-page='commands'] #content {
+  padding: 12px clamp(8px, 2vw, 32px);
+}
+#area[data-page='commands'] .workflow {
+  grid-template-columns: minmax(170px, 29%) minmax(0, 1fr);
+  gap: clamp(12px, 2vw, 28px);
+  align-items: start;
+}
+#area[data-page='commands'] .heading h2 {
+  font:
+    700 clamp(22px, 2.6vw, 34px) Rubik,
+    sans-serif;
+}
+@media (max-width: 760px) {
+  #area[data-page='commands'] .workflow {
+    grid-template-columns: 1fr;
+  }
+  .flowSide {
+    min-height: 0;
+  }
+  .commandTabs button {
+    padding-inline: 6px;
+  }
+}
+.boardTools {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.deskGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  grid-auto-flow: row dense;
+  grid-auto-rows: 4px;
+  gap: 12px;
+  align-items: start;
+}
+.boardTile {
+  padding: 0;
+  align-self: start;
+}
+.tileInner {
+  padding: 16px;
+}
+.tileInner header,
+.boardOrder {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.tileInner header {
+  margin-bottom: 10px;
+}
+.tileInner header h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 auto 0 0;
+  font-size: 16px;
+}
+.tileInner header small {
+  color: var(--muted);
+}
+.tileInner header button,
+.boardOrder button {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+}
+.tileInner header svg,
+.boardOrder svg {
+  width: 15px;
+  height: 15px;
+}
+.boardEmpty {
+  min-height: 104px;
+  padding: 14px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+[data-tile='notes'] .boardEmpty {
+  background: color-mix(in srgb, var(--panel) 88%, white);
+  align-content: start;
+  justify-content: start;
+  text-align: left;
+  box-shadow: 0 2px 6px var(--shade);
+  border-radius: 10px;
+}
+[data-tile='notes'] .boardEmpty svg {
+  display: none;
+}
+.boardBody > .btn {
+  margin-top: 8px;
+}
+.boardEmpty svg {
+  width: 24px;
+  height: 24px;
+}
+.boardValue {
+  font-size: 18px;
+  margin: 10px 0;
+}
+.boardTile[draggable='true'] header {
+  cursor: grab;
+}
+.boardOrder {
+  padding-top: 8px;
+  justify-content: flex-end;
+}
+#area[data-page='model'] .sceneNav {
+  display: none;
+}
+@media (min-width: 940px) {
+  .deskGrid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    container-type: inline-size;
+  }
+  .boardTile {
+    grid-column: span 4;
+  }
+  [data-tile='system'],
+  [data-tile='events'] {
+    grid-column: span 3;
+  }
+  [data-tile='notes'] .tileInner,
+  [data-tile='tasks'] .tileInner,
+  [data-tile='events'] .tileInner {
+    aspect-ratio: 1;
+  }
+  [data-tile='clock'] .tileInner {
+    min-height: 15.6cqw;
+  }
+}
+.appChoices > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 8px;
+  align-items: center;
+}
+.appChoices > div > input {
+  min-width: 0;
+}
+.boardTools[popover]:not(:popover-open) {
+  display: none;
+}
+.boardTools:popover-open {
+  position: fixed;
+  inset: 85px 12px auto auto;
+  z-index: 10;
+  margin: 0;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  box-shadow: 0 8px 22px var(--shade);
+  display: grid;
+}
+.boardTools .btn {
+  justify-content: flex-start;
+}
+#area[data-page='desk'] #content {
+  padding: 10px clamp(8px, 2.4vw, 34px) 15px;
+}
+:is(.boardTile, .commandEmpty) svg:not(.wires) {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.boardEmpty {
+  font-size: 15px;
+}
+[data-tile='notes'] .boardEmpty,
+[data-tile='tasks'] .boardEmpty {
+  min-height: clamp(130px, 22vh, 175px);
+}
+[data-tile='reminders'] .boardEmpty {
+  min-height: 74px;
+}
+@media (min-width: 940px) {
+  [data-tile='reminders'] {
+    grid-column: span 6;
+  }
+  [data-tile='reminders'] .tileInner {
+    min-height: 26cqw;
+  }
+}
+[data-tile='notes'] .boardBody > .btn,
+[data-tile='tasks'] .boardBody > .btn {
+  width: 100%;
+  justify-content: center;
+}
+.clockDate {
+  display: grid;
+  text-align: right;
+  line-height: 1.15;
+}
+.clockDate b {
+  font:
+    730 clamp(28px, 3.5vw, 48px) / 1 Rubik,
+    sans-serif;
+}
+.clockDate span {
+  font-weight: 700;
+}
+.clockDate small {
+  font-size: 12px;
+}
+.tileInner {
+  display: flex;
+  flex-direction: column;
+}
+.tileInner h3 {
+  overflow: hidden;
+  white-space: nowrap;
+}
+.tileInner h3 svg {
+  box-sizing: content-box;
+  flex-shrink: 0;
+  padding: 7px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.boardBody,
+.boardBody .boardEmpty {
+  flex: 1;
+}
+.boardBody {
+  display: flex;
+  flex-direction: column;
+}
+.boardBody > .btn {
+  align-self: flex-start;
+}
+[data-tile='reminders'] .boardEmpty {
+  display: block;
+  text-align: left;
+  padding: 0;
+}
+[data-tile='reminders'] .boardEmpty svg {
+  display: none;
+}
+[data-tile='clock'][draggable='false'] .tileInner {
+  position: relative;
+  justify-content: center;
+}
+[data-tile='clock'][draggable='false'] .boardBody {
+  flex: none;
+}
+[data-tile='clock'][draggable='false'] header {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+}
+[data-tile='clock'][draggable='false'] header > :not(button),
+[data-tile='clock'][draggable='false'] header svg {
+  display: none;
+}
+[data-tile='clock'][draggable='false'] header button {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: transparent;
 }

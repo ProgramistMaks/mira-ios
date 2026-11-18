@@ -47,6 +47,7 @@ export class ChoreographyRig {
     this.previousPosition=this.origin.clone();this.hipVelocity=new Vector3();this.previousDt=0;
     this.q=new Quaternion(); this.a=new Quaternion(); this.b=new Quaternion();
     this.parent=new Quaternion(); this.inverseParent=new Quaternion(); this.rootQ=new Quaternion(); this.v=new Vector3(); this.v2=new Vector3();
+    this.viewOffset=0;this.priorViewOffset=0;
     this.mode='auto'; this.clip='idle'; this.age=0; this.fade=1;
     this.history=[]; this.nextDance=45+random()*45; this.elapsed=0; this.silence=1;
     this.breathCycle=0; this.inhale=0;
@@ -64,6 +65,7 @@ export class ChoreographyRig {
   begin(id, direct=false) {
     const dt=this.enabled && !this.wasReduced ? this.previousDt : 0;
     this.enabled=true;
+    this.priorViewOffset=this.viewOffset;
     this.clip=id; this.age=0; this.fade=0; this.direct=direct;
     this.targets?.resetTwist();
     this.stance?.beginTransfer(dt>0);
@@ -136,6 +138,9 @@ export class ChoreographyRig {
     this.previousPosition.copy(this.hips.position);
     for(const entry of this.entries)entry.previous.copy(entry.node.quaternion);
     const shot=SHOTS[this.clip];
+    const targetView=at(shot?.view,this.age);
+    this.viewOffset=this.wasReduced ? 0 : this.clip==='arrival' ? targetView :
+      this.priorViewOffset+(targetView-this.priorViewOffset)*smooth(this.fade/.4);
     const source=(this.clip==='walk'||this.clip==='dance')?this.clip:'idle';
     // All staged gestures share frame zero of the retargeted idle clip.
     // Store it in local bone space so it remains valid on a rotated turntable.
@@ -152,7 +157,7 @@ export class ChoreographyRig {
     this.stance?.sampleLanding();
     // Crossfade *after* solving both arms and the support foot so their
     // transition starts at the actual previous displayed pose.
-    const blend=smooth(this.fade/.4);
+    const blend=smooth(this.fade/(this.clip==='arrival'?.12:.4));
     if(blend<1) {
       // Carry the displayed velocity through an interruption, then let it die
       // away. Replaying from a static snapshot stalls a moving hand for a frame.
@@ -283,6 +288,21 @@ export class ChoreographyRig {
       leftFootForward:.012,rightFootForward:-.014,leftFootLift:foot*.038,leftKnee:foot*.45,leftFootPitch:foot*.15,
       leftShoulderLift:leftLead*(shot?.shoulder??.075),rightShoulderLift:rightLead*(shot?.shoulder??.075),
       leftShoulderForward:leftLead*.09,rightShoulderForward:rightLead*.09};
+    if(this.clip==='templeDance'){
+      // The first side step widens the base. The soles stay planted while
+      // the pelvis crosses between them during the repeated upper-body phrase.
+      for(const [i,side] of sides.entries()){
+        const step=smooth((t-.08-i*.22)/.37);
+        pose[side+'FootSide']+=.085*step;
+        pose[side+'FootLift']+=.026*Math.sin(Math.PI*step)**2;
+      }
+      const swing=Math.cos((t-.68)*Math.PI/.95)*smooth((t-.20)/.48);
+      pose.hipsSide+=.043*swing;
+      pose.hipsDrop+=.009*(1-Math.abs(swing));
+      pose.hipsRoll+=.048*swing;
+      pose.leftKnee+=.14*Math.max(0,swing);
+      pose.rightKnee+=.14*Math.max(0,-swing);
+    }
     if(shot?.floor){
       const settle=at(shot.floor,t);
       pose.floorSeat=settle;
@@ -290,10 +310,10 @@ export class ChoreographyRig {
       pose.hipsForward=-.018*settle;
       // The feet tuck in succession so the ankles pass at different heights.
       for(const [i,side] of sides.entries()){
-        const fold=smooth((t-.30-i*.16)/.88);
+        const fold=smooth((t-.13-i*.09)/.66);
         pose[side+'FootSide']-=.073*fold;
         pose[side+'FootForward']+=(i?.159:.103)*fold;
-        pose[side+'FootLift']=(i?.023:.008)*fold+.032*Math.sin(Math.PI*fold)**2;
+        pose[side+'FootLift']=(i?.043:.026)*fold+.050*Math.sin(Math.PI*fold)**2;
         pose[side+'FootRoll']=(i?1:-1)*.19*fold;
       }
     }

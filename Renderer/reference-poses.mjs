@@ -13,6 +13,7 @@ const tracks=Object.fromEntries(Object.entries(rows).map(([id,frames])=>[id,
 // Application time of source frame zero, blend-in and blend-out intervals.
 // Cuts and captions in the references delimit each usable continuous take.
 const timing={
+  templeDance:[0,0,.14], arrival:[0,0,.10,4.8,5.5], sitFloor:[0,0,.28],
   welcome:[.40,0,.48,4.18,4.54], dance:[0,0,.30,1.70,1.98],
   temples:[.18,.05,.66,2.64,3.51], cheek:[.89,.05,.91,2.84,3.9],
   fold:[1.0,.09,1.04,3.31,4.51], palms:[.57,.04,.62,2.12,3.53],
@@ -47,12 +48,27 @@ export function referencePose(id,time){
     const span=last-first;
     frame=last-Math.abs((frame-first)%(2*span)-span);
   }
+  // After the opening step, alternate the two temple positions with each transfer.
+  if(id==='templeDance' && frame>24) frame=24+(frame-24)%57;
   const v=curves.map(c=>at(c,frame));
   const hand=(i,d,pole)=>({x:v[i],y:v[i+1],elbowX:v[pole]??v[i+2],elbowY:v[pole+1]??v[i+3],z:v[d],elbowZ:v[d+1]});
   const left=hand(0,11,17),right=hand(4,13,19);
+  if(id==='arrival' || id==='sitFloor' || id==='templeDance') left.fitDepth=right.fitDepth=true;
   if(id==='welcome'){
     directPalm(left,at(welcomeHands.left,frame),at(welcomeHands.leftRoll,frame));
     directPalm(right,at(welcomeHands.right,frame),at(welcomeHands.rightRoll,frame));
+  }else if(id==='arrival'){
+    const drop=ramp((frame-27)/18), cheek=ramp((frame-90)/20);
+    directPalm(left,12+144*drop,18+47*drop);
+    directPalm(right,5+149*drop-164*cheek,-24+92*drop-46*cheek);
+  }else if(id==='templeDance'){
+    const up=ramp((frame-5)/17);
+    directPalm(left,105-151*up,40-18*up);
+    directPalm(right,115-159*up,32-8*up);
+  }else if(id==='sitFloor'){
+    const settle=ramp((frame-22)/20);
+    directPalm(left,20-153*settle,15+48*settle);
+    directPalm(right,29-162*settle,16+52*settle);
   }else if(id==='palms'){
     const reach=ramp((frame-38)/8);
     left.fingers=[.06+.55*reach,.99-.28*reach,.06];
@@ -129,6 +145,20 @@ export class ReferenceFrame {
       this.rotate(nodes.neck,.35*(pose.roll-roll)*pose.weight);
       this.rotate(nodes.head,.65*(pose.roll-roll)*pose.weight);
     }
+  }
+  fitArmDepth(shoulder,elbow,wrist,upperLength,lowerLength,weight){
+    // A screen-space segment fixes two coordinates. Recover the remaining
+    // depth from this avatar's segment length, in the viewer-facing plane.
+    this.axis.set(0,0,this.sign).applyQuaternion(this.root.getWorldQuaternion(this.q));
+    const fit=(origin,end,length)=>{
+      const difference=this.diff.subVectors(end,origin);
+      const depth=difference.dot(this.axis);
+      const planarSquared=Math.max(0,difference.lengthSq()-depth*depth);
+      const fitted=Math.sqrt(Math.max(0,length*length-planarSquared));
+      end.addScaledVector(this.axis,(fitted-depth)*weight);
+    };
+    fit(shoulder,elbow,upperLength);
+    fit(elbow,wrist,lowerLength);
   }
   place(world,x,y,z,weight){
     this.root.worldToLocal(world);

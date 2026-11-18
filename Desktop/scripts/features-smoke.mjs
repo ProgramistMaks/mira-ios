@@ -134,6 +134,58 @@ try {
     .toBeGreaterThan(0.012);
   if (evidence) await p.screenshot({ path: path.join(evidence, 'wardrobe.png') });
   await go('commands');
+  const commandTab = (id) => p.locator('[data-act=commandTab][data-id=' + id + ']').click();
+  await expect(p.locator('.commandEmpty')).toBeVisible();
+  await commandTab('settings');
+  await p.locator('#graphLines').selectOption('angular');
+  await expect.poll(async () => (await state()).settings.graphLines).toBe('angular');
+  await p.locator('#routineSeconds').fill('1');
+  await p.locator('[data-act=saveRoutineLimits]').click();
+  await expect.poll(async () => (await state()).settings.routineSeconds).toBe(1);
+  await p.locator('[data-act=addBaseCommands]').click();
+  await expect
+    .poll(async () => (await state()).routines.filter((r) => r.group === 'Базовые команды').length)
+    .toBeGreaterThan(0);
+  const baseCount = (await state()).routines.length;
+  await p.locator('[data-act=addBaseCommands]').click();
+  assert.equal((await state()).routines.length, baseCount);
+  await p.locator('[data-act=scanCommandApps]').click();
+  await expect(p.locator('#modalTitle')).toContainText('меню «Пуск»');
+  await close();
+  await commandTab('editor');
+  await p.locator('#commandQuery').fill('абракадабра');
+  await expect(p.locator('#noCommandMatches')).toBeVisible();
+  await p.locator('#commandQuery').fill('');
+  await p.locator('[data-act=newCommandGroup]').click();
+  await p.locator('#commandGroup').fill('Экран');
+  await p.locator('[data-act=saveCommandGroup]').click();
+  await p.locator('[data-act=groupRoutine][data-id="Экран"]').click();
+  await expect(p.locator('#rGroup')).toHaveValue('Экран');
+  await p.locator('#rName').fill('Моя команда');
+  await commandTab('settings');
+  await commandTab('editor');
+  await expect(p.locator('#rName')).toHaveValue('Моя команда');
+  await expect(p.locator('.wires path').first()).toHaveAttribute('d', / H .* V /);
+  await p.locator('#rPhrase').fill('включи напоминалки');
+  await p.locator('#kind').selectOption('wait');
+  await p.locator('[data-act=addBlock]').click();
+  await p.locator('#nodeValue').fill('3');
+  await p.locator('[data-act=saveRoutine]').click();
+  const controlled = (await state()).routines.find((r) => r.phrase === 'включи напоминалки');
+  const timeout = await p.evaluate(async (id) => {
+    try {
+      await window.desk.call('run', { id });
+      return '';
+    } catch (e) {
+      return e.message;
+    }
+  }, controlled.id);
+  assert.match(timeout, /Истёк лимит времени/);
+  await commandTab('settings');
+  await p.locator('#routineSeconds').fill('0');
+  await p.locator('[data-act=saveRoutineLimits]').click();
+  await expect.poll(async () => (await state()).settings.routineSeconds).toBe(0);
+  await commandTab('editor');
   await p.locator('[data-act=describeCommand]').click();
   await p.locator('#commandPrompt').fill('Утро: поставь таймер на 25 минут и запиши планы');
   await p.locator('[data-act=generateCommand]').click();
@@ -145,7 +197,18 @@ try {
     .toBe(true);
   console.log('Wardrobe and command generation passed');
   await go('desk');
+  await p.locator('#panelWidgets').click();
+  await p.locator('[data-act=boardEdit]').click();
+  const firstTile = await p.locator('.boardTile').first().getAttribute('data-tile');
+  const secondTile = await p.locator('.boardTile').nth(1).getAttribute('data-tile');
+  await p.locator('[data-tile="' + firstTile + '"]').dragTo(p.locator('[data-tile="' + secondTile + '"]'));
+  await expect.poll(async () => (await state()).settings.widgets[0].id).toBe(secondTile);
+  await p.locator('[data-act=boardUp][data-id="' + firstTile + '"]').click();
+  await expect.poll(async () => (await state()).settings.widgets[0].id).toBe(firstTile);
+  await p.locator('#panelWidgets').click();
+  await p.locator('[data-act=boardEdit]').click();
   await expect(p.locator('#content [data-wall-time]')).toHaveText(/\d{2}:\d{2}/);
+  await p.locator('#panelWidgets').click();
   await p.locator('#content [data-act=widgets]').click();
   await p.locator('[data-widget=weather]').uncheck();
   await p.locator('[data-act=widgetUp][data-id=tasks]').click();

@@ -36,6 +36,7 @@ const {
   templates,
   checkVRM,
 } = require('./core.cjs');
+const commandLibrary = require('./command-library.cjs');
 const { LocalModels } = require('./models.cjs'),
   network = require('./network.cjs'),
   speech = require('./speech.cjs'),
@@ -608,6 +609,10 @@ async function execute(spec, remote = false) {
   if (executing) throw Error('Уже выполняется команда');
   const controller = new AbortController();
   executing = controller;
+  const limits = store.data.settings;
+  const timeout = limits.routineSeconds
+    ? setTimeout(() => controller.abort(Error('Истёк лимит времени команды')), limits.routineSeconds * 1000)
+    : null;
   try {
     await runRoutine(
       spec,
@@ -779,9 +784,16 @@ async function execute(spec, remote = false) {
         }
       },
       controller.signal,
+      limits,
     );
+    controller.signal.throwIfAborted();
     return 'Выполнена команда «' + spec.name + '».';
+  } catch (e) {
+    if (controller.signal.aborted && controller.signal.reason?.message === 'Истёк лимит времени команды')
+      throw controller.signal.reason;
+    throw e;
   } finally {
+    clearTimeout(timeout);
     if (executing === controller) executing = null;
   }
 }
@@ -881,7 +893,7 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
     addItem('events', reminder.text, reminder.time, { repeat: reminder.repeat });
     return { text: 'Напомню ' + new Date(reminder.time).toLocaleString('ru-RU') + '.' };
   }
-  const spec = d.routines.find((r) => normal(r.phrase) && normal(r.phrase) === normal(text));
+  const spec = commandLibrary.matchPhrase(d.routines, text, s);
   if (spec) return { text: await execute(spec, remote) };
   if (/^(потанцуй|танцуй|станцуй)[.!]?$/iu.test(text)) {
     push({ type: 'dance' });
@@ -1210,7 +1222,67 @@ function workFor(id) {
 const gitWorkshop = () => new Workshop(store.data.workshopRepo, secret('workshop'));
 const voiceLibrary = new (require('./voice-library.cjs').VoiceLibrary)();
 const panelNames = ['chess', 'cat', 'shadow', 'freedoom'];
+async function startMenuApps() {
+  if (process.platform !== 'win32') return [];
+  const roots = [app.getPath('appData'), process.env.ProgramData]
+    .filter(Boolean)
+    .map((root) => path.join(root, 'Microsoft', 'Windows', 'Start Menu', 'Programs'));
+  return commandLibrary.scanShortcuts(roots);
+}
+function addCommandSpecs(specs) {
+  const count = commandLibrary.addMissing(store.data, specs);
+  if (count) changed();
+  return count;
+}
 const actions = {
+  createCommandGroup: ({ name }) => {
+    const group = String(name || '')
+      .trim()
+      .slice(0, 60);
+    if (!group) throw Error('Укажи название папки');
+    if (!store.data.commandGroups.includes(group)) {
+      store.data.commandGroups.push(group);
+      changed();
+    }
+    return group;
+  },
+  scanCommandApps: async () => (await startMenuApps()).map(({ id, name }) => ({ id, name })),
+  suggestAppPhrases: async ({ ids }) => {
+    const selected = new Set(ids);
+    const apps = (await startMenuApps()).filter((v) => selected.has(v.id));
+    if (!apps.length) return {};
+    const { model } = store.data.settings;
+    if (!models.list().some((v) => v.id === model && v.installed))
+      throw Error('Выбери скачанную модель во вкладке «ИИ».');
+    const local = await models.connection(model);
+    return commandLibrary.suggestPhrases(apps, (messages) =>
+      network.ai(local.base, local.key, local.id, messages, AbortSignal.timeout(120000), {
+        temperature: 0,
+        max_tokens: 1500,
+        response_format: { type: 'json_object' },
+        chat_template_kwargs: { enable_thinking: false },
+      }),
+    );
+  },
+  addAppCommands: async ({ ids, phrases = {} }) => {
+    const selected = new Set(ids);
+    const specs = (await startMenuApps())
+      .filter((v) => selected.has(v.id))
+      .map((v) => {
+        const fileId = 'start-' + v.id;
+        return {
+          id: 'open-' + v.id,
+          name: 'Открыть ' + v.name,
+          group: 'Приложения',
+          phrase: (typeof phrases[v.id] === 'string' && phrases[v.id].trim()) || 'открой ' + v.name,
+          blocks: [{ kind: 'file', value: fileId }],
+          link: { id: fileId, name: v.name, path: v.file, kind: 'file' },
+        };
+      });
+    return addCommandSpecs(specs);
+  },
+  addBaseCommands: () =>
+    addCommandSpecs(templates.map((r) => ({ ...r, id: 'base-' + r.id, group: 'Базовые команды' }))),
   screenWidget: ({ id, mode }) => screenWidgets.set(id, mode),
   islandAction: (args) => island.action(args),
   reindex: async () => {
@@ -1458,6 +1530,7 @@ const actions = {
     ...store.public(),
     outfits,
     widgetNames: require('./core.cjs').widgetNames,
+    defaultWidgets: require('./core.cjs').widgetLayout(),
     models: models.list(),
     templates,
     extensionPresets: extensionPresets.map(({ id, name, detail }) => ({ id, name, detail })),
@@ -1502,6 +1575,7 @@ const actions = {
       theme: ['cream', 'night', 'sage', 'rose', 'graphite', 'coal', 'mist', 'system'],
       provider: ['local', 'endpoint'],
       fps: [30, 60, 120, 240],
+      graphLines: ['round', 'angular'],
       overlayHeight: [300, 440, 600, 750],
       overlayAnchor: ['bottom-right', 'bottom-left', 'top-right', 'top-left'],
       avatar: ['vita', ...store.data.avatars.map((x) => x.id)],
@@ -1521,6 +1595,25 @@ const actions = {
       silence: [0.4, 2],
     })) {
       if (k in input && Number.isFinite(+input[k])) s[k] = Math.min(hi, Math.max(lo, +input[k]));
+    }
+    for (const [key, max] of [
+      ['routineSeconds', 86400],
+      ['routineSteps', 10000],
+      ['routineRepeats', 10000],
+    ]) {
+      if (!(key in input)) continue;
+      const n = input[key];
+      if (!Number.isInteger(n) || n < 0 || n > max) throw Error('Значение должно быть от 0 до ' + max);
+      s[key] = n;
+    }
+    if ('phraseThreshold' in input) {
+      if (
+        !Number.isFinite(input.phraseThreshold) ||
+        input.phraseThreshold < 0.85 ||
+        input.phraseThreshold > 1
+      )
+        throw Error('Порог сходства должен быть от 0,85 до 1,00');
+      s.phraseThreshold = input.phraseThreshold;
     }
     if ('wakeAlias' in input) s.wakeAlias = String(input.wakeAlias).trim().slice(0, 50);
     if ('widgets' in input) s.widgets = require('./core.cjs').widgetLayout(input.widgets);
@@ -1555,6 +1648,7 @@ const actions = {
     for (const k of [
       'reduced',
       'introDone',
+      'allowTypos',
       'showAvatar',
       'glass',
       'island',
@@ -1869,7 +1963,7 @@ const actions = {
     }
     if (action === 'close') main.close();
   },
-  motion: ({ id }) => push({ type: 'motion', id }),
+  motion: ({ id, temporary }) => push({ type: 'motion', id, temporary: temporary === true }),
   phase: ({ value }) => overlay?.webContents.send('update', { type: 'phase', value }),
   level: ({ value }) =>
     overlay?.webContents.send('update', {

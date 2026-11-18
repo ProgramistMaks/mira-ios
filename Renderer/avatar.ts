@@ -160,14 +160,17 @@ async function main() {
   const target = new THREE.Object3D(); target.position.set(0, center.y + height * 0.24, 3);
   scene.add(target);
   if (avatar.lookAt) avatar.lookAt.target = target;
+  const desktopStage = location.protocol === 'mira:' && location.hostname === 'desk';
+  const restingFrame = desktopStage ? .068 : 0;
+  let framingOffset = 0;
   const resize = () => {
     const width = Math.max(1, nativeSize?.width ?? innerWidth);
     const viewportHeight = Math.max(1, nativeSize?.height ?? innerHeight);
     renderer.setSize(width, viewportHeight);
     camera.aspect = width / viewportHeight;
-    const distance = height * 0.54 / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const distance = height * (desktopStage ? .585 : .54) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     camera.position.set(0, center.y + height * 0.03, distance * Math.max(1, 0.65 / camera.aspect));
-    camera.lookAt(0, center.y, 0); camera.updateProjectionMatrix();
+    camera.lookAt(0, center.y, 0); camera.position.y += (restingFrame + framingOffset) * height; camera.updateProjectionMatrix();
   };
   applyResize = resize; resize(); addEventListener('resize', resize);
   let rotation = 0;
@@ -235,7 +238,7 @@ async function main() {
   let displayedVariant = -1;
   let mouth = 0, elapsed = 0;
   let previousPhase = phase;
-  acting.update(0, reduced); acting.trigger('greeting'); authored.react(location.protocol === 'mira:' && location.hostname === 'desk' ? 'arrival' : 'greeting'); details.listenCue();
+  acting.update(0, reduced); acting.trigger('greeting'); authored.react(desktopStage ? 'arrival' : 'greeting'); details.listenCue();
   let lastPoseTime = 0;
   const renderFrame = (timestamp: number) => {
     // A cap is a target, not a claim about measured device performance.
@@ -269,6 +272,8 @@ async function main() {
       if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
       armTargets.apply(pose);
     } else authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+    framingOffset = useAuthored && !reduced ? authored.viewOffset : 0;
+    camera.position.y = center.y + height * (.03 + restingFrame + framingOffset);
     seatWeight = THREE.MathUtils.damp(seatWeight, seated ? 1 : 0, 7, delta);
     if (seatWeight > .001) {
       for (const side of ['left','right'] as const) {
@@ -278,7 +283,7 @@ async function main() {
       }
     }
     window.companion.bodyStatus.behavior = useAuthored ? authored.title : body.behaviorLabel;
-    window.companion.bodyStatus.choreography = {clip: authored.clip, mode: authored.mode, enabled: authored.enabled};
+    window.companion.bodyStatus.choreography = {clip: authored.clip, mode: authored.mode, enabled: authored.enabled, time: authored.age};
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {

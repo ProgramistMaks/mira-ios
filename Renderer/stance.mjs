@@ -61,6 +61,7 @@ class PlantedLeg {
       Math.max(0, bounded(pose, side + 'FootLift', .1)), bounded(pose, side + 'FootForward', .09 + .09 * seat) * this.forward).multiplyScalar(height);
     this.offset.y += kneeLift;
     this.footTilt.setFromEuler(this.footEuler.set(-this.forward * bounded(pose, side + 'FootPitch', .4), 0, bounded(pose, side + 'FootRoll', .2)));
+    this.foldedAnkle = seat;
     const outward = .45 * seat;
     this.kneeUp = 1.08 * seat;
     this.kneeIn=(side==='left'?1:-1)*(bounded(pose,side+'KneeIn',.65)-outward);
@@ -114,6 +115,9 @@ class PlantedLeg {
     this.worldRotation.multiply(this.anchorRotation).multiply(this.footTilt);
     this.foot.parent.getWorldQuaternion(this.parentRotation).invert();
     this.foot.quaternion.copy(this.parentRotation.multiply(this.worldRotation));
+    // Once the ankles cross, release the floor orientation and let each
+    // foot follow its shin. Contact transfers retain their cached orientation.
+    if (!transferring && this.foldedAnkle) this.foot.quaternion.slerp(this.restFoot, .70*this.foldedAnkle);
     if(this.rollFoot){
       this.toes.quaternion.copy(this.toeRest);
       // Keep the toe pad level during contact; let it follow the foot in flight.

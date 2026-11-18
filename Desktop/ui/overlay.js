@@ -5,6 +5,8 @@ let state,
   phase = 'idle',
   seated = false,
   motion = 'auto',
+  replayPending = false,
+  dancePending = false,
   timer;
 function ready() {
   clearTimeout(timer);
@@ -18,6 +20,15 @@ function ready() {
   a.setState(phase, state.settings.reduced);
   a.setDesktopPose(seated);
   a.configureChoreography(motion);
+  if (replayPending) {
+    replayPending = false;
+    if (motion === 'dance') a.dance();
+    else if (motion !== 'auto') a.replayGesture();
+  }
+  if (dancePending) {
+    dancePending = false;
+    a.dance();
+  }
 }
 async function update() {
   state = await call('state');
@@ -34,11 +45,13 @@ $('#more').onclick = () => call('overlayMenu');
 window.desk.on((e) => {
   const a = avatar();
   if (e.type === 'refresh') update();
-  if (e.type === 'dance') a?.dance();
-  if (e.type === 'motion') {
+  if (e.type === 'dance' || (e.type === 'motion' && e.temporary)) {
+    dancePending = true;
+    ready();
+  } else if (e.type === 'motion') {
     motion = e.id;
-    if (e.id === 'dance') a?.dance();
-    else a?.configureChoreography(e.id);
+    replayPending = true;
+    ready();
   }
   if (e.type === 'phase') {
     phase = e.value;

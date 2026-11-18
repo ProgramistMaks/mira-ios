@@ -117,6 +117,12 @@ try {
   await action('projectAttach');
   await expect(p.locator('#attachment')).toHaveText('sample.md');
   await go('desk');
+  await p.locator('#panelWidgets').click();
+  await p.locator('#boardMenu [data-act=widgets]').click();
+  await p.locator('[data-widget=focus]').check();
+  await p.locator('[data-widget=launch]').check();
+  await p.locator('[data-act=saveWidgets]').click();
+  await p.locator('[data-tile=focus] header [data-act=day]').click();
   const widgetReady = app.waitForEvent('window');
   await p.locator('#place-focus').selectOption('pin');
   const widget = await widgetReady;
@@ -126,9 +132,19 @@ try {
   await expect.poll(async () => (await call('state')).focus.ends).toBeGreaterThan(0);
   await widget.locator('#pin').click();
   await expect(widget.locator('#pin')).toHaveAttribute('aria-pressed', 'false');
-  await widget.locator('#close').click();
+  await Promise.all([
+    widget.waitForEvent('close'),
+    widget
+      .locator('#close')
+      .click()
+      .catch((e) => {
+        if (!widget.isClosed()) throw e;
+      }),
+  ]);
   await expect.poll(async () => (await call('state')).screenWidgets.focus).toBeUndefined();
-  await action('addShortcut');
+  await action('dismissWidget');
+  await p.locator('[data-tile=launch] header [data-act=day]').click();
+  await p.locator('#widgetDrawer [data-act=addShortcut]').click();
   await p.locator('#launchName').fill('Мой ярлык');
   await action('saveShortcut');
   await expect.poll(async () => (await call('state')).shortcuts[0]?.name).toBe('Мой ярлык');
@@ -136,7 +152,7 @@ try {
   await app.close();
   app = await launch();
   const reopened = await app.firstWindow();
-  await reopened.locator('#heroName').waitFor();
+  await reopened.locator('#prompt').waitFor();
   const saved = await reopened.evaluate(() => window.desk.call('state'));
   assert.equal(saved.settings.introDone, true);
   assert.equal(saved.settings.silence, 1.25);

@@ -140,6 +140,21 @@ const scale = (title, key, value, items) =>
   );
 export const wallDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', weekday: 'long' });
 const wallTime = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
+export function wallCalendar(date) {
+  const parts = Object.fromEntries(wallDate.formatToParts(date).map(({ type, value }) => [type, value]));
+  return '<b>' + parts.day + '</b><span>' + parts.month + '</span><small>' + parts.weekday + '</small>';
+}
+function clockFace(now) {
+  return (
+    '<div class="wallClock"><time data-wall-time>' +
+    wallTime.format(now) +
+    '</time><div class="clockDate" data-wall-date="' +
+    now.toDateString() +
+    '">' +
+    wallCalendar(now) +
+    '</div></div>'
+  );
+}
 export function desk(s, c, only) {
   const w = c.weather,
     r = c.rates,
@@ -151,16 +166,9 @@ export function desk(s, c, only) {
   const money = ['USD', 'EUR', 'CNY', 'RUB'].map((x) => [x, x]);
   const temperature = (n) => Math.round(prefs.degree === 'F' ? 32 + n * 1.8 : n) + '°' + prefs.degree;
   const now = new Date();
+  if (!only) return widgetBoard(s, c, { w, r, sys, prefs, temperature, now });
   const cards = {
-    clock: box(
-      'Часы',
-      'clock-3',
-      '<div class="wallClock"><time data-wall-time>' +
-        wallTime.format(now) +
-        '</time><small data-wall-date>' +
-        wallDate.format(now) +
-        '</small></div>',
-    ),
+    clock: box('Дата и время', 'clock-3', clockFace(now)),
     launch: box(
       'Быстрый запуск',
       'play',
@@ -233,6 +241,7 @@ export function desk(s, c, only) {
     ),
     tasks: listBox(s, 'tasks', 'Задачи', 'list-checks', 'Здесь появятся твои задачи.'),
     notes: listBox(s, 'notes', 'Заметки', 'notebook-pen', 'Заметку можно надиктовать или записать здесь.'),
+    reminders: listBox(s, 'events', 'Напоминания', 'calendar-days', 'Напоминаний пока нет.'),
     events: listBox(s, 'events', 'Календарь', 'calendar-days', 'Напоминаний пока нет.'),
     weather: box(
       'Погода',
@@ -309,15 +318,131 @@ export function desk(s, c, only) {
     );
     cards[id] = cards[id].replace('</article>', place + '</article>');
   }
-  if (only) return cards[only] || '';
+  return cards[only] || '';
+}
+function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
   const active = s.settings.widgets.filter((w) => w.visible);
+  const tile = (id) => {
+    const open = rowAction('day', id, 'chevron-right', 'Открыть виджет «' + s.widgetNames[id] + '»');
+    const symbols = {
+      tasks: 'list-checks',
+      notes: 'notebook-pen',
+      events: 'calendar-days',
+      reminders: 'calendar-days',
+      clock: 'clock-3',
+      focus: 'timer',
+      system: 'cpu',
+      music: 'music-2',
+      weather: 'cloud-sun',
+      rates: 'banknote',
+      crypto: 'banknote',
+      launch: 'play',
+    };
+    let body,
+      addControl = '',
+      meta = '';
+    if (['notes', 'tasks', 'events', 'reminders'].includes(id)) {
+      const scheduled = id === 'events' || id === 'reminders';
+      const items = scheduled
+        ? s.events
+            .filter(
+              (e) =>
+                !e.fired && (id === 'reminders' || new Date(e.time).toDateString() === now.toDateString()),
+            )
+            .sort((a, b) => a.time - b.time)
+        : s[id];
+      meta =
+        id === 'events'
+          ? now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+          : String(items.length);
+      const placeholder = {
+        notes: 'Чистый лист. Добавь первую заметку.',
+        tasks: 'В этом списке пока пусто',
+        events: 'Ничего не запланировано',
+        reminders: 'Напоминаний пока нет.',
+      };
+      const addLabel = { notes: 'Новая заметка', tasks: 'Новая задача', events: 'Новое событие', reminders: 'Напомнить' }[id];
+      if (id !== 'notes') addControl = rowAction('add-' + id, '', 'plus', addLabel);
+      body = items.length
+        ? items.slice(0, 2).map((item) => entry(item, scheduled ? 'events' : id)).join('')
+        : '<div class="boardEmpty">' + ico(symbols[id]) + '<p>' + placeholder[id] + '</p></div>';
+      if (id === 'notes') body += btn(addLabel, 'add-notes', 'plus');
+    } else if (id === 'clock') {
+      body = clockFace(now);
+    } else if (id === 'focus') {
+      body =
+        '<div class="clock" data-clock>' +
+        timerTime(s.focus) +
+        '</div>' +
+        btn(s.focus.ends ? 'Пауза' : 'Начать', 'focusToggle', s.focus.ends ? 'pause' : 'play');
+    } else if (id === 'launch') {
+      body =
+        (s.shortcuts || [])
+          .slice(0, 3)
+          .map((v) => btn(v.name, 'shortcutGo', 'play', '', v.id))
+          .join('') + btn('Добавить ярлык', 'addShortcut', 'plus');
+    } else {
+      const value = {
+        system: sys ? sys.ram + '% памяти' : 'Получаю показания…',
+        music: s.music?.name || 'Дорожка не выбрана',
+        weather: w ? temperature(w.temp) + ' · ' + w.city : prefs.city,
+        rates: r
+          ? '1 ' +
+            prefs.exchangeFrom +
+            ' = ' +
+            (r[prefs.exchangeFrom] / r[prefs.exchangeTo]).toLocaleString('ru-RU', {
+              maximumFractionDigits: 4,
+            }) +
+            ' ' +
+            prefs.exchangeTo
+          : prefs.exchangeFrom + ' / ' + prefs.exchangeTo,
+        crypto:
+          c.crypto?.coin === prefs.cryptoCoin && c.crypto?.currency === prefs.currency
+            ? c.crypto.value.toLocaleString('ru-RU') + ' ' + prefs.currency.toUpperCase()
+            : prefs.cryptoCoin,
+      };
+      body =
+        '<div class="boardValue">' +
+        esc(value[id]) +
+        '</div>' +
+        btn('Подробнее', 'day', 'chevron-right', '', id);
+    }
+    const order = c.boardEditing
+      ? '<div class="boardOrder">' +
+        rowAction('boardUp', id, 'chevron-up', 'Переместить раньше') +
+        rowAction('boardDown', id, 'chevron-down', 'Переместить позже') +
+        '</div>'
+      : '';
+    return (
+      '<article class="box boardTile" data-tile="' +
+      id +
+      '" draggable="' +
+      Boolean(c.boardEditing) +
+      '"><div class="tileInner"><header>' +
+      '<h3>' +
+      ico(symbols[id]) +
+      esc(s.widgetNames[id]) +
+      '</h3><small>' +
+      esc(meta) +
+      '</small>' +
+      addControl +
+      open +
+      '</header>' +
+      '<div class="boardBody">' +
+      body +
+      '</div>' +
+      order +
+      '</div></article>'
+    );
+  };
   return (
-    heading(
-      'Рабочий стол',
-      acts(btn('Виджеты', 'widgets', 'sliders-horizontal'), btn('Найти файл', 'find', 'search')),
-    ) +
-    '<div class="grid deskGrid">' +
-    (active.length ? active.map((w) => cards[w.id]).join('') : empty('Выбери виджеты для рабочего стола.')) +
+    '<div id="boardMenu" popover="auto" class="boardTools">' +
+    btn(c.boardEditing ? 'Готово' : 'Редактировать', 'boardEdit', 'pencil') +
+    btn('Виджеты', 'widgets', 'sliders-horizontal') +
+    btn('Найти файл', 'find', 'search') +
+    '</div>' +
+    '<div class="deskGrid" aria-label="Рабочий стол">' +
+    (active.length ? active.map((w) => tile(w.id)).join('') : empty('Выбери виджеты для рабочего стола.')) +
     '</div>'
   );
 }
@@ -327,47 +452,143 @@ export function newRoutine() {
 export function commands(s, c) {
   const d = c.draft,
     list = s.routines;
-  const side =
-    '<div class="box flowSide"><h3>Мои команды</h3>' +
-    [...new Set(list.map((x) => x.group || 'Без группы'))]
-      .map(
-        (group) =>
-          '<h4>' +
-          esc(group) +
-          '</h4>' +
-          list
-            .filter((x) => (x.group || 'Без группы') === group)
-            .map((x) =>
-              btn(
-                x.name,
-                'edit',
-                d?.id === x.id ? 'circle-dot' : 'workflow',
-                d?.id === x.id ? 'selected' : '',
-                x.id,
-              ),
-            )
-            .join(''),
-      )
-      .join('') +
-    btn('Из описания', 'describeCommand', 'workflow') +
-    btn('Новая команда', 'newRoutine', 'plus') +
-    btn('Импорт JSON', 'importPack', 'upload') +
-    '</div>';
-  if (!d)
+  const setting = c.commandTab === 'settings';
+  const head = heading(
+    'Команды',
+    '<nav class="commandTabs" aria-label="Раздел команд">' +
+      [
+        ['editor', 'Редактор команд'],
+        ['settings', 'Настройки'],
+      ]
+        .map(
+          ([id, title]) =>
+            '<button data-act="commandTab" data-id="' +
+            id +
+            '" aria-current="' +
+            (setting === (id === 'settings') ? 'page' : 'false') +
+            '">' +
+            title +
+            '</button>',
+        )
+        .join('') +
+      '</nav>',
+  );
+  if (setting) {
+    const a = s.settings;
     return (
-      heading('Команды') +
-      '<div class="workflow">' +
-      side +
+      head +
+      '<div class="stack commandPreferences">' +
       box(
-        'Сценарии',
+        'Автонастройка',
         'workflow',
-        empty('Выбери команду или собери свою из блоков.') +
-          acts(
-            btn('Создать команду', 'newRoutine', 'plus', 'primary'),
-            btn('Мастерская', 'workshop', 'library'),
-          ),
+        '<p>Команды для открытия приложений из меню «Пуск» Windows.</p>' +
+          btn('Запустить автонастройку', 'scanCommandApps', 'search') +
+          '<h4>Базовые команды</h4><p>Добавить готовые сценарии для работы, музыки и управления компьютером.</p>' +
+          btn('Добавить базовые команды', 'addBaseCommands', 'plus'),
+      ) +
+      box(
+        'Граф',
+        'workflow',
+        select(
+          'Линии связей',
+          'graphLines',
+          [
+            ['angular', 'Угловые'],
+            ['round', 'Скруглённые'],
+          ],
+          a.graphLines,
+        ),
+      ) +
+      box(
+        'Сопоставление целых фраз',
+        'message-circle',
+        onOff('Допускать опечатки', 'allowTypos', a.allowTypos) +
+          select(
+            'Порог сходства',
+            'phraseThreshold',
+            Array.from({ length: 16 }, (_, i) => {
+              const v = (85 + i) / 100;
+              return [v, v.toFixed(2).replace('.', ',')];
+            }),
+            a.phraseThreshold,
+          ) +
+          '<p class="muted">Если фраза подходит нескольким командам, автоматический запуск пропускается.</p>',
+      ) +
+      box(
+        'Выполнение команд',
+        'timer',
+        field('Лимит времени (секунды)', 'routineSeconds', a.routineSeconds, 'number') +
+          field('Максимум шагов', 'routineSteps', a.routineSteps, 'number') +
+          field('Максимум итераций цикла', 'routineRepeats', a.routineRepeats, 'number') +
+          '<p class="muted">Ноль отключает таймер. Для шагов и повторов ноль задаёт предел 10 000.</p>' +
+          btn('Сохранить пределы', 'saveRoutineLimits', 'save'),
       ) +
       '</div>'
+    );
+  }
+  const iconAction = (title, action, icon) =>
+    '<button class="cmdTool" data-act="' +
+    action +
+    '" title="' +
+    title +
+    '" aria-label="' +
+    title +
+    '">' +
+    ico(icon) +
+    '</button>';
+  const groups = [...new Set([...s.commandGroups, ...list.map((x) => x.group || '')])];
+  const side =
+    '<aside class="box flowSide"><header><h3>Команды</h3>' +
+    iconAction('Импорт команд', 'importPack', 'upload') +
+    iconAction('Новая папка', 'newCommandGroup', 'folder-open') +
+    iconAction('Новая команда', 'newRoutine', 'plus') +
+    '</header>' +
+    '<input type="search" id="commandQuery" class="control" placeholder="Поиск…" aria-label="Поиск команд" value="' +
+    esc(c.commandQuery || '') +
+    '">' +
+    groups
+      .map((group) => {
+        const rows = list
+          .filter((x) => (x.group || '') === group)
+          .map((x) =>
+            btn(
+              x.name,
+              'edit',
+              d?.id === x.id ? 'circle-dot' : 'workflow',
+              d?.id === x.id ? 'selected' : '',
+              x.id,
+            ),
+          )
+          .join('');
+        return (
+          '<section data-command-group="' +
+          esc(group) +
+          '">' +
+          (group
+            ? '<h4>' +
+              esc(group) +
+              '<button data-act="groupRoutine" data-id="' +
+              esc(group) +
+              '" aria-label="Добавить команду в папку">' +
+              ico('plus') +
+              '</button></h4>'
+            : '') +
+          rows +
+          '</section>'
+        );
+      })
+      .join('') +
+    '<p id="noCommandMatches" class="muted" hidden>Совпадений нет</p>' +
+    btn('Из описания', 'describeCommand', 'workflow') +
+    '</aside>';
+  if (!d)
+    return (
+      head +
+      '<div class="workflow">' +
+      side +
+      '<section class="commandEmpty">' +
+      ico('workflow') +
+      '<p>Выбери команду из списка или создай новую</p></section></div>'
     );
   const selected = Math.max(0, Math.min(c.node || 0, d.blocks.length - 1)),
     b = d.blocks[selected];
@@ -384,27 +605,26 @@ export function commands(s, c) {
     const endX = target.x,
       endY = target.y + 32;
     const bend = Math.max(27, Math.abs(endX - x) * 0.44);
-    wires.push(
-      '<path class="' +
-        (alt ? 'alt' : '') +
-        '" d="M ' +
-        x +
-        ' ' +
-        y +
-        ' C ' +
-        (x + bend) +
-        ' ' +
-        y +
-        ' ' +
-        (endX - bend) +
-        ' ' +
-        endY +
-        ' ' +
-        endX +
-        ' ' +
-        endY +
-        '"/>',
-    );
+    const path =
+      s.settings.graphLines === 'angular'
+        ? 'M ' + x + ' ' + y + ' H ' + (x + endX) / 2 + ' V ' + endY + ' H ' + endX
+        : 'M ' +
+          x +
+          ' ' +
+          y +
+          ' C ' +
+          (x + bend) +
+          ' ' +
+          y +
+          ' ' +
+          (endX - bend) +
+          ' ' +
+          endY +
+          ' ' +
+          endX +
+          ' ' +
+          endY;
+    wires.push('<path class="' + (alt ? 'alt' : '') + '" d="' + path + '"/>');
   };
   edge(204, 72, pos[0]);
   for (const [i, n] of d.blocks.entries()) {
@@ -503,13 +723,11 @@ export function commands(s, c) {
     nodes.join('') +
     '</div></div>';
   return (
-    heading(
-      'Редактор команд',
-      acts(btn('Запустить', 'runRoutine', 'play'), btn('Сохранить', 'saveRoutine', 'save', 'primary')),
-    ) +
+    head +
     '<div class="workflow">' +
     side +
     '<article class="editPanel">' +
+    acts(btn('Запустить', 'runRoutine', 'play'), btn('Сохранить', 'saveRoutine', 'save', 'primary')) +
     field('Название', 'rName', d.name) +
     '<div class="grid">' +
     field('Группа', 'rGroup', d.group || '') +

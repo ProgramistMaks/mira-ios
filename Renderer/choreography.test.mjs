@@ -39,7 +39,7 @@ const point = name => bone(name).getWorldPosition(new Vector3()).divideScalar(he
 test('all menu clips produce finite, moving, different trajectories on Vita', () => {
   const ids = CHOREOGRAPHY.map(entry => entry.id);
   const samples = new Set();
-  assert.equal(new Set(ids).size,18);
+  assert.equal(new Set(ids).size,19);
   for (const id of ids) {
     hold(id,.1);
     const trajectory = [], names = ['leftHand','rightHand','leftFoot','rightFoot','head'];
@@ -82,10 +82,27 @@ test('chest hold, cheek, wave, index fingers and raised foot are distinguishable
   assert.ok(point('leftFoot').y-point('rightFoot').y>.035);
 });
 
+test('temple dance opens the stance once, points both index fingers and transfers weight between planted feet',()=>{
+  hold('templeDance',.12);
+  const startWidth=Math.abs(point('leftFoot').x-point('rightFoot').x);
+  advance(.80);
+  const feet=['leftFoot','rightFoot'].map(point), hip=point('hips');
+  assert.ok(Math.abs(feet[0].x-feet[1].x)>startWidth+.08);
+  for(const side of ['left','right']){
+    assert.ok(point(side+'Hand').y>point(side+'UpperArm').y-.04);
+    const curl=f=>bone(side+f+'Intermediate').quaternion.angleTo(new Quaternion());
+    assert.ok(curl('Middle')>curl('Index')+.30);
+  }
+  advance(.94);
+  assert.ok(Math.abs(point('hips').x-hip.x)>.025);
+  for(const [i,id] of ['leftFoot','rightFoot'].entries())
+    assert.ok(feet[i].distanceTo(point(id))<.018,'foot slides during sway');
+});
+
 test('floor sitting lowers the pelvis, folds both knees out and settles the feet before the hands', () => {
   hold('idle',1);
   const standing=point('hips').y;
-  hold('sitFloor',.55);
+  hold('sitFloor',.37);
   const lowering=point('hips').y;
   advance(2.1);
   const pelvis=point('hips'), left=point('leftFoot'), right=point('rightFoot');
@@ -328,6 +345,44 @@ test('visible wrists and elbows follow intermediate source frames on Vita',()=>{
     assert.ok(errors[Math.floor(errors.length/2)]<.09,clip+' median projected error');
     assert.ok(errors[Math.ceil(.9*errors.length)-1]<.16,clip+' 90th percentile projected error');
   }
+});
+
+// Independently read wrist and elbow positions in the desktop recordings.
+// Times start when the selected action appears. Coordinates use torso lengths.
+test('desktop greeting and floor sit track the visible arms at eight checkpoints', () => {
+  const clips={
+ arrival:[[.84,.41,.77,.57,.48,-.42,.82,-.58,.46],[1.28,.49,-.37,.55,-.54,-.50,-.38,-.54,-.54],[2.64,.52,-1.01,.51,-.55,-.52,-.94,-.48,-.55],[4.43,.53,-1.12,.48,-.59,-.28,-.15,-.38,-.53]],
+ sitFloor:[[.36,.74,-.35,.51,-.67,-.62,-.42,-.51,-.69],[.82,.29,-.51,.32,-.86,-.49,-.56,-.32,-.86],[1.75,.16,-.86,.39,-.66,-.19,-.86,-.41,-.65],[3.10,.14,-.85,.38,-.65,-.18,-.85,-.40,-.64]]
+};
+  for (const [id,frames] of Object.entries(clips)) {
+    hold('idle',1);
+    rig.configure(id); rig.replay();
+    const errors=[];
+    for(const [time,...marks] of frames){
+      while(rig.age<time-1e-5) rig.update(1/120);
+      const center=point('leftUpperArm').lerp(point('rightUpperArm'),.5);
+      const span=center.distanceTo(point('hips'));
+      ['leftHand','leftLowerArm','rightHand','rightLowerArm'].forEach((name,i)=>{
+        const v=point(name).sub(center).divideScalar(span);
+        errors.push(Math.hypot(v.x-marks[2*i],v.y-marks[2*i+1]));
+      });
+    }
+    errors.sort((a,b)=>a-b);
+    assert.ok((errors[7]+errors[8])/2<.075,id+' median arm error');
+    assert.ok(errors[14]<(id==='arrival'?.12:.30),id+' 90th percentile arm error');
+  }
+});
+
+test('the desktop entrance clears the viewport, lands and restores framing on interruption', () => {
+  hold('arrival',.05); assert.ok(rig.viewOffset>.85);
+  advance(.94); assert.ok(rig.viewOffset<-.065);
+  advance(.30); assert.ok(rig.viewOffset>0);
+  hold('sitFloor',1.6); assert.ok(rig.viewOffset<-.08);
+  rig.configure('idle'); rig.update(1/120);
+  assert.ok(rig.viewOffset<-.06);
+  advance(.42); assert.equal(rig.viewOffset,0);
+  hold('arrival',.05); rig.update(1/60,{reduced:true});
+  assert.equal(rig.viewOffset,0);
 });
 
 test('reference motion is stable at different refresh rates and follows viewer rotation',()=>{
