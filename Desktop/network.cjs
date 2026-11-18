@@ -151,13 +151,26 @@ function plain(s) {
     .replace(/\s+/g, ' ')
     .trim();
 }
-async function search(query, key, signal, fetcher = fetch) {
+function webQuery(text) {
+  const match = String(text)
+    .trim()
+    .match(
+      /^(?:(?:пожалуйста[, ]+)?(?:найди|поищи|поиск)(?:\s+в\s+(?:интернете|сети))?|(?:посмотри|проверь|поищи|найди|можешь\s+(?:найти|посмотреть|проверить))\s+в\s+(?:интернете|сети))[, :]+(?:пожалуйста[, ]+)?(.+)/isu,
+    );
+  return match?.[1]?.trim() || '';
+}
+async function search(query, key, signal, fetcher = fetch, fallback = true) {
   const request = (url, options, timeout) => response(url, { ...options, signal }, timeout, fetcher);
   if (key) {
-    const d = await (
-      await request('https://api.tavily.com/search', post({ query, max_results: 5 }, key))
-    ).json();
-    return (d.results || []).map((x) => ({ title: x.title, url: webURL(x.url), text: x.content }));
+    try {
+      const d = await (
+        await request('https://api.tavily.com/search', post({ query, max_results: 5 }, key), 12000)
+      ).json();
+      const items = (d.results || []).map((x) => ({ title: x.title, url: webURL(x.url), text: x.content }));
+      if (items.length || !fallback) return items;
+    } catch (e) {
+      if (signal?.aborted || !fallback) throw e;
+    }
   }
   const du = new URL('https://lite.duckduckgo.com/lite/');
   du.searchParams.set('q', query);
@@ -225,27 +238,93 @@ async function rates() {
     ...Object.fromEntries(['USD', 'EUR', 'CNY'].map((k) => [k, d.Valute[k].Value / d.Valute[k].Nominal])),
   };
 }
-async function fishVoices(key, query = '', page = 1) {
-  if (!key) throw Error('Укажите ключ Fish Audio');
-  const url = new URL('https://api.fish.audio/model');
-  url.search = new URLSearchParams({ title: query, page_number: String(page), page_size: '24' });
-  const d = await (await response(url, { headers: { Authorization: 'Bearer ' + key } })).json();
-  return (d.items || []).map((x) => ({ id: x._id, title: x.title }));
-}
-async function fishSpeech(key, id, text, signal) {
-  if (!key || !id) throw Error('Укажите ключ Fish Audio и выберите голос');
-  const b = await (
-    await response(
-      'https://api.fish.audio/v1/tts',
-      {
-        ...post({ text, reference_id: id, format: 'wav', sample_rate: 24000 }, key),
-        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, model: 's2-pro' },
-        signal,
-      },
-      120000,
+const fishModelId = /^[a-f0-9]{32}$/i;
+function sampleUrl(sample) {
+  if (fishModelId.test(sample?.task_id))
+    return 'https://platform.r2.fish.audio/task/' + sample.task_id + '.mp3';
+  const value = sample?.audio;
+  try {
+    const u = new URL(value);
+    if (
+      u.protocol === 'https:' &&
+      !u.username &&
+      !u.password &&
+      !u.port &&
+      (u.hostname === 'fish.audio' || u.hostname.endsWith('.fish.audio'))
     )
-  ).arrayBuffer();
-  return Buffer.from(b);
+      return u.href;
+  } catch {}
+  return '';
+}
+async function fishVoices(query = '', page = 1, fetcher = fetch) {
+  const url = new URL('https://api.fish.audio/model');
+  const size = 12;
+  url.search = new URLSearchParams({
+    title: String(query).trim().slice(0, 120),
+    type: 'tts',
+    page_number: String(Math.max(1, Math.min(100, Math.trunc(page) || 1))),
+    page_size: String(size),
+  });
+  const data = await (await response(url, {}, 12000, fetcher)).json();
+  if (!Array.isArray(data.items)) throw Error('Библиотека голосов вернула неизвестный ответ');
+  const items = data.items
+    .filter(
+      (x) =>
+        fishModelId.test(x._id) &&
+        x.title &&
+        !x.dmca_taken_down &&
+        x.visibility === 'public' &&
+        x.state === 'trained',
+    )
+    .map((x) => ({
+      id: x._id,
+      title: String(x.title).trim().slice(0, 120),
+      author: String(x.author?.nickname || '').slice(0, 110),
+      languages: (x.languages || []).slice(0, 6).join(', ').toUpperCase(),
+      sample: (x.samples || []).some(sampleUrl),
+    }));
+  return { items, more: data.has_more ?? data.items.length === size };
+}
+async function audioBytes(res, limit) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of res.body) {
+    size += chunk.length;
+    if (size > limit) throw Error('Аудиофайл слишком большой');
+    chunks.push(chunk);
+  }
+  if (size < 32) throw Error('Сервис вернул пустой аудиофайл');
+  return Buffer.concat(chunks);
+}
+async function fishSample(id, signal, fetcher = fetch) {
+  if (!fishModelId.test(id)) throw Error('Неизвестный голос Fish Audio');
+  const model = await (
+    await response('https://api.fish.audio/model/' + id, { signal }, 12000, fetcher)
+  ).json();
+  if (model._id !== id || model.visibility !== 'public' || model.dmca_taken_down)
+    throw Error('Голос недоступен в каталоге');
+  const url = (model.samples || []).map(sampleUrl).find(Boolean);
+  if (!url) throw Error('У этого голоса нет опубликованного примера');
+  return audioBytes(await response(url, { signal, redirect: 'error' }, 20000, fetcher), 12 * 1024 * 1024);
+}
+async function fishSpeech(key, id, text, signal, fetcher = fetch) {
+  if (!key || !fishModelId.test(id))
+    throw Error('Для ответов этим голосом укажи ключ Fish Audio и выбери голос');
+  const res = await response(
+    'https://api.fish.audio/v1/tts',
+    {
+      ...post(
+        { text: String(text).slice(0, 6000), reference_id: id, format: 'wav', sample_rate: 24000 },
+        key,
+      ),
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key, model: 's2-pro' },
+      redirect: 'error',
+      signal,
+    },
+    120000,
+    fetcher,
+  );
+  return audioBytes(res, 32 * 1024 * 1024);
 }
 async function mcp(config, method, params, signal) {
   const base = endpoint(config.url),
@@ -315,9 +394,11 @@ module.exports = {
   selectTool,
   community,
   search,
+  webQuery,
   weather,
   rates,
   fishSpeech,
   fishVoices,
+  fishSample,
   mcp,
 };

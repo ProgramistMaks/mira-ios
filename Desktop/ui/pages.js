@@ -329,6 +329,7 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
     const symbols = {
       tasks: 'list-checks',
       notes: 'notebook-pen',
+      mail: 'mail',
       events: 'calendar-days',
       reminders: 'calendar-days',
       clock: 'clock-3',
@@ -436,6 +437,7 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
           .join('') + btn('Добавить ярлык', 'addShortcut', 'plus');
     } else {
       const value = {
+        mail: s.mail.latest || (s.mail.boxes ? 'Входящие' : 'Ящик не подключён'),
         system: sys ? sys.ram + '% памяти' : 'Получаю показания…',
         music: s.music?.name || 'Дорожка не выбрана',
         weather: w ? temperature(w.temp) + ' · ' + w.city : prefs.city,
@@ -1036,11 +1038,140 @@ export function model(s, c) {
     '</div></div>'
   );
 }
+function voiceLibrary(s, c) {
+  const a = s.settings,
+    saved = s.fishFavorites || [],
+    favorites = c.fishTab === 'saved',
+    rows = favorites ? saved : c.fishList || [];
+  const list = rows
+    .map((v) => {
+      const selected = a.fishVoice === v.id && (a.voice === 'fish' || a.fishPending);
+      return (
+        '<li><div><strong>' +
+        esc(v.title) +
+        '</strong><small>' +
+        esc([v.author, v.languages].filter(Boolean).join(' · ')) +
+        '</small></div><div class="acts">' +
+        (v.sample === false
+          ? ''
+          : btn(
+              c.previewId === v.id ? 'Остановить' : 'Послушать',
+              'fishPreview',
+              c.previewId === v.id ? 'square' : 'play',
+              '',
+              v.id,
+            )) +
+        btn(
+          selected ? (a.fishPending ? 'Ожидает ключ' : 'Выбран') : 'Выбрать',
+          'fishPick',
+          selected ? 'check' : '',
+          '',
+          v.id,
+        ) +
+        btn(
+          saved.some((x) => x.id === v.id) ? 'Убрать из избранного' : 'В избранное',
+          'fishStar',
+          'star',
+          '',
+          v.id,
+        ) +
+        '</div></li>'
+      );
+    })
+    .join('');
+  return (
+    '<article class="box voiceLibrary"><h3>' +
+    ico('audio-lines') +
+    'Библиотека голосов</h3>' +
+    '<form id="fishSearchForm"><label for="fishQuery">Название или имя</label><div><input id="fishQuery" maxlength="120" placeholder="Например, Братишкин или Джарвис" value="' +
+    esc(c.fishInput ?? c.fishQuery ?? '') +
+    '"><button class="btn" type="submit">' +
+    ico('search') +
+    'Найти</button></div></form>' +
+    acts(
+      btn('Результаты поиска', 'fishResults', 'list'),
+      btn('Избранное · ' + saved.length, 'fishSaved', 'star'),
+    ) +
+    '<div aria-live="polite">' +
+    (c.fishError && !favorites
+      ? esc(c.fishError)
+      : c.fishLoading && !favorites
+        ? 'Ищу голоса…'
+        : !rows.length
+          ? favorites
+            ? 'Пока нет избранных голосов'
+            : c.fishList
+              ? 'Ничего не найдено'
+              : ''
+          : '') +
+    '</div>' +
+    '<ul class="fishRows">' +
+    list +
+    '</ul>' +
+    (!favorites && (c.fishPage > 1 || c.fishMore)
+      ? acts(
+          c.fishPage > 1 ? btn('Назад', 'fishPrev', 'chevron-left') : '',
+          c.fishMore ? btn('Дальше', 'fishNext', 'chevron-right') : '',
+        )
+      : '') +
+    '<div class="fishAccess">' +
+    (a.fishVoiceName && (a.voice === 'fish' || a.fishPending)
+      ? '<strong>' +
+        esc(a.fishVoiceName) +
+        (a.fishPending ? ' · выбран для подключения' : ' · голос ответов') +
+        '</strong>'
+      : '') +
+    '<p>Примеры из Fish Audio можно слушать бесплатно. Чтобы Мира произносила свои ответы выбранным голосом, нужен ключ Fish Audio.</p>' +
+    field(
+      s.keys.includes('fish') ? 'Ключ Fish Audio сохранён · заменить' : 'Ключ Fish Audio',
+      'fishKey',
+      '',
+      'password',
+    ) +
+    btn('Сохранить ключ', 'keyFish', 'save') +
+    '</div></article>'
+  );
+}
 export function voice(s, c) {
   const a = s.settings;
+  const options = (rows, selected, label) => {
+    const list = [
+      ['', 'По умолчанию'],
+      ...(rows || [])
+        .filter((d) => d.deviceId && d.deviceId !== 'default')
+        .map((d, i) => [d.deviceId, d.label || label + ' ' + (i + 1)]),
+    ];
+    if (selected && !list.some(([id]) => id === selected))
+      list.push([selected, 'Ранее выбранное устройство']);
+    return list;
+  };
   return (
     heading('Голос') +
     '<div class="grid">' +
+    voiceLibrary(s, c) +
+    box(
+      'Микрофон и динамики',
+      'mic',
+      select(
+        'Микрофон для распознавания голоса',
+        'microphoneId',
+        options(c.audioDevices?.inputs, a.microphoneId, 'Микрофон'),
+        a.microphoneId,
+      ) +
+        (c.audioDevices?.canRoute === false
+          ? ''
+          : select(
+              'Устройство вывода звука',
+              'speakerId',
+              options(c.audioDevices?.outputs, a.speakerId, 'Динамики'),
+              a.speakerId,
+            )) +
+        '<div class="micTest"><meter id="micLevel" min="0" max="1" value="0" aria-label="Уровень микрофона"></meter><output id="micReading">Проверка микрофона</output></div>' +
+        acts(
+          btn(c.testingMic ? 'Завершить проверку' : 'Проверить микрофон', 'testMic', 'mic'),
+          btn('Проверить голос', 'audition', 'volume-2'),
+        ),
+    ) +
     box(
       'Параметры разговора',
       'audio-lines',
@@ -1057,6 +1188,8 @@ export function voice(s, c) {
           ],
           String(a.sensitivity),
         ) +
+        onOff('Можно перебивать ответ голосом', 'interruptReplies', a.interruptReplies) +
+        scale('Следующая реплика без обращения, сек', 'wakeWindow', a.wakeWindow, [0, 3, 6, 10, 20, 30, 60]) +
         field('Слово активации', 'wakeAlias', a.wakeAlias || a.name) +
         btn('Сохранить слово', 'saveWake', 'save'),
     ) +
@@ -1130,53 +1263,6 @@ export function voice(s, c) {
         ) +
         acts(btn('Сохранить сервис', 'saveSpeechService', 'save')),
     ) +
-    box(
-      'Fish Audio',
-      'cloud-sun',
-      field(
-        s.keys.includes('fish') ? 'Ключ сохранён · заменить' : 'Ключ доступа',
-        'fishKey',
-        '',
-        'password',
-      ) +
-        acts(btn('Сохранить ключ', 'keyFish', 'save')) +
-        ((s.fishFavorites || []).length
-          ? '<h3>Избранное</h3>' +
-            s.fishFavorites
-              .map(
-                (v) =>
-                  '<div class="entry"><span>' +
-                  esc(v.title) +
-                  '</span>' +
-                  btn('Послушать', 'fishPreview', 'play', '', v.id) +
-                  btn('Выбрать', 'fishPick', '', '', v.id) +
-                  btn('Убрать', 'fishStar', 'x', '', v.id) +
-                  '</div>',
-              )
-              .join('')
-          : '') +
-        field('Поиск по библиотеке', 'fishQuery', c.fishQuery || '') +
-        acts(btn('Найти голоса', 'fishSearch', 'search')) +
-        (c.fishList || [])
-          .map(
-            (v) =>
-              '<div class="entry"><span>' +
-              esc(v.title) +
-              '</span>' +
-              btn('Послушать', 'fishPreview', 'play', '', v.id) +
-              btn(
-                (s.fishFavorites || []).some((x) => x.id === v.id) ? 'Из избранного' : 'В избранное',
-                'fishStar',
-                'library',
-                '',
-                v.id,
-              ) +
-              btn(a.fishVoice === v.id ? 'Выбран' : 'Выбрать', 'fishPick', '', '', v.id) +
-              '</div>',
-          )
-          .join('') +
-        (c.fishList?.length ? acts(btn('Следующая страница', 'fishNext', 'chevron-right')) : ''),
-    ) +
     '</div>'
   );
 }
@@ -1234,6 +1320,7 @@ export function ai(s, c) {
           '',
           'password',
         ) +
+        onOff('При сбое Tavily искать через DuckDuckGo или Bing', 'searchFallback', a.searchFallback) +
         acts(btn('Сохранить', 'keySearch', 'save'), btn('Поиск', 'searchNow', 'search')),
     ) +
     '<article class="box" style="grid-column:1/-1"><h3>' +

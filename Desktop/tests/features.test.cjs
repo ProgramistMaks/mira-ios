@@ -97,7 +97,7 @@ test('widget layout preserves new defaults and process condition follows the fal
     { id: 'notes', visible: true },
     { id: 'bad' },
   ]);
-  assert.equal(layout.length, 12);
+  assert.equal(layout.length, 13);
   assert.ok(layout.some((w) => w.id === 'clock' && w.visible));
   assert.deepEqual(layout[0], { id: 'notes', visible: false });
   assert.deepEqual(widgetLayout([{ id: 'notes', width: 1, height: 100 }])[0], {

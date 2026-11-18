@@ -15,3 +15,11 @@ export function address(text, name, waiting) {
   const rest = phrase.slice(match[0].length).trim();
   return rest ? { waiting: false, text: rest } : { waiting: false, reply: 'Я слушаю.' };
 }
+
+// Continuous conversation stays open. In name-activated mode a bare name also
+// opens one answer window when the optional follow-up interval is set to zero.
+export function followUpDelay(standby, waiting, first, seconds) {
+  if (!standby || waiting) return null;
+  const duration = Math.min(60, Math.max(0, Number(seconds) || 0));
+  return (first ? Math.max(8, duration) : duration) * 1000;
+}

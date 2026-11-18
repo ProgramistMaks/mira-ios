@@ -24,6 +24,7 @@ const normal = (s) =>
 const uid = () => randomUUID();
 const widgetNames = {
   notes: 'Заметки',
+  mail: 'Почта',
   tasks: 'Задачи',
   events: 'Календарь',
   clock: 'Дата и время',
@@ -73,6 +74,10 @@ const defaults = () => ({
     speechRate: 1,
     speechVolume: 1,
     sensitivity: 0.012,
+    microphoneId: '',
+    speakerId: '',
+    wakeWindow: 6,
+    interruptReplies: true,
     silence: 0.78,
     degree: 'C',
     exchangeFrom: 'USD',
@@ -100,6 +105,9 @@ const defaults = () => ({
     },
     systemVoice: '',
     fishVoice: '',
+    fishVoiceName: '',
+    fishPending: false,
+    searchFallback: true,
     avatar: 'vita',
     outfit: 'original',
     showAvatar: false,
@@ -164,7 +172,8 @@ class Store {
     fs.renameSync(temp, this.file);
   }
   public() {
-    const { secrets, telegramOffset, pairedChat, shelf, excludedDirs, ...state } = this.data;
+    const { secrets, mailBoxes, mailIndex, telegramOffset, pairedChat, shelf, excludedDirs, ...state } =
+      this.data;
     return {
       ...state,
       projects: (state.projects || []).map(({ root, ...p }) => ({

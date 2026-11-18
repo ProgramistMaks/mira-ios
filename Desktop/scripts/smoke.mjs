@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import dgram from 'node:dgram';
+import { microphoneWav } from './microphone-fixture.mjs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -18,44 +19,6 @@ const profile = await mkdtemp(path.join(os.tmpdir(), 'mira-desk-smoke-'));
 const evidence = process.env.MIRA_EVIDENCE;
 if (evidence) await mkdir(evidence, { recursive: true });
 
-function microphoneWav(raw) {
-  let rate, channels, pcm;
-  for (let off = 12; off + 8 <= raw.length; ) {
-    const size = raw.readUInt32LE(off + 4),
-      kind = raw.toString('ascii', off, off + 4);
-    if (kind === 'fmt ') {
-      assert.equal(raw.readUInt16LE(off + 8), 1);
-      channels = raw.readUInt16LE(off + 10);
-      rate = raw.readUInt32LE(off + 12);
-      assert.equal(raw.readUInt16LE(off + 22), 16);
-    }
-    if (kind === 'data') pcm = raw.subarray(off + 8, off + 8 + size);
-    off += 8 + size + (size % 2);
-  }
-  assert.ok(pcm && channels && rate);
-  const sampleRate = 48000,
-    speechSamples = Math.floor(((pcm.length / (2 * channels)) * sampleRate) / rate);
-  const count = sampleRate * 10 + speechSamples,
-    b = Buffer.alloc(44 + 2 * count);
-  b.write('RIFF');
-  b.writeUInt32LE(b.length - 8, 4);
-  b.write('WAVEfmt ', 8);
-  b.writeUInt32LE(16, 16);
-  b.writeUInt16LE(1, 20);
-  b.writeUInt16LE(1, 22);
-  b.writeUInt32LE(sampleRate, 24);
-  b.writeUInt32LE(2 * sampleRate, 28);
-  b.writeUInt16LE(2, 32);
-  b.writeUInt16LE(16, 34);
-  b.write('data', 36);
-  b.writeUInt32LE(b.length - 44, 40);
-  for (let i = 0; i < speechSamples; i++)
-    b.writeInt16LE(
-      pcm.readInt16LE(2 * channels * Math.floor((i * rate) / sampleRate)),
-      44 + 2 * (i + 2 * sampleRate),
-    );
-  return b;
-}
 let app;
 try {
   const voice = path.join(profile, 'voice.wav'),
@@ -157,6 +120,83 @@ try {
   );
   assert.ok(state.chats.some((c) => c.messages.some((m) => m.text === 'Записала в заметки.')));
   await p.locator('#voiceEnd').click();
+  await p.locator('[data-go=voice]').first().click();
+  await p.locator('[data-act=testMic]').click();
+  await expect(p.locator('#micReading')).toContainText('дБ');
+  await expect(p.locator('[data-act=testMic]')).toContainText('Завершить');
+  const input = await p
+    .locator('#microphoneId option')
+    .evaluateAll((options) => options.find((o) => o.value)?.value);
+  assert.ok(input, 'The fake audio input should be selectable');
+  await p.locator('#microphoneId').selectOption(input);
+  await expect
+    .poll(() => p.evaluate(async () => (await window.desk.call('state')).settings.microphoneId))
+    .toBe(input);
+  await p.locator('#wakeWindow').selectOption('10');
+  await expect
+    .poll(() => p.evaluate(async () => (await window.desk.call('state')).settings.wakeWindow))
+    .toBe(10);
+  await p.locator('[data-go=home]').first().click();
+  await expect(p.locator('#voiceBar')).toBeHidden();
+  await p.locator('[data-go=voice]').first().click();
+  await expect(p.locator('[data-act=testMic]')).toContainText('Проверить микрофон');
+  assert.deepEqual(await p.evaluate(async () => (await window.desk.call('state')).chats), state.chats);
+  // Interrupt a real Piper output with an independently recorded utterance. The
+  // first browser-microphone turn above also exercises the getUserMedia/worklet path.
+  const recorded = await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'));
+  const interrupt = await p.evaluate(async (bytes) => {
+    const { Voice } = await import('/audio.js');
+    const states = [],
+      heard = [],
+      errors = [];
+    const v = new Voice(
+      async (text) => {
+        heard.push(text);
+        return 'Слушаю.';
+      },
+      (s) => states.push(s),
+      (e) => errors.push(e.message),
+    );
+    v.enabled = true;
+    v.settings = { sensitivity: 0.006, silence: 0.45, interruptReplies: true };
+    v.reset();
+    const ctx = await v.context(),
+      clip = await ctx.decodeAudioData(Uint8Array.from(bytes).buffer);
+    const pending = v.speak(
+      'Сейчас я расскажу о планах на день. Ты можешь заговорить в любой момент, и я услышу твою новую фразу.',
+    );
+    const wait = async (condition) => {
+      const end = Date.now() + 60000;
+      while (!condition()) {
+        if (Date.now() > end) throw Error('Timed out ' + JSON.stringify({ states, heard, errors }));
+        await new Promise((r) => setTimeout(r, 35));
+      }
+    };
+    try {
+      await wait(() => v.speaker);
+      const input = clip.getChannelData(0),
+        size = 2048,
+        start = ctx.currentTime;
+      for (let i = 0; i < input.length; i += size)
+        v.chunk(input.slice(i, i + size), start + i / ctx.sampleRate);
+      for (let i = 0; i < 20; i++)
+        v.chunk(new Float32Array(size), start + (input.length + i * size) / ctx.sampleRate);
+      await pending;
+      await wait(() => heard.length && !v.busy && !v.playing);
+      return { states: [...states], heard, errors };
+    } finally {
+      v.stop(false);
+      await ctx.close();
+    }
+  }, Array.from(recorded));
+  assert.deepEqual(interrupt.errors, []);
+  assert.match(interrupt.heard[0], /молоко/iu);
+  assert.ok(interrupt.states.indexOf('Слышу тебя…') > interrupt.states.indexOf('Отвечаю…'));
+  assert.equal(interrupt.states.filter((s) => s === 'Отвечаю…').length, 2);
+  assert.equal(interrupt.states.at(-1), 'Слушаю. Можно говорить.');
+  console.log(
+    'Microphone meter, device selection, follow-up preference and interruption with real local transcription and synthesis passed.',
+  );
   // Receive a real VMC stream on loopback, including when the model page is hidden.
   const listener = dgram.createSocket('udp4');
   await new Promise((resolve) => listener.bind(0, '127.0.0.1', resolve));

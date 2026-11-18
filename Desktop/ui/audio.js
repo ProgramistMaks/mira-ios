@@ -1,3 +1,4 @@
+import { outputReference, isPlaybackEcho } from './voice-signal.mjs';
 import { call, mouth } from './shared.js';
 export function wav(samples, rate) {
   const n = Math.floor((samples.length * 16000) / rate),
@@ -41,9 +42,43 @@ export class Voice {
     this.epoch = 0;
     this.audioEpoch = 0;
     this.enabled = false;
+    this.testing = false;
+    this.turnId = 0;
+    this.captureId = 0;
+  }
+  async devices() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return {
+      inputs: devices.filter((d) => d.kind === 'audioinput'),
+      outputs: devices.filter((d) => d.kind === 'audiooutput'),
+      canRoute: typeof AudioContext.prototype.setSinkId === 'function',
+    };
+  }
+  async route(id = this.settings?.speakerId || '') {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed') return;
+    if (!ctx.setSinkId) {
+      if (id) throw Error('Выбор динамиков на этом компьютере недоступен');
+      return;
+    }
+    if (ctx.sinkId === id) return;
+    try {
+      await ctx.setSinkId(id);
+    } catch (err) {
+      if (id && err.name === 'NotFoundError') {
+        await ctx.setSinkId('');
+        this.onError(Error('Динамики отключены. Использую системный выход.'));
+        return;
+      }
+      throw err;
+    }
   }
   async context() {
-    if (!this.ctx || this.ctx.state === 'closed') this.ctx = new AudioContext();
+    if (!this.ctx || this.ctx.state === 'closed') {
+      this.ctx = new AudioContext();
+      this.loaded = false;
+    }
+    await this.route();
     await this.ctx.resume();
     return this.ctx;
   }
@@ -53,17 +88,58 @@ export class Voice {
     this.talking = 0;
     this.quiet = 0;
     this.recording = false;
+    this.overlap = [];
+    this.overlapTime = 0;
   }
-  async start() {
+  async getInput(id = this.settings?.microphoneId || '') {
+    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: id ? { ...audio, deviceId: { exact: id } } : audio,
+      });
+    } catch (err) {
+      if (!id || !['OverconstrainedError', 'NotFoundError'].includes(err.name)) throw err;
+      this.onError(Error('Выбранный микрофон отключён. Использую системный микрофон.'));
+      return navigator.mediaDevices.getUserMedia({ audio });
+    }
+  }
+  async switchInput(id) {
+    if (!this.stream || !this.proc) return;
+    const request = ++this.captureId,
+      epoch = this.epoch;
+    const stream = await this.getInput(id);
+    if (request !== this.captureId || epoch !== this.epoch) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    this.source.disconnect();
+    this.stream.getTracks().forEach((t) => t.stop());
+    this.bindInput(stream);
+    this.reset();
+  }
+  bindInput(stream) {
+    this.stream = stream;
+    this.source = this.ctx.createMediaStreamSource(stream);
+    this.source.connect(this.proc);
+    stream.getAudioTracks()[0].onended = () => {
+      if (stream !== this.stream) return;
+      this.switchInput('').catch((e) => {
+        if (stream === this.stream) {
+          this.stop();
+          this.onError(e);
+        }
+      });
+    };
+  }
+  async start(test = false) {
     this.stop(false);
     const e = this.epoch;
-    this.enabled = true;
+    this.testing = test;
+    this.enabled = !test;
     this.onStatus('Доступ к микрофону…', 'listening');
     try {
       const ctx = await this.context();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      const stream = await this.getInput();
       if (this.epoch !== e) {
         stream.getTracks().forEach((t) => t.stop());
         return;
@@ -74,15 +150,17 @@ export class Voice {
         this.loaded = true;
       }
       if (this.epoch !== e) return;
-      this.source = ctx.createMediaStreamSource(stream);
       this.proc = new AudioWorkletNode(ctx, 'mira-pcm');
       this.mute = ctx.createGain();
       this.mute.gain.value = 0;
-      this.proc.port.onmessage = (ev) => this.chunk(ev.data);
-      this.source.connect(this.proc).connect(this.mute).connect(ctx.destination);
+      this.proc.port.onmessage = (ev) => {
+        if (e === this.epoch) this.chunk(ev.data.samples, ev.data.time);
+      };
+      this.bindInput(stream);
+      this.proc.connect(this.mute).connect(ctx.destination);
       this.reset();
       this.busy = false;
-      this.onStatus('Слушаю. Можно говорить.', 'listening');
+      this.onStatus(test ? 'Проверка микрофона' : 'Слушаю. Можно говорить.', 'listening');
     } catch (err) {
       if (e === this.epoch) {
         this.stop();
@@ -90,12 +168,52 @@ export class Voice {
       }
     }
   }
-  chunk(buf) {
-    if (!this.enabled || this.busy || this.playing) return;
+  chunk(buf, time) {
+    if ((!this.enabled && !this.testing) || !buf?.length) return;
     let power = 0;
     for (const x of buf) power += x * x;
-    const voiced = Math.sqrt(power / buf.length) > (this.settings?.sensitivity ?? 0.012),
+    const rms = Math.sqrt(power / buf.length),
+      threshold = this.settings?.sensitivity ?? 0.012;
+    let voiced = rms > threshold,
       sec = buf.length / this.ctx.sampleRate;
+    this.onMeter?.(rms, this.stream?.getAudioTracks()[0]?.label || '');
+    if (this.testing) return;
+    if (this.tail) {
+      if (time > this.tail.until) this.tail = null;
+      else if (voiced && isPlaybackEcho(buf, this.ctx.sampleRate, time, this.tail.reference)) voiced = false;
+    }
+    if (this.playing) {
+      if (!this.speaker || this.settings?.interruptReplies === false) return;
+      if (
+        isPlaybackEcho(buf, this.ctx.sampleRate, time, this.reference) ||
+        (rms < Math.max(0.014, threshold * 1.35) && (!this.overlapTime || this.overlapQuiet > 0.08))
+      ) {
+        this.overlapTime = 0;
+        this.overlapQuiet = 0;
+        this.overlap = [];
+        return;
+      }
+      this.overlap.push(buf);
+      if (rms < Math.max(0.014, threshold * 1.35)) {
+        this.overlapQuiet += sec;
+        return;
+      }
+      this.overlapQuiet = 0;
+      this.overlapTime += sec;
+      if (this.overlapTime < 0.22) return;
+      const captured = this.overlap;
+      // The interrupted turn may still be awaiting audio completion. Its finally must
+      // not discard the first syllables of the replacement turn.
+      this.turnId++;
+      this.hush();
+      this.busy = false;
+      this.reset();
+      this.frames = captured;
+      this.recording = true;
+      this.onStatus('Слышу тебя…', 'listening');
+      return;
+    }
+    if (this.busy) return;
     if (!this.recording) {
       this.pre.push(buf);
       if (this.pre.length > Math.ceil(0.45 / sec)) this.pre.shift();
@@ -113,28 +231,30 @@ export class Voice {
     this.turn(bytes).catch((e) => this.onError(e));
   }
   async turn(bytes) {
-    const e = this.epoch;
+    const e = this.epoch,
+      turn = ++this.turnId;
+    const active = () => e === this.epoch && turn === this.turnId;
     this.busy = true;
     this.onStatus('Распознаю фразу…', 'thinking');
     try {
       const text = await call('transcribe', { bytes, localOnly: this.localOnly() });
-      if (e !== this.epoch || !text.trim()) return;
+      if (!active() || !text.trim()) return;
       this.onStatus('Думаю…', 'thinking');
       let result;
       try {
         result = await this.onTurn(text);
       } catch (err) {
-        if (e !== this.epoch) return;
+        if (!active()) return;
         this.onError(err);
         result = /скачайте модель/iu.test(err.message)
           ? 'Для свободного разговора выбери модель во вкладке ИИ. Я уже могу записывать заметки, ставить таймер и искать в интернете.'
           : 'Сейчас не удалось получить ответ. Я снова слушаю.';
       }
-      if (e === this.epoch && result) await this.speak(result);
+      if (active() && result) await this.speak(result);
     } catch (err) {
-      if (e === this.epoch) this.onError(err);
+      if (active()) this.onError(err);
     } finally {
-      if (e === this.epoch) {
+      if (active()) {
         this.busy = false;
         this.reset();
         this.onStatus('Слушаю. Можно говорить.', 'listening');
@@ -161,6 +281,11 @@ export class Voice {
       output.gain.value = this.settings?.speechVolume ?? 1;
       src.connect(meter).connect(output).connect(ctx.destination);
       this.speaker = src;
+      const start = ctx.currentTime;
+      this.reference =
+        this.enabled && this.settings?.interruptReplies !== false
+          ? outputReference(b.getChannelData(0), b.sampleRate, src.playbackRate.value, start)
+          : null;
       const values = new Float32Array(meter.fftSize);
       const step = () => {
         if (this.speaker !== src) return;
@@ -173,7 +298,7 @@ export class Voice {
       step();
       await new Promise((resolve) => {
         src.onended = resolve;
-        src.start();
+        src.start(start);
       });
       output.disconnect();
       meter.disconnect();
@@ -195,20 +320,30 @@ export class Voice {
         src.stop();
       } catch {}
     }
+    if (src && this.reference) this.tail = { reference: this.reference, until: this.ctx.currentTime + 0.4 };
     this.playing = false;
+    this.reference = null;
+    this.overlap = [];
+    this.overlapTime = 0;
+    this.overlapQuiet = 0;
     mouth(0);
   }
   stop(cancel = true) {
     this.epoch++;
     this.enabled = false;
+    this.testing = false;
+    this.captureId++;
+    this.turnId++;
     this.busy = false;
     this.hush();
+    this.tail = null;
     this.reset();
     this.proc?.disconnect();
     this.source?.disconnect();
     this.mute?.disconnect();
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    this.onMeter?.(0, '');
     if (cancel) call('stop').catch(() => {});
     this.onStatus('', 'idle');
   }

@@ -109,10 +109,24 @@ function noteEditor() {
       .join('') +
     '</div>' +
     button('pin', n.pinned ? 'Открепить заметку' : 'Закрепить заметку', 'pin') +
+    button('attach', 'Прикрепить файл', 'paperclip') +
     button('removeNote', 'Удалить заметку', 'trash-2') +
     '</div>' +
     '<input id="noteTitle" maxlength="200" placeholder="Заголовок" aria-label="Заголовок заметки">' +
-    '<div id="noteBody" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-placeholder="Напиши заметку…"></div>';
+    '<div id="noteBody" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст заметки" data-placeholder="Напиши заметку…"></div>' +
+    (n.attachments || [])
+      .map(
+        (f) =>
+          '<div class="noteFile">' +
+          ico('paperclip') +
+          '<span>' +
+          esc(f.name) +
+          '</span>' +
+          button('export', 'Сохранить файл как', 'download', f.id) +
+          button('detach', 'Убрать вложение', 'x', f.id) +
+          '</div>',
+      )
+      .join('');
   pane.querySelector('[data-org=pin]').setAttribute('aria-pressed', String(!!n.pinned));
   $('#noteTitle').value = n.title || '';
   const body = $('#noteBody');
@@ -407,6 +421,9 @@ async function action(op, id) {
     selected = 'main';
     $('#orgOptions').hidden = true;
   }
+  if (op === 'attach') await call('noteAttach', { id: selected });
+  if (op === 'detach') await call('noteDetach', { id: selected, fileId: id });
+  if (op === 'export') return call('noteExport', { id: selected, fileId: id });
   if (op === 'pin') await call('pinNote', { id: selected, pinned: !noteById().pinned });
   if (op === 'removeNote') await call('remove', { kind: 'notes', id: selected });
   if (op === 'removeTask') await call('remove', { kind: 'tasks', id });

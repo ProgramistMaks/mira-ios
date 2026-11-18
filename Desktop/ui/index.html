@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'"
     />
     <title>Мира</title>
     <link rel="stylesheet" href="style.css" />
@@ -197,6 +197,16 @@
       </div>
       <div id="widgetBody"></div>
     </aside>
+    <dialog id="mailDialog" aria-labelledby="mailHeading">
+      <header class="orgHeader">
+        <h2 id="mailHeading"></h2>
+        <small id="mailCount"></small>
+        <div id="mailActions"></div>
+        <button id="mailClose" aria-label="Закрыть" data-i="x"></button>
+      </header>
+      <div id="mailBody"></div>
+      <p id="mailStatus" role="status" hidden></p>
+    </dialog>
     <dialog id="agenda" aria-labelledby="agendaHeading">
       <header class="orgHeader">
         <h2 id="agendaHeading"></h2>

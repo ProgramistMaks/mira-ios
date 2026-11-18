@@ -1,4 +1,4 @@
-import { address } from './wake.mjs';
+import { address, followUpDelay } from './wake.mjs';
 import { syncCat } from './cat.js';
 import {
   $,
@@ -20,6 +20,7 @@ import { noteLabel, sortedNotes, taskListOf } from './note-format.mjs';
 import { boardSizing } from './board-sizing.js';
 import { Voice } from './audio.js';
 import { openOrganizer, syncOrganizer } from './organizer.js';
+import { openMail } from './mail.js';
 import { openAgenda, syncAgenda } from './agenda.js';
 import { openSetup } from './setup.js';
 let state,
@@ -37,16 +38,34 @@ const cache = { gesture: 'auto', emotion: '', draft: null, progress: null },
   music = new Audio();
 music.controls = true;
 music.preload = 'metadata';
+let standbyMode = false,
+  waitingForCommand = false,
+  wakeTimer;
 let waitingForName = false,
   lastMicMode = 'off';
 const voice = new Voice(
   async (text) => {
     const next = address(text, state.settings.wakeAlias || state.settings.name, waitingForName);
+    waitingForCommand = waitingForName && !next.waiting && !next.text;
     waitingForName = next.waiting;
+    if (waitingForName) standbyMode = true;
     if (next.text) return send(next.text, true);
     return next.reply;
   },
   (msg, p) => {
+    clearTimeout(wakeTimer);
+    if (voice.testing) return;
+    if (voice.enabled && msg === 'Слушаю. Можно говорить.') {
+      const ms = followUpDelay(standbyMode, waitingForName, waitingForCommand, state.settings.wakeWindow);
+      if (ms === 0) waitingForName = true;
+      else if (ms !== null)
+        wakeTimer = setTimeout(() => {
+          if (!voice.enabled) return;
+          waitingForName = true;
+          waitingForCommand = false;
+          voice.onStatus('Слушаю. Можно говорить.', 'listening');
+        }, ms);
+    }
     const mode = voice.enabled ? (waitingForName ? 'waiting' : 'talking') : 'off';
     if (mode !== lastMicMode) {
       lastMicMode = mode;
@@ -63,6 +82,26 @@ const voice = new Voice(
   (e) => toast(e.message),
   () => waitingForName,
 );
+let meterAt = 0;
+voice.onMeter = (rms, label) => {
+  if (page !== 'voice' || (rms && performance.now() - meterAt < 90)) return;
+  meterAt = performance.now();
+  const meter = $('#micLevel'),
+    out = $('#micReading');
+  if (!meter || !out) return;
+  const db = Math.max(-60, 20 * Math.log10(Math.max(rms, 0.001)));
+  meter.value = (db + 60) / 60;
+  out.textContent = label ? label + ' · ' + Math.round(db) + ' дБ' : 'Проверка микрофона';
+};
+async function refreshAudioDevices() {
+  const devices = await voice.devices();
+  cache.audioDevices = devices;
+  cache.testingMic = voice.testing;
+  if (page === 'voice') renderPage();
+}
+navigator.mediaDevices?.addEventListener('devicechange', () => {
+  if (page === 'voice' || voice.enabled) refreshAudioDevices().catch(err);
+});
 const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const tabs = $('#tabs');
 tabs.innerHTML = Object.entries(pages.tabIcons)
@@ -112,6 +151,16 @@ function renderFrame() {
 }
 function nav(next) {
   if (!pages.names[next]) return;
+  if (voice.testing && next !== 'voice') {
+    voice.stop(false);
+    cache.testingMic = false;
+  }
+  if (next !== 'voice' && cache.previewId) {
+    cache.previewVersion++;
+    cache.previewId = '';
+    voice.hush();
+    voice.onStatus(voice.enabled ? 'Слушаю. Можно говорить.' : '', voice.enabled ? 'listening' : 'idle');
+  }
   pages.captureDraft(cache.draft);
   cache.openWidget = null;
   drawWidget();
@@ -122,6 +171,7 @@ function nav(next) {
   $('#drawer').hidden = true;
   render();
   if (page === 'desk') refreshSystem();
+  if (page === 'voice') refreshAudioDevices().catch(err);
   if (page === 'voice' && !cache.sysVoices)
     call('systemVoices')
       .then((v) => {
@@ -186,7 +236,17 @@ function renderPage() {
   const cursor =
     quick && document.activeElement === quick ? [quick.selectionStart, quick.selectionEnd] : null;
   if (quick) quick.onblur = null;
+  const typing =
+    page === 'voice' && ['fishQuery', 'fishKey'].includes(document.activeElement?.id)
+      ? document.activeElement
+      : null;
   $('#content').innerHTML = pages[page](state, cache);
+  if (typing) {
+    const next = document.getElementById(typing.id);
+    next.value = typing.value;
+    next.focus({ preventScroll: true });
+    next.setSelectionRange(typing.selectionStart, typing.selectionEnd);
+  }
   if (page === 'desk') {
     const input = $('#quickTask');
     if (input) {
@@ -262,6 +322,7 @@ function cards() {
         .sort((a, b) => a.time - b.time)
         .map((e) => timeLabel(e.time))[0] || 'Нет событий',
     ],
+    mail: ['mail', '', s.mail.latest || (s.mail.boxes ? 'Входящие' : 'Ящик не подключён')],
     notes: ['notebook-pen', 'gold', s.notes.length ? noteLabel(sortedNotes(s.notes)[0]) : 'Записать заметку'],
     music: ['music-2', '', s.music?.name || 'Выбрать дорожку'],
     weather: [
@@ -513,6 +574,8 @@ async function toggleVoice(standby = false) {
     return;
   }
   waitingForName = standby;
+  standbyMode = standby;
+  waitingForCommand = false;
   nav('home');
   await voice.start();
 }
@@ -690,6 +753,7 @@ async function handle(action, id) {
     case 'day':
       $('#home').classList.remove('widgets-open');
       $('#panelWidgets').setAttribute('aria-expanded', 'false');
+      if (id === 'mail') return openMail();
       if (id === 'notes' || id === 'tasks') return openOrganizer(id);
       if (id === 'events' || id === 'reminders') return openAgenda(id);
       cache.openWidget = id;
@@ -1067,6 +1131,15 @@ async function handle(action, id) {
     case 'settings':
       nav('settings');
       return;
+    case 'testMic':
+      if (voice.enabled) {
+        toast('Микрофон уже включён в разговоре');
+        return;
+      }
+      if (voice.testing) voice.stop(false);
+      else await voice.start(true);
+      await refreshAudioDevices();
+      return;
     case 'audition':
       await voice.speak('Привет! Я рядом. Давай немного поговорим.');
       return;
@@ -1078,7 +1151,9 @@ async function handle(action, id) {
         keySearch: ['search', 'searchKey'],
         keyTelegram: ['telegram', 'tgKey'],
       }[action];
-      await call('key', { name, value: val(input) });
+      const value = val(input);
+      await call('key', { name, value });
+      if (name === 'fish' && value && state.settings.fishPending) await saveSettings({ voice: 'fish' });
       toast('Настройка сохранена');
       return;
     }
@@ -1129,22 +1204,89 @@ async function handle(action, id) {
         '<iframe class="gamePanel" title="' + id + '" src="/panel.html?game=' + id + '"></iframe>',
       );
       return;
-    case 'fishStar':
-      await call('fishFavorite', { id, title: cache.fishList?.find((v) => v.id === id)?.title });
-      return;
-    case 'fishPreview':
-      await voice.speak('Привет! Вот так звучит мой голос.', id);
-      return;
-    case 'fishSearch':
-    case 'fishNext':
-      cache.fishQuery = val('fishQuery');
-      cache.fishPage = action === 'fishNext' ? (cache.fishPage || 1) + 1 : 1;
-      cache.fishList = await call('fish', { query: cache.fishQuery, page: cache.fishPage });
+    case 'fishSaved':
+    case 'fishResults':
+      cache.fishTab = action === 'fishSaved' ? 'saved' : 'search';
       renderPage();
       return;
-    case 'fishPick':
-      await saveSettings({ voice: 'fish', fishVoice: id });
+    case 'fishStar':
+      await call('fishFavorite', { ...cache.fishList?.find((v) => v.id === id), id });
+      await refresh();
       return;
+    case 'fishPreview': {
+      if (!cache.previewId && (voice.busy || voice.playing)) {
+        toast('Сначала дождись окончания реплики');
+        return;
+      }
+      const stopping = cache.previewId === id,
+        version = (cache.previewVersion || 0) + 1;
+      cache.previewVersion = version;
+      voice.hush();
+      cache.previewId = stopping ? '' : id;
+      renderPage();
+      if (stopping) {
+        voice.onStatus(voice.enabled ? 'Слушаю. Можно говорить.' : '', voice.enabled ? 'listening' : 'idle');
+        return;
+      }
+      try {
+        await voice.speak('', id);
+      } finally {
+        if (version === cache.previewVersion) {
+          cache.previewId = '';
+          if (page === 'voice') renderPage();
+        }
+      }
+      return;
+    }
+    case 'fishSearch':
+    case 'fishNext':
+    case 'fishPrev': {
+      const query = action === 'fishSearch' ? val('fishQuery').trim() : cache.fishQuery || '';
+      const number =
+        action === 'fishNext' ? cache.fishPage + 1 : action === 'fishPrev' ? cache.fishPage - 1 : 1;
+      const serial = (cache.fishRequest || 0) + 1;
+      cache.fishRequest = serial;
+      cache.fishLoading = true;
+      cache.fishError = '';
+      cache.fishTab = 'search';
+      cache.fishInput = query;
+      renderPage();
+      try {
+        const result = await call('fish', { query, page: number });
+        if (cache.fishRequest === serial) {
+          cache.fishQuery = query;
+          cache.fishPage = number;
+          cache.fishList = result.items;
+          cache.fishMore = result.more;
+        }
+      } catch (e) {
+        if (cache.fishRequest === serial) {
+          cache.fishError = 'Не удалось открыть библиотеку Fish Audio. Проверь подключение и повтори поиск.';
+          cache.fishList = [];
+          cache.fishPage = 1;
+          cache.fishMore = false;
+        }
+      } finally {
+        if (cache.fishRequest === serial) {
+          cache.fishLoading = false;
+          if (page === 'voice') renderPage();
+        }
+      }
+      return;
+    }
+    case 'fishPick': {
+      const model = [...(cache.fishList || []), ...(state.fishFavorites || [])].find((v) => v.id === id);
+      if (!model) return;
+      const ready = state.keys.includes('fish');
+      await saveSettings({
+        fishVoice: id,
+        fishVoiceName: model.title,
+        fishPending: !ready,
+        ...(ready ? { voice: 'fish' } : {}),
+      });
+      toast(ready ? 'Голос ответов изменён' : 'Голос выбран. Для озвучки ответов добавь ключ Fish Audio.');
+      return;
+    }
     case 'saveAI': {
       const base = val('base'),
         cloudModel = val('cloudModel'),
@@ -1727,6 +1869,18 @@ document.addEventListener('change', (e) => {
     return;
   }
   const v = e.target.value;
+  if (e.target.id === 'microphoneId' || e.target.id === 'speakerId') {
+    const key = e.target.id;
+    (async () => {
+      if (key === 'microphoneId') await voice.switchInput(v);
+      else await voice.route(v);
+      await saveSettings({ [key]: v });
+    })().catch((error) => {
+      renderPage();
+      err(error);
+    });
+    return;
+  }
   if (e.target.id.startsWith('place-')) {
     call('screenWidget', { id: e.target.id.slice(6), mode: v }).catch(err);
     return;
@@ -1747,17 +1901,22 @@ document.addEventListener('change', (e) => {
     overlayHeight: { overlayHeight: +v },
     overlayAnchor: { overlayAnchor: v },
     outfit: { outfit: v },
+    searchFallback: { searchFallback: v === 'on' },
     voicePick: { voice: v },
     sysVoice: { systemVoice: v },
     stt: { stt: v },
     quiet: { quiet: v === 'on' },
+    interruptReplies: { interruptReplies: v === 'on' },
     ...Object.fromEntries(
       ['island', 'islandPin', 'hideCapture', 'startHidden', 'startLogin', 'startListening', 'bubbles'].map(
         (k) => [k, { [k]: v === 'on' }],
       ),
     ),
     ...Object.fromEntries(
-      ['speechRate', 'speechVolume', 'sensitivity', 'silence'].map((k) => [k, { [k]: Number(v) }]),
+      ['speechRate', 'speechVolume', 'sensitivity', 'silence', 'wakeWindow'].map((k) => [
+        k,
+        { [k]: Number(v) },
+      ]),
     ),
     ...Object.fromEntries(
       ['degree', 'exchangeFrom', 'exchangeTo', 'cryptoCoin', 'currency'].map((k) => [k, { [k]: v }]),
@@ -2076,7 +2235,14 @@ function filterCommandList() {
   if (empty) empty.hidden = !query || count > 0;
 }
 $('#historyQuery').oninput = renderChat;
+document.addEventListener('submit', (e) => {
+  if (e.target.id === 'fishSearchForm') {
+    e.preventDefault();
+    handle('fishSearch').catch(err);
+  }
+});
 document.addEventListener('input', (e) => {
+  if (e.target.id === 'fishQuery') cache.fishInput = e.target.value;
   if (e.target.id === 'commandQuery') {
     cache.commandQuery = e.target.value;
     filterCommandList();

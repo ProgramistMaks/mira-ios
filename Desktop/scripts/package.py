@@ -174,6 +174,7 @@ def build(cache, out, stage_only):
     for f in DESKTOP.glob("*.cjs"):
         shutil.copy2(f, app / f.name)
     shutil.copy2(DESKTOP / "package.json", app / "package.json")
+    subprocess.run(["node", DESKTOP / "scripts/stage-mail.mjs", app], check=True)
     subprocess.run(["node", DESKTOP / "scripts/vendor.mjs"], check=True)
     shutil.copytree(DESKTOP / "ui", app / "ui", dirs_exist_ok=True)
     shutil.copytree(ROOT / "Resources/Web", app / "renderer", dirs_exist_ok=True)
