@@ -7,7 +7,9 @@ struct AvatarView: UIViewRepresentable {
     var characterID: String = "vita"
     var expressionEmotion = "auto"
     var expressionIntensity = 0.7
-    var expressionVariant = -1
+    var motionClip = "auto"
+    var motionReplay = 0
+    var danceRequest = 0
     var expressionsEnabled = true
     var bodyMode = "natural"
     var bodyControls = "{}"
@@ -69,7 +71,13 @@ struct AvatarView: UIViewRepresentable {
         let assets = BundleScheme()
         var mouthSubscription: AnyCancellable?
         var mouthBridge: MouthBridge?
-        init(parent: AvatarView) { self.parent = parent }
+        private var lastReplay: Int
+        private var lastDance: Int
+        init(parent: AvatarView) {
+            self.parent = parent
+            lastReplay = parent.motionReplay
+            lastDance = parent.danceRequest
+        }
         func update(_ view: WKWebView) {
             if assets.characterID != parent.characterID {
                 assets.characterID = parent.characterID
@@ -82,12 +90,12 @@ struct AvatarView: UIViewRepresentable {
             guard loaded else { return }
             let settings: [String: Any] = ["emotion": parent.expressionEmotion,
                 "intensity": parent.expressionIntensity.isFinite ? parent.expressionIntensity : 0.7,
-                "variant": parent.expressionVariant, "enabled": parent.expressionsEnabled]
+                "variant": -1, "enabled": parent.expressionsEnabled]
             let encoded = (try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys])) ?? Data("{}".utf8)
             let performance = String(decoding: encoded, as: UTF8.self)
             let controls = parent.bodyControls.utf8.count <= 32000
                 ? (try? JSONDecoder().decode([String: Double].self, from: Data(parent.bodyControls.utf8))) ?? [:] : [:]
-            let bodySettings: [String: Any] = ["mode": parent.bodyMode, "controls": controls,
+            let bodySettings: [String: Any] = ["mode": parent.bodyMode, "clip": parent.motionClip, "controls": controls,
                 "physics": parent.secondaryPhysics, "wind": parent.physicsWind.isFinite ? parent.physicsWind : 0,
                 "softness": parent.physicsSoftness.isFinite ? parent.physicsSoftness : 0.5, "detail": parent.hairDetail]
             let bodyData = (try? JSONSerialization.data(withJSONObject: bodySettings, options: [.sortedKeys])) ?? Data("{}".utf8)
@@ -95,12 +103,24 @@ struct AvatarView: UIViewRepresentable {
             let command = """
                 window.companion?.configureBody(\(bodyJSON));
                 window.companion?.configurePerformance(\(performance));
+                window.companion?.configureChoreography((\(bodyJSON)).clip);
                 window.companion?.setState('\(parent.phase.rawValue)', \(parent.reduceMotion));
                 window.companion?.setFrameRate(\(parent.frameRate));
                 window.companion?.setActive(\(parent.active));
                 """
-            guard command != lastCommand else { return }; lastCommand = command
-            view.evaluateJavaScript(command, completionHandler: nil)
+            if command != lastCommand {
+                lastCommand = command
+                view.evaluateJavaScript(command, completionHandler: nil)
+            }
+            guard visible else { return }
+            if lastReplay != parent.motionReplay {
+                lastReplay = parent.motionReplay
+                view.evaluateJavaScript("window.companion?.replayGesture()", completionHandler: nil)
+            }
+            if lastDance != parent.danceRequest {
+                lastDance = parent.danceRequest
+                view.evaluateJavaScript("window.companion?.dance()", completionHandler: nil)
+            }
         }
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: String], message.frameInfo.isMainFrame else { return }

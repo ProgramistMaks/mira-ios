@@ -129,8 +129,9 @@ export class ArticulationRig {
       });
     }
   }
-  apply(pose){
+  apply(pose, hands){
     for(const {node,kind,side,index,joint,rest}of this.entries){
+      if(hands && (kind!=='finger' || !hands[side]))continue;
       const sign=(side==='left'?-1:1)*this.sign;let x=0,y=0,z=0;
       if(kind==='upperChest'){x=pose.upperChestX??0;y=pose.upperChestY??0;z=pose.upperChestZ??0;}
       if(kind==='shoulder'){z=sign*(pose[side+'ShoulderLift']??0);y=(side==='left'?-1:1)*(pose[side+'ShoulderForward']??0);}
@@ -143,7 +144,9 @@ export class ArticulationRig {
           if(joint.endsWith('0'))y=sign*(pose[side+'ThumbOpposition']??0);
         }
       }
-      node.quaternion.copy(rest).multiply(this.q.setFromEuler(this.euler.set(x,y,z,'XYZ')));
+      this.q.setFromEuler(this.euler.set(x,y,z,'XYZ')).premultiply(rest);
+      if(hands)node.quaternion.slerp(this.q,hands[side].weight);
+      else node.quaternion.copy(this.q);
     }
   }
 }

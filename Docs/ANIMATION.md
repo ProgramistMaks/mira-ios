@@ -1,5 +1,7 @@
 # Character acting and rendering
 
+The default character motion and the settings picker now use the 16-clip catalogue in `Renderer/choreography.mjs`. The sections below describe the earlier controller, which still supplies expressions and numeric diagnostic poses. [Current motion study](MOTION-REFERENCE-STUDY.md).
+
 A compositional layer now adds **29,952 selectable combinations** of 52 gestures,
 12 emotional styles, 8 gaze targets and 6 stances. These are not 29,952 independently
 authored clips. See [performance library](PERFORMANCE-LIBRARY.md) for selection,

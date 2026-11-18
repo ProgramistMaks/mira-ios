@@ -39,7 +39,8 @@ struct CompanionView: View {
     @AppStorage("expressionsEnabled") private var expressionsEnabled = true
     @AppStorage("expressionEmotion") private var expressionEmotion = "auto"
     @AppStorage("expressionIntensity") private var expressionIntensity = 0.7
-    @AppStorage("expressionVariant") private var expressionVariant = -1
+    @AppStorage("motionClip") private var motionClip = "auto"
+    @AppStorage("motionReplay") private var motionReplay = 0
     @AppStorage("bodyMode") private var bodyMode = "natural"
     @AppStorage("bodyControls") private var bodyControls = "{}"
     @AppStorage("secondaryPhysics") private var secondaryPhysics = true
@@ -251,7 +252,7 @@ struct CompanionView: View {
                     .frame(width: 160, height: 16).blur(radius: 12).padding(.bottom, 12)
             }.allowsHitTesting(false).accessibilityHidden(true)
             AvatarView(phase: phase, characterID: characterID, expressionEmotion: expressionEmotion,
-                       expressionIntensity: expressionIntensity, expressionVariant: expressionVariant, expressionsEnabled: expressionsEnabled,
+                       expressionIntensity: expressionIntensity, motionClip: motionClip, motionReplay: motionReplay, danceRequest: store.danceRequest, expressionsEnabled: expressionsEnabled,
                        bodyMode: bodyMode, bodyControls: bodyControls, secondaryPhysics: secondaryPhysics,
                        physicsWind: physicsWind, physicsSoftness: physicsSoftness, hairDetail: hairDetail, voice: voice, reduceMotion: reduceMotion,
                        frameRate: frameRate,

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import EventKit
 import LocalLLM
 import Combine
@@ -26,6 +27,7 @@ final class CompanionStore: ObservableObject {
     @Published private(set) var cloudConfigured = false
     @Published private(set) var searchConfigured = false
     private var automaticCaptureSession: UUID?
+    @Published private(set) var danceRequest = 0
     @Published var characterReady = false
     @Published var characterError: String?
     let voice = VoiceService()
@@ -87,6 +89,24 @@ final class CompanionStore: ObservableObject {
         let text = (utterance ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty && !thinking && !voice.recordingBusy else { return }
         guard text.count <= 12000 else { failConversation("Сообщение слишком длинное: максимум 12 000 символов."); return }
+        let words = text.lowercased().components(separatedBy: CharacterSet.letters.inverted)
+            .filter { !$0.isEmpty }.joined(separator: " ")
+        if ["потанцуй", "станцуй", "мира потанцуй", "мира станцуй", "давай потанцуем"].contains(words) {
+            let question = Message(role: .user, content: text)
+            let preferences = UserDefaults.standard
+            let allowsDance = !UIAccessibility.isReduceMotionEnabled &&
+                (preferences.object(forKey: "expressionsEnabled") as? Bool) != false &&
+                (preferences.string(forKey: "bodyMode") ?? "natural") == "natural"
+            let answer = allowsDance ? "Давай!" : "Для танца включи жесты и живое поведение и выключи уменьшение движения."
+
+            messages.append(question)
+            messages.append(Message(role: .assistant, content: answer, replyTo: question.id))
+            if utterance == nil { draft = "" }
+            saveConversation()
+            if allowsDance { danceRequest &+= 1 }
+            if speakReply ?? settings.speakReplies { speakAnswer(answer) }
+            return
+        }
         if let proposal = CommandProposal.parse(text) {
             if proposal.kind == .search {
                 searchWeb(proposal.text, original: text, speakReply: speakReply ?? settings.speakReplies,

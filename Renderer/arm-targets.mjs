@@ -5,7 +5,7 @@ import { Matrix4, Quaternion, Vector3 } from 'three';
 export class ArmTargets {
   constructor(root,bone,height,armSign=1){
     this.root=root;this.height=height;this.forward=-armSign;this.armSign=armSign;
-    this.chest=bone('chest');this.neck=bone('neck');this.arms=[];
+    this.chest=bone('chest');this.neck=bone('neck');this.head=bone('head');this.arms=[];
     for(const side of ['left','right']){
       const upper=bone(side+'UpperArm'),lower=bone(side+'LowerArm'),hand=bone(side+'Hand');
       if(!upper||!lower||!hand)continue;
@@ -28,19 +28,25 @@ export class ArmTargets {
     const world=node.getWorldQuaternion(new Quaternion()).premultiply(swing);
     node.quaternion.copy(node.parent.getWorldQuaternion(new Quaternion()).invert().multiply(world));
   }
-  apply(pose){
+  apply(pose, paths = {}){
     if(!this.chest||!this.neck)return;
     for(const arm of this.arms){
       const {side,upper,lower,hand}=arm,s=side==='left'?-this.armSign:this.armSign;
       const safe=key=>Number.isFinite(pose[key])?pose[key]:0;
       const chest=Math.max(0,Math.min(1,safe(side+'ChestReach'))),wave=Math.max(0,Math.min(1,safe(side+'WaveReach')));
-      const weight=Math.max(chest,wave);if(weight<1e-6){arm.twistUnwrapped=undefined;continue;}
-      const isWave=wave>chest,anchor=isWave?this.neck:this.chest;
+      const path = paths[side];
+      const weight=path ? path.weight : Math.max(chest,wave);if(weight<1e-6){arm.twistUnwrapped=undefined;continue;}
+      const isWave=wave>chest,anchor=path ? this[path.anchor] ?? this.chest : isWave?this.neck:this.chest;
       // Keep the wrist in front of the garment; this is a near-chest gesture,
       // not a claim of cloth contact/self-collision simulation.
       const target=anchor.localToWorld(new Vector3(s*(isWave?.19:.045)*this.height,
         (isWave?.025:.065)*this.height,this.forward*(isWave?.06:.07)*this.height));
       if(isWave){const shift=this.root.getWorldQuaternion(new Quaternion());target.add(new Vector3(safe(side+'Wrist')*.065*this.height,0,0).applyQuaternion(shift));}
+      if (path) {
+        const [lateral, vertical, forward] = path.position;
+        target.set(s*lateral, vertical, this.forward*forward).multiplyScalar(this.height);
+        anchor.localToWorld(target);
+      }
       const a=upper.getWorldPosition(new Vector3()),b=lower.getWorldPosition(new Vector3()),c=hand.getWorldPosition(new Vector3());
       const l1=a.distanceTo(b),l2=b.distanceTo(c);if(l1<1e-8||l2<1e-8)continue;
       const originalUpper=upper.quaternion.clone(),originalLower=lower.quaternion.clone(),originalHand=hand.quaternion.clone();
@@ -50,7 +56,7 @@ export class ArmTargets {
       const reach=Math.max(minimumReach,Math.min(l1+l2-1e-6,distance));
       destination.copy(a).addScaledVector(direction,reach);
       const along=(l1*l1-l2*l2+reach*reach)/(2*reach),height=Math.sqrt(Math.max(0,l1*l1-along*along));
-      const pole=this.chest.localToWorld(new Vector3(s*.18*this.height,-.11*this.height,this.forward*.045*this.height)).sub(a);
+      const pole=this.chest.localToWorld(new Vector3(s*(path?.elbow ?? .18)*this.height,-.11*this.height,this.forward*.045*this.height)).sub(a);
       pole.addScaledVector(direction,-pole.dot(direction));if(pole.lengthSq()<1e-10)pole.copy(b).sub(a).addScaledVector(direction,-b.clone().sub(a).dot(direction));
       pole.normalize();
       const knee=a.clone().addScaledVector(direction,along).addScaledVector(pole,height);
@@ -61,6 +67,11 @@ export class ArmTargets {
       // palm towards the torso. Preserve each rig's authored hand basis.
       const up=isWave?new Vector3(0,1,0):new Vector3(-s*.8,.6,0).normalize();
       const palm=new Vector3(0,0,isWave?this.forward:-this.forward);
+      if (path) {
+        up.set(s*path.fingers[0],path.fingers[1],this.forward*path.fingers[2]).normalize();
+        palm.set(s*path.palm[0],path.palm[1],this.forward*path.palm[2]);
+        palm.addScaledVector(up,-up.dot(palm)).normalize();
+      }
       const across=new Vector3().crossVectors(up,palm).normalize();
       const orientation=new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(across,up,palm));
       const world=anchor.getWorldQuaternion(new Quaternion()).multiply(orientation).multiply(arm.localBasis.clone().invert());

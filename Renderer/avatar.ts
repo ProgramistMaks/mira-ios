@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { motion, SpeechSamples } from './motion.mjs';
 import { PerformanceController } from './performance.mjs';
+import { ChoreographyRig, CHOREOGRAPHY } from './choreography.mjs';
 import { ArmTargets } from './arm-targets.mjs';
 import { ArmRig } from './arms.mjs';
 import { VARIANT_COUNT } from './expression-library.mjs';
@@ -17,6 +18,7 @@ declare global {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
       setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
+      configureChoreography(id: string): void; dance(): void; choreographyCatalog: typeof CHOREOGRAPHY;
       replayGesture(): void; configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
@@ -28,6 +30,8 @@ const report = (type: string, detail = '') => {
 };
 const acting = new PerformanceController(crypto.getRandomValues(new Uint32Array(1))[0]);
 const body = new BodyController(crypto.getRandomValues(new Uint32Array(1))[0]);
+let choreography: ChoreographyRig | undefined;
+let choreographyMode = 'auto';
 let resetPhysics: (() => void) | undefined;
 let frameRate = 60;
 let active = true;
@@ -46,11 +50,14 @@ let nativeSize: { width: number; height: number } | undefined;
 let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
+  choreographyCatalog: CHOREOGRAPHY,
+  configureChoreography(id) { choreographyMode = id; choreography?.configure(id); },
+  dance() { choreography?.react('dance'); },
   variantCount: VARIANT_COUNT,
   bodyCatalog: BODY_CATALOG, bodyStatus: {},
   configureBody(settings) { body.configure(settings); },
   configurePerformance(settings) { acting.configure(settings); },
-  replayGesture() { acting.replay(); },
+  replayGesture() { acting.replay(); choreography?.replay(); },
   phase,
   setActive(value) {
     if (!active && value === true) resetPhysics?.();
@@ -105,6 +112,9 @@ async function main() {
   VRMUtils.combineSkeletons(avatar.scene);
   VRMUtils.combineMorphs(avatar);
   avatar.scene.traverse(object => { object.frustumCulled = false; });
+  const authored = new ChoreographyRig(avatar);
+  choreography = authored;
+  choreography.configure(choreographyMode);
   // Bring the sample's T-pose into a relaxed resting pose.
   const left = avatar.humanoid.getNormalizedBoneNode('leftUpperArm');
   const right = avatar.humanoid.getNormalizedBoneNode('rightUpperArm');
@@ -159,7 +169,9 @@ async function main() {
     const tap = !pointer.moved;
     pointer = undefined;
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
-    if (tap && active && hitCharacter(event)) acting.trigger('touch');
+    if (tap && active && hitCharacter(event) && !reduced) {
+      acting.trigger('touch'); authored.react('touch');
+    }
   });
   renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; });
   renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; });
@@ -184,9 +196,15 @@ async function main() {
     ['angry', expressionName(['angry'])], ['sad', expressionName(['sad'])],
     ['relaxed', expressionName(['relaxed'])], ['surprise', expressionName(['surprised', 'Surprised'])],
   ] as const;
+  // Pose the raw skeleton before resetting spring history. No first-frame
+  // explosion from simulating a T-pose -> standing jump.
+  authored.bind(stance, armTargets, articulation);
+  authored.enabled = true; authored.renderPose();
+  avatar.update(0); secondary.reset();
+  for (let i = 0; i < 12; i++) avatar.update(1 / 120);
   let displayedVariant = -1;
   let mouth = 0, elapsed = 0;
-  acting.update(0, reduced); acting.trigger('greeting');
+  acting.update(0, reduced); acting.trigger('greeting'); authored.react('greeting');
   renderer.setAnimationLoop(timestamp => {
     // A cap is a target, not a claim about measured device performance.
     const cap = reduced ? Math.min(frameRate, 30) : frameRate;
@@ -195,8 +213,8 @@ async function main() {
     if (delta === null) return;
     elapsed += delta;
     const audioLevel = speechSamples.level();
-    const pose = body.update(acting.update(delta, reduced, audioLevel), delta, reduced, {phase, automatic:acting.settings.variant < 0 && acting.settings.enabled, directReaction:['greeting','touch'].includes(acting.clip)});
-    window.companion.bodyStatus.behavior = body.behaviorLabel;
+    const useAuthored = body.mode === 'natural' && acting.settings.variant < 0;
+    const pose = body.update(acting.update(delta, reduced, audioLevel), delta, reduced, {phase, automatic:!useAuthored && acting.settings.variant < 0 && acting.settings.enabled, directReaction:['greeting','touch'].includes(acting.clip)});
     if (detail.mode !== body.detail) { detail.set(body.detail); bodyStatus(); }
     secondary.configure(body, reduced);
     document.documentElement.dataset.motion = reduced ? 'reduced' : acting.clip;
@@ -206,14 +224,19 @@ async function main() {
     }
     const face = motion(elapsed, phase, reduced, audioLevel);
     turntable.rotation.y = THREE.MathUtils.damp(turntable.rotation.y, rotation, 6, delta);
-    stance.apply(pose);
-    arms.apply(pose);
-    articulation.apply(pose);
-    if (spine) spine.rotation.set(pose.spineX, pose.spineY, pose.spineZ);
-    if (chest) chest.rotation.set(pose.chestX, pose.chestY, pose.chestZ);
-    if (neck) neck.rotation.set(pose.neckX, pose.neckY, pose.neckZ);
-    if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
-    armTargets.apply(pose);
+    if (!useAuthored) {
+      authored.enabled = false;
+      stance.apply(pose);
+      arms.apply(pose);
+      articulation.apply(pose);
+      if (spine) spine.rotation.set(pose.spineX, pose.spineY, pose.spineZ);
+      if (chest) chest.rotation.set(pose.chestX, pose.chestY, pose.chestZ);
+      if (neck) neck.rotation.set(pose.neckX, pose.neckY, pose.neckZ);
+      if (head) head.rotation.set(pose.headX, pose.headY, pose.headZ);
+      armTargets.apply(pose);
+    } else authored.update(delta, {phase, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+    window.companion.bodyStatus.behavior = useAuthored ? CHOREOGRAPHY.find(item=>item.id===authored.clip)?.title : body.behaviorLabel;
+    window.companion.bodyStatus.choreography = {clip: authored.clip, mode: authored.mode, enabled: authored.enabled};
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
     if (avatar.lookAt) {

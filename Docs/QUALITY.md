@@ -11,7 +11,7 @@ Videos sampled visually on 2026-11-15; full audio was machine-transcribed locall
 
 - [x] Character appearance selected by the user: on 2026-11-17 the user said they really like the current Vita character. Keep it; no replacement is needed to match Astra.
 - [ ] Device-verified hair/clothing dynamics and accurate material rendering for the selected character. Asset terms are documented; appearance approval alone does not validate runtime quality.
-- [ ] Authored idle, listening, thinking, speaking, greeting and touch-reaction animation clips with smooth blending. Original torso/arm/hand/gaze clips now include pelvis weight shifts and dips with planted-foot leg IK and interruption-safe blending. A compositional layer now adds 29,952 combinations of gestures, emotions, gaze and stance; this is not a count of independent clips. Native performance and recorded reference comparison remain unfinished.
+- [ ] On-device validation of the 16-clip choreography, including the greeting, touch reactions, clip transitions and choreography during conversation. The renderer has a two-angle capture harness and Vita-specific wrist, finger and foot checks. See [motion study](MOTION-REFERENCE-STUDY.md).
 - [ ] Phoneme-aware mouth animation and device-verified audiovisual timing. Actual PCM amplitude now drives mouth opening; this is not phoneme lip sync. See SPEECH.md.
 - [ ] Natural Russian voice, interruptible playback, no feedback loop into microphone. Current Apple TTS is a functional baseline, not demonstrated parity.
 - [ ] User-confirmed automatic conversation, endpoint detection, next-turn microphone restart and transcripts validated on device with Bluetooth, interruption, permission denial and network loss.

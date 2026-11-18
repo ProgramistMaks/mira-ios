@@ -1,5 +1,7 @@
 # Compositional character performances
 
+This document covers the earlier numeric catalogue, retained for compatibility. Current native and web gesture pickers share the 16-clip choreography catalogue. [Current motion study](MOTION-REFERENCE-STUDY.md).
+
 The user's request for over 10,000 animations is implemented as **29,952 selectable
 combinations**, not 29,952 independently authored clips or motion-capture recordings:
 

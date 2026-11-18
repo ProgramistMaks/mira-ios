@@ -30,7 +30,7 @@ def fixture():
               "NSExtension": {"NSExtensionPointIdentifier": "com.apple.widgetkit-extension"}}
     return {"Info.plist": plistlib.dumps(info), "Companion": binary(linked=True),
             "Frameworks/llama.framework/llama": binary(), "Web/character.vrm": b"glTFfixture",
-            **{name: b"fixture" for name in ["Web/index.html", "Web/avatar.js", "Web/ASSET-LICENSE.md", "Web/avatar.js.LEGAL.txt"]},
+            **{name: b"fixture" for name in ["Web/index.html", "Web/avatar.js", "Web/choreography.json", "Web/body-catalog.json", "Web/ASSET-LICENSE.md", "Web/avatar.js.LEGAL.txt"]},
             "PlugIns/MiraWidgets.appex/Info.plist": plistlib.dumps(widget),
             "PlugIns/MiraWidgets.appex/MiraWidgets": binary()}
 
@@ -51,7 +51,7 @@ class PackageTests(unittest.TestCase):
         self.assertEqual(len(report["sha256"]), 64)
 
     def test_missing_components_are_rejected(self):
-        for name in ["Web/character.vrm", "Frameworks/llama.framework/llama", "PlugIns/MiraWidgets.appex/MiraWidgets"]:
+        for name in ["Web/choreography.json", "Web/body-catalog.json", "Web/character.vrm", "Frameworks/llama.framework/llama", "PlugIns/MiraWidgets.appex/MiraWidgets"]:
             with self.subTest(name=name):
                 files = fixture(); del files[name]
                 with self.assertRaisesRegex(ValueError, "Missing bundled component"):
