@@ -11,6 +11,8 @@ test('every hands-free turn needs its own wake word. A separate name accepts exa
   assert.ok(gate.pending(450));
   assert.equal(gate.accept('какая погода', 'Вита', 10399, 18000), 'какая погода');
   assert.ok(!gate.pending(18001));
+  gate.accept('Мира', 'Вита', 18002, 19500);
+  assert.equal(gate.accept('запиши чай', 'Вита', 19000, 19800), 'запиши чай');
   gate.accept('Мира', 'Вита', 20000, 20000);
   assert.equal(gate.accept('привет', 'Вита', 30001, 30001), undefined);
   assert.equal(gate.accept('мы говорили про Миру', 'Вита', 31000, 31000), undefined);
@@ -81,4 +83,37 @@ test('delayed loudspeaker echo does not interrupt playback, but independent spee
   for (let i = 0; i < 12; i++) voice.chunk(new Float32Array(frame), start + 1 + (i * frame) / rate);
   assert.equal(Buffer.from(captured).subarray(0, 4).toString(), 'RIFF');
   assert.ok(captured.length > 44);
+});
+
+test('a question spoken while the wake word is still being transcribed is processed in order', async () => {
+  const { Voice } = await import('../ui/audio.js');
+  const { WakeGate } = await import('../ui/wake.mjs');
+  const gate = new WakeGate(), accepted = [], errors = [];
+  let finishWake;
+  const wake = new Promise((resolve) => { finishWake = resolve; });
+  const previousWindow = global.window;
+  let requests = 0;
+  global.window = { desk: { call: async () => (++requests === 1 ? wake : 'сколько времени') } };
+  try {
+    const voice = new Voice((text, start) => {
+      const question = gate.accept(text, 'Мира', start);
+      if (question) accepted.push(question);
+    }, () => {}, (error) => errors.push(error), () => true, () => false);
+    Object.assign(voice, { enabled: true, settings: { silence: 0.45 }, ctx: { sampleRate: 16000 } });
+    voice.reset();
+    const first = voice.turn(new Uint8Array(64), Date.now() - 2000);
+    const frame = new Float32Array(1024).fill(0.2);
+    for (let i = 0; i < 10; i++) voice.chunk(frame, i * 0.064);
+    for (let i = 10; i < 20; i++) voice.chunk(new Float32Array(1024), i * 0.064);
+    assert.equal(voice.pendingSpeech.length, 1);
+    finishWake('Мира');
+    await first;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(accepted, ['сколько времени']);
+    assert.deepEqual(errors, []);
+    assert.equal(requests, 2);
+  } finally {
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+  }
 });

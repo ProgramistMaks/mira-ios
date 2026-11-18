@@ -24,13 +24,14 @@ function desktopIntent(text) {
     .trim()
     .toLowerCase()
     .replace(/[.,!?]/g, '')
+    .replace(/(браузер)[-–—]+(?=[а-яa-z])/g, '$1 ')
     .replace(/^(?:(?:мира|пожалуйста|please)\s+)+|\s+(?:пожалуйста|please)$/g, '');
   const match = /^(?:открой|открыть|запусти|запустить|open|launch)\s+(?:(?:the|мой)\s+)?(.+)$/.exec(phrase);
   if (!match) return;
   if (/^(?:браузер\s+)?(?:(?:гугл|гугол|google)\s+)?(?:хром|chrome)(?:\s+browser)?$/.test(match[1]))
     return 'chrome';
   if (
-    /^(?:браузер|браузер (?:гугл|гугол|google)|(?:гугл|гугол|google) браузер|гугл|гугол|google|browser|google browser)$/.test(
+    /^(?:браузер|браузер (?:гугл|гугол|бугл|google)|(?:гугл|гугол|google) браузер|гугл|гугол|google|browser|google browser)$/.test(
       match[1],
     )
   )

@@ -183,6 +183,7 @@ try {
   await expect(outputControl).toHaveAttribute('data-state', 'off');
   await expect(p.locator('#voiceBar')).toBeHidden();
   await outputControl.click();
+  const beforeMicTest = await p.evaluate(async () => (await window.desk.call('state')).chats);
   await p.locator('[data-act=testMic]').click();
   await expect(p.locator('#micReading')).toContainText('дБ');
   await expect(p.locator('[data-act=testMic]')).toContainText('Завершить');
@@ -198,7 +199,7 @@ try {
   await expect(p.locator('#voiceBar')).toBeHidden();
   await p.locator('[data-go=voice]').first().click();
   await expect(p.locator('[data-act=testMic]')).toContainText('Проверить микрофон');
-  assert.deepEqual(await p.evaluate(async () => (await window.desk.call('state')).chats), state.chats);
+  assert.deepEqual(await p.evaluate(async () => (await window.desk.call('state')).chats), beforeMicTest);
   // Interrupt a real Piper output with an independently recorded utterance. The
   // first browser-microphone turn above also exercises the getUserMedia/worklet path.
   const recorded = await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'));
@@ -251,7 +252,7 @@ try {
   assert.match(interrupt.heard[0], /молоко/iu);
   assert.ok(interrupt.states.indexOf('Слышу тебя…') > interrupt.states.indexOf('Отвечаю…'));
   assert.equal(interrupt.states.filter((s) => s === 'Отвечаю…').length, 2);
-  assert.equal(interrupt.states.at(-1), 'Жду обращения «Мира»');
+  assert.equal(interrupt.states.at(-1), 'Слушаю. Можно говорить.');
   console.log(
     'Microphone meter, device selection, follow-up preference and interruption with real local transcription and synthesis passed.',
   );

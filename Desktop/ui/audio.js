@@ -46,6 +46,7 @@ export class Voice {
     this.turnId = 0;
     this.replyEpoch = 0;
     this.captureId = 0;
+    this.pendingSpeech = [];
   }
   async devices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -186,7 +187,7 @@ export class Voice {
     if (this.wakeDuringPlayback && (this.interruption || this.playing)) {
       if (this.settings?.interruptReplies === false || this.probingWake) return;
       const echo =
-        this.playing && (!this.speaker || isPlaybackEcho(buf, this.ctx.sampleRate, time, this.reference));
+        this.speaker && isPlaybackEcho(buf, this.ctx.sampleRate, time, this.reference);
       const speech = voiced && !echo;
       if (!this.interruption && !speech) return;
       const capture = (this.interruption ??= { start: Date.now(), frames: [], quiet: 0, speech: 0 });
@@ -231,7 +232,7 @@ export class Voice {
       this.onStatus('Слышу тебя…', 'listening');
       return;
     }
-    if (this.busy) return;
+    if (this.busy && !this.wakeDuringPlayback) return;
     if (!this.recording) {
       this.pre.push(buf);
       if (this.pre.length > Math.ceil(0.45 / sec)) this.pre.shift();
@@ -247,6 +248,11 @@ export class Voice {
     if (this.quiet < (this.settings?.silence ?? 0.78) && this.frames.length * sec < 70) return;
     const bytes = wav(join(this.frames), this.ctx.sampleRate);
     this.reset();
+    if (this.busy) {
+      // Whisper and the next utterance can overlap on slower computers.
+      if (this.pendingSpeech.length < 3) this.pendingSpeech.push({ bytes, startedAt: this.utteranceStart });
+      return;
+    }
     this.turn(bytes, this.utteranceStart).catch((e) => this.onError(e));
   }
   async checkInterruption(capture) {
@@ -259,6 +265,7 @@ export class Voice {
       if (epoch !== this.epoch || !this.enabled || !this.wakeDuringPlayback(text)) return;
       this.probingWake = null;
       this.turnId++;
+      this.pendingSpeech.length = 0;
       this.hush();
       this.reset();
       await this.turn(null, capture.start, text);
@@ -297,8 +304,9 @@ export class Voice {
       if (active()) {
         this.transcribing = false;
         this.busy = false;
-        this.reset();
-        this.onStatus('Слушаю. Можно говорить.', 'listening');
+        const next = this.pendingSpeech.shift();
+        if (next) this.turn(next.bytes, next.startedAt).catch((err) => this.onError(err));
+        else if (!this.recording) this.onStatus('Слушаю. Можно говорить.', 'listening');
       }
     }
   }
@@ -383,6 +391,7 @@ export class Voice {
     this.enabled = false;
     this.testing = false;
     this.captureId++;
+    this.pendingSpeech.length = 0;
     this.interruption = null;
     this.probingWake = null;
     this.turnId++;

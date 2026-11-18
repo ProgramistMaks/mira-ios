@@ -37,7 +37,7 @@ export class WakeGate {
   accept(text, name, startedAt = Date.now(), now = Date.now()) {
     const hit = this.match(text, name);
     if (hit && !hit.text) {
-      this.armedAt = now;
+      this.armedAt = startedAt;
       this.until = now + 10000;
       return;
     }
