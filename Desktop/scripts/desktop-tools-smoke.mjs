@@ -11,6 +11,11 @@ const root = fileURLToPath(new URL('../../', import.meta.url)),
   profile = await mkdtemp(path.join(os.tmpdir(), 'mira-tools-ui-'));
 const requests = [];
 const server = createServer(async (req, res) => {
+  if (req.url === '/v1/models') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ data: [{ id: 'fixture' }, { id: 'extra-fixture' }] }));
+    return;
+  }
   let body = '';
   for await (const chunk of req) body += chunk;
   requests.push(JSON.parse(body));
@@ -64,6 +69,7 @@ try {
   await p.locator('#base').fill('http://127.0.0.1:' + server.address().port + '/v1');
   await p.locator('#cloudModel').fill('fixture');
   await p.locator('[data-act=saveAI]').click();
+  await expect(p.locator('#availableAI option').nth(2)).toHaveAttribute('value', 'fixture');
   await p.locator('[data-act=assistants]').click();
   await p.locator('#assistantRole').selectOption('writer');
   await p.locator('#jobPrompt').fill('Проверка заметки');
@@ -101,6 +107,14 @@ try {
     .poll(() => p.locator('.generatedImage').evaluateAll((images) => images[0]?.naturalWidth))
     .toBe(1);
   await p.keyboard.press('Escape');
+  await p.locator('#aiKey').fill('saved-model-key-fixture');
+  await p.locator('[data-act=saveAI]').click();
+  await expect(p.locator('[data-act=useSavedAI]')).toHaveCount(1);
+  await expect(p.locator('#aiKey')).toBeEmpty();
+  await expect(p.locator('#availableAI option').nth(1)).toHaveAttribute('value', 'extra-fixture');
+  await p.locator('#availableAI').selectOption('extra-fixture');
+  await expect.poll(() => p.evaluate(async () => (await window.desk.call('state')).settings.cloudModel))
+    .toBe('extra-fixture');
   await app.evaluate(({ shell }) => {
     shell.openExternal = async (url) => {
       globalThis.openedByMira = url;
@@ -110,7 +124,43 @@ try {
   await p.locator('#prompt').fill('открой браузер гугол');
   await p.locator('#send').click();
   await expect.poll(() => app.evaluate(() => globalThis.openedByMira)).toBe('https://www.google.com/');
+  await p.evaluate(() => window.desk.call('settings', { name: 'Nova' }));
+  await expect(p.locator('#nameplate span')).toHaveText('Nova');
+  await p.locator('[data-act=buildVoiceRoutine]').first().click();
+  await expect(p.locator('#area')).toHaveAttribute('data-page', 'commands');
+  await p.locator('[data-act=youtubeRoutine]').click();
+  await expect(p.locator('#rPhrase')).toHaveValue('открой ютуб');
+  await p.locator('[data-act=saveRoutine]').click();
+  await expect.poll(() => p.evaluate(async () => (await window.desk.call('state')).routines
+    .some(r => r.phrase === 'открой ютуб'))).toBe(true);
+  await app.evaluate(({ shell }) => {
+    globalThis.routineUrls = [];
+    shell.openExternal = async (url) => { globalThis.routineUrls.push(url); };
+  });
+  await p.evaluate(async () => {
+    const { WakeGate } = await import('/wake.mjs');
+    const gate = new WakeGate();
+    const text = gate.accept('Мира, открой ютуб', 'Мира');
+    const { id } = await window.desk.call('newChat');
+    await window.desk.call('send', { id, text, voiceMode: true });
+  });
+  assert.deepEqual(await app.evaluate(() => globalThis.routineUrls), [
+    'https://www.google.com/',
+    'https://www.youtube.com/',
+  ]);
+  await app.evaluate(() => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (url, ...options) => String(url).startsWith('https://api.github.com/repos/ProgramistMaks/mira-ios/releases?')
+      ? Promise.resolve(Response.json([{
+          tag_name: 'desktop-v0.13.0',
+          body: 'https://github.com/ProgramistMaks/mira-ios/raw/' + 'e'.repeat(40) +
+            '/Mira-PC-0.13.0-Windows-x64.zip\nSHA-256 `' + 'a'.repeat(64) + '`',
+        }]))
+      : real(url, ...options);
+  });
   await p.locator('#tabs [data-go=settings]').click();
+  await p.locator('[data-act=checkUpdate]').click();
+  await expect(p.locator('#content [role=status]').filter({hasText:'0.13.0'})).toBeVisible();
   await p.locator('[data-act=widgetShapes]').click();
   await p.locator('#shapeMode').selectOption('window');
   await p.locator('#shapePoints').fill('0,0 100,0 100,80 50,100 0,80');
@@ -126,6 +176,10 @@ try {
   p = await launch();
   await expect(p.locator('html')).toHaveAttribute('lang', 'en');
   await expect(p.locator('#intro')).toBeHidden();
+  await expect(p.locator('#heroName')).toHaveText('Nova');
+  await p.locator('#tabs [data-go=ai]').click();
+  await expect(p.locator('[data-act=useSavedAI]')).toHaveCount(1);
+  await expect(p.locator('#cloudModel')).toHaveValue('extra-fixture');
   assert.equal(
     await p.evaluate(
       async () => (await window.desk.call('assistantList')).find((x) => x.role === 'writer').result,

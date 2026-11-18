@@ -45,6 +45,7 @@ export const kinds = {
   task: 'Добавить задачу',
   focus: 'Запустить фокус, мин',
   wait: 'Подождать, сек',
+  browser: 'Открыть браузер',
   url: 'Открыть сайт',
   file: 'Открыть файл или программу',
   search: 'Поиск в интернете',
@@ -62,6 +63,7 @@ export const kinds = {
 const commandsIcon = {
   ifTime: 'clock-3',
   repeat: 'rotate-ccw',
+  browser: 'globe',
   url: 'globe',
   file: 'folder-open',
   say: 'volume-2',
@@ -675,6 +677,7 @@ export function commands(s, c) {
       })
       .join('') +
     '<p id="noCommandMatches" class="muted" hidden>Совпадений нет</p>' +
+    btn('Пример с YouTube', 'youtubeRoutine', 'globe') +
     btn('Из описания', 'describeCommand', 'workflow') +
     '</aside>';
   if (!d)
@@ -773,7 +776,7 @@ export function commands(s, c) {
         b.value,
       );
     if (b.kind === 'clipboardAI') value = field('Задание для ИИ', 'nodeValue', b.value);
-    if (['dance', 'music', 'meeting', 'cancelShutdown'].includes(b.kind)) value = '';
+    if (['browser', 'dance', 'music', 'meeting', 'cancelShutdown'].includes(b.kind)) value = '';
     if (['processRunning', 'closeWindow'].includes(b.kind))
       value = field('Имя процесса · notepad.exe', 'nodeValue', b.value);
     if (b.kind === 'ifTime') value = field('Диапазон часов · 09-18', 'nodeValue', b.value);
@@ -831,7 +834,9 @@ export function commands(s, c) {
     field('Группа', 'rGroup', d.group || '') +
     field('Голосовая фраза', 'rPhrase', d.phrase) +
     field('Горячая клавиша', 'rHotkey', d.hotkey) +
-    '</div><div class="flowTools"><select class="control" id="kind">' +
+    '</div>' +
+    (d.phrase ? '<p class="muted">Для голосового запуска скажи «' + esc((s.settings.wakeAlias || 'Мира') + ', ' + d.phrase) + '».</p>' : '') +
+    '<div class="flowTools"><select class="control" id="kind">' +
     Object.entries(kinds)
       .concat(
         s.extensions.flatMap((p) =>
@@ -985,7 +990,8 @@ export function model(s, c) {
             a.overlayAnchor,
           ) +
             acts(
-              btn(s.seated ? 'Встать' : 'Сесть на край окна', 'seat', 'pin'),
+              btn(s.seated && !s.seatOnTaskbar ? 'Встать' : 'Сесть на край окна', 'seat', 'pin'),
+              btn(s.seatOnTaskbar ? 'Встать с панели' : 'Сесть на панель задач', 'seatTaskbar', 'monitor'),
               btn(a.showAvatar ? 'Скрыть на главной' : 'Показать на главной', 'showAvatar', 'user-round'),
               preview,
             ),
@@ -1324,17 +1330,36 @@ export function ai(s, c) {
           ? select('Подставить адрес', 'preset', [['', 'Свой сервер'], ...providerPresets], a.base) +
             field('Адрес API', 'base', a.base) +
             field('Название модели', 'cloudModel', a.cloudModel) +
+            (c.availableAI?.base === a.base && c.availableAI.ids.length
+              ? select('Доступные модели', 'availableAI', [['', 'Выбрать модель'], ...c.availableAI.ids.map(id => [id, id])], a.cloudModel)
+              : '') +
+            (c.aiModelStatus ? '<p role="status">' + esc(c.aiModelStatus) + '</p>' : '') +
             field(
               s.keys.includes('ai') ? 'API-ключ сохранён · заменить' : 'API-ключ',
               'aiKey',
               '',
               'password',
             ) +
-            acts(btn('Сохранить подключение', 'saveAI', 'save', 'primary'))
+            acts(btn('Сохранить подключение', 'saveAI', 'save', 'primary') +
+              btn('Загрузить модели', 'listAI', 'refresh-cw'))
           : '<p class="muted">Вес модели скачивается на ПК один раз. Для запуска используется встроенный llama.cpp.</p>') +
         '<hr>' +
         field('Роль собеседника', 'role', a.role) +
         acts(btn('Сохранить роль', 'saveRole', 'save')),
+    ) +
+    box(
+      'Сохранённые API-ключи',
+      'key-round',
+      ((s.aiKeys || []).length
+        ? '<ul>' + s.aiKeys.map(base =>
+            '<li>' + esc(providerPresets.find(p => p[0] === base)?.[1] || base) +
+            ' <button class="text" data-act="useSavedAI" data-id="' + esc(base) + '">Подключить</button>' +
+            ' <button class="text" data-act="forgetAI" data-id="' + esc(base) + '">Удалить</button></li>').join('') + '</ul>'
+        : '<p class="muted">Ключей для ИИ пока нет.</p>') +
+        '<p class="muted">' + esc([
+          ['search', 'Tavily'], ['images', 'OpenAI Images'], ['fish', 'Fish Audio'],
+          ['speechAPI', 'Сервис речи'], ['telegram', 'Telegram'], ['workshop', 'Мастерская'],
+        ].filter(([id]) => s.keys.includes(id)).map(([,label]) => label).join(' · ')) + '</p>',
     ) +
     box(
       'Поиск в интернете',
@@ -1614,6 +1639,16 @@ export function settings(s, c) {
           btn('Размещение и форма виджетов', 'widgetShapes', 'layout-dashboard') +
             btn('Предпросмотр и очистка кэша', 'cachePreview', 'trash-2'),
         ),
+    ) +
+    box(
+      'Обновления приложения',
+      'refresh-cw',
+      '<p>Текущая версия ' + esc(s.version) + '</p>' +
+        (c.updateStatus ? '<p role="status">' + esc(c.updateStatus) + '</p>' : '') +
+        acts(btn('Проверить обновления', 'checkUpdate', 'refresh-cw') +
+          (c.updateBuild && s.platform === 'win32' && !c.updateRunning
+            ? btn('Обновить до ' + c.updateBuild.version, 'installUpdate', 'download', 'primary')
+            : '')),
     ) +
     box(
       'Остров на экране',

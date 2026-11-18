@@ -9,9 +9,9 @@ const titles = {
 };
 export const CHOREOGRAPHY = Object.entries(titles).filter(([id])=>!SHOTS[id]?.automaticOnly).map(([id,title])=>({id,title}));
 const pools = {
-  idle:['cheek','fold','nod'],
-  listening:['heart','nod','fold','cheek','shrug','idle','palms'],
-  thinking:['cheek','fold','options','no','shrug','point'],
+  idle:['idle','cheek','fold','nod','palms','temples','heart'],
+  listening:['heart','nod','fold','cheek','shrug','idle','palms','temples'],
+  thinking:['cheek','fold','options','no','shrug','point','temples','nod'],
   speaking:['palms','options','point','heart','nod','no','shrug','temples','cheek'],
 };
 const fingerCurl = {open:[.14,.045,.1,.16,.22],soft:[.22,.18,.29,.39,.47],
@@ -49,7 +49,7 @@ export class ChoreographyRig {
     this.parent=new Quaternion(); this.inverseParent=new Quaternion(); this.rootQ=new Quaternion(); this.v=new Vector3(); this.v2=new Vector3();
     this.viewOffset=0;this.priorViewOffset=0;
     this.mode='auto'; this.clip='idle'; this.age=0; this.fade=1;
-    this.history=[]; this.nextDance=45+random()*45; this.elapsed=0; this.silence=1;
+    this.history=[]; this.elapsed=0; this.silence=1;
     this.breathCycle=0; this.inhale=0;
     this.phase='idle'; this.enabled=false; this.holdUntil=3.6; this.direct=false;
   }
@@ -98,10 +98,6 @@ export class ChoreographyRig {
   }
   choose(phase) {
     if(phase==='idle' && this.clip!=='idle')return 'idle';
-    if(phase==='speaking' && this.elapsed>=this.nextDance){
-      this.nextDance=this.elapsed+45+this.random()*45;
-      return this.random()<.5?'skip':'dance';
-    }
     const candidates=pools[phase].filter(id=>!this.history.includes(id));
     if(!candidates.length)return this.history.find(id=>pools[phase].includes(id));
     return candidates[Math.floor(this.random()*candidates.length)];

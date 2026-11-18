@@ -169,8 +169,8 @@ function renderFrame() {
   a?.setActive(visible);
   if ((visible || state.motionPort) && !a?.ready && !avatarReadyTimer) setupAvatar();
   a?.setFrameRate(state.settings.fps);
-  $('#nameplate span').textContent =
-    state.avatars.find((v) => v.id === state.settings.avatar)?.name || 'Вита';
+  $('#nameplate span').textContent = state.settings.name;
+  avatarFrame.title = state.settings.name;
 }
 function nav(next) {
   if (!pages.names[next]) return;
@@ -807,6 +807,24 @@ function newChat() {
   nav('home');
   $('#prompt').focus();
 }
+let modelListRequest = 0;
+async function loadAIModels() {
+  const base = state.settings.base;
+  const request = ++modelListRequest;
+  cache.aiModelStatus = 'Загружаю список моделей…';
+  cache.availableAI = null;
+  if (page === 'ai') renderPage();
+  try {
+    const ids = await call('discoverAi', { base });
+    if (request !== modelListRequest || state.settings.base !== base) return;
+    cache.availableAI = { base, ids };
+    cache.aiModelStatus = ids.length ? '' : 'Сервис не вернул доступных моделей';
+  } catch (error) {
+    if (request !== modelListRequest || state.settings.base !== base) return;
+    cache.aiModelStatus = error.message;
+  }
+  if (page === 'ai') renderPage();
+}
 async function saveSettings(data) {
   await call('settings', data);
   await refresh();
@@ -1389,6 +1407,53 @@ async function handle(action, id) {
           .join('') || '<p class="empty">Совпадений нет.</p>';
       return;
     }
+    case 'checkUpdate':
+      if (cache.updateRunning) return;
+      cache.updateStatus = 'Проверяю обновления…';
+      cache.updateBuild = null;
+      renderPage();
+      try {
+        cache.updateBuild = await call('checkUpdate');
+        cache.updateStatus = cache.updateBuild
+          ? 'Доступна версия ' + cache.updateBuild.version
+          : 'Установлена последняя версия';
+      } catch (error) {
+        cache.updateStatus = error.message;
+      }
+      if (page === 'settings') renderPage();
+      return;
+    case 'installUpdate':
+      if (cache.updateRunning ||
+          !window.confirm('Скачать обновление и перезапустить Миру после подготовки?')) return;
+      cache.updateRunning = true;
+      cache.updateStatus = 'Скачиваю и проверяю обновление…';
+      renderPage();
+      try {
+        await call('installUpdate');
+      } catch (error) {
+        cache.updateStatus = error.message;
+        cache.updateRunning = false;
+        if (page === 'settings') renderPage();
+      }
+      return;
+    case 'buildVoiceRoutine':
+      cache.commandTab = 'editor';
+      nav('commands');
+      loadDraft('');
+      return;
+    case 'youtubeRoutine':
+      cache.draft = {
+        name: 'Открыть YouTube',
+        phrase: 'открой ютуб',
+        hotkey: '',
+        blocks: [
+          { kind: 'browser', value: '' },
+          { kind: 'url', value: 'https://www.youtube.com/' },
+        ],
+      };
+      cache.node = 0;
+      renderPage();
+      return;
     case 'standby':
       await toggleVoice(true);
       return;
@@ -1435,6 +1500,9 @@ async function handle(action, id) {
     case 'showAvatar':
       if ($('#navMenu').matches(':popover-open')) $('#navMenu').hidePopover();
       return saveSettings({ showAvatar: !state.settings.showAvatar });
+    case 'seatTaskbar':
+      await call('seat', { taskbar: true });
+      return refresh();
     case 'seat':
       await call('seat');
       await refresh();
@@ -1614,14 +1682,26 @@ async function handle(action, id) {
       toast(ready ? 'Голос ответов изменён' : 'Голос выбран. Для озвучки ответов добавь ключ Fish Audio.');
       return;
     }
+    case 'forgetAI':
+      if (!window.confirm('Удалить ключ для ' + id + '?')) return;
+      await call('key', { name: 'ai', base: id, value: '' });
+      cache.availableAI = null;
+      return refresh();
+    case 'useSavedAI':
+      await saveSettings({ base: id, cloudModel: '', provider: 'endpoint' });
+      return loadAIModels();
+    case 'listAI':
     case 'saveAI': {
       const base = val('base'),
         cloudModel = val('cloudModel'),
         key = val('aiKey');
       await saveSettings({ base, cloudModel, provider: 'endpoint' });
-      if (key) await call('key', { name: 'ai', value: key });
-      toast('Подключение сохранено');
-      return;
+      if (key) {
+        await call('key', { name: 'ai', base, value: key });
+        await refresh();
+      }
+      if (action === 'saveAI') toast('Подключение сохранено');
+      return loadAIModels();
     }
     case 'saveRole':
       return saveSettings({ role: val('role') });
@@ -2299,10 +2379,14 @@ document.addEventListener('change', (e) => {
       .catch(err);
     return;
   }
+  if (e.target.id === 'availableAI' && v) {
+    $('#cloudModel').value = v;
+    saveSettings({ cloudModel: v }).catch(err);
+  }
   if (e.target.id === 'preset' && v) {
     $('#base').value = v;
     const preset = pages.providerPresets.find((p) => p[0] === v);
-    if (preset?.[2]) $('#cloudModel').value = preset[2];
+    $('#cloudModel').value = preset?.[2] || '';
   }
   if (e.target.id === 'gesture') {
     cache.gesture = v;
@@ -2355,6 +2439,11 @@ $('#content').addEventListener('pointerup', () => {
   renderPage();
 });
 $('#content').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && ['aiKey', 'cloudModel', 'base'].includes(e.target.id)) {
+    e.preventDefault();
+    handle('saveAI').catch(err);
+    return;
+  }
   const n = e.target.closest('button[data-node]');
   if (n && ['Enter', ' '].includes(e.key)) {
     e.preventDefault();

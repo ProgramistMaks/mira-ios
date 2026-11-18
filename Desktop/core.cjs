@@ -13,6 +13,7 @@ function endpoint(value) {
   const u = new URL(webURL(value));
   if (u.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(u.hostname))
     throw Error('Для внешнего сервиса нужен HTTPS');
+  if (u.search || u.hash) throw Error('Укажи базовый адрес API без параметров');
   return u.href.replace(/\/$/, '');
 }
 const normal = (s) =>
@@ -175,6 +176,11 @@ class Store {
       },
     };
     let migrated = !!disk.settings && !Object.hasOwn(disk.settings, 'wakePerTurn');
+    if (this.data.secrets.ai) {
+      this.data.secrets['ai@' + this.data.settings.base] ||= this.data.secrets.ai;
+      delete this.data.secrets.ai;
+      migrated = true;
+    }
     for (const chat of this.data.chats)
       for (const message of chat.messages)
         if (!message.id) {
@@ -208,7 +214,11 @@ class Store {
       })),
       excludedDirs: (excludedDirs || []).map(({ id, name }) => ({ id, name })),
       paired: Boolean(pairedChat),
-      keys: Object.keys(secrets).filter((k) => Boolean(secrets[k])),
+      aiKeys: Object.keys(secrets).filter((k) => k.startsWith('ai@') && secrets[k]).map((k) => k.slice(3)),
+      keys: [
+        ...Object.keys(secrets).filter((k) => !k.startsWith('ai@') && Boolean(secrets[k])),
+        ...(secrets['ai@' + state.settings.base] ? ['ai'] : []),
+      ],
       files: state.files.map(({ id, name, kind }) => ({ id, name, kind })),
       voices: state.voices.map(({ id, name }) => ({ id, name })),
       avatars: state.avatars.map(({ id, name }) => ({ id, name })),
@@ -222,6 +232,7 @@ const blockTypes = [
   'task',
   'focus',
   'wait',
+  'browser',
   'url',
   'file',
   'search',

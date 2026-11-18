@@ -113,6 +113,7 @@ const push = (data) => {
 let modelCalls = 0;
 let activityVersion = 0;
 let aiKeyRevision = 0;
+let updating = false;
 let lastModelCheck;
 function modelConfig() {
   const s = store.data.settings;
@@ -169,20 +170,21 @@ function secret(k) {
   const v = store.data.secrets[k];
   return v ? safeStorage.decryptString(Buffer.from(v, 'base64')) : '';
 }
-function saveSecret(k, v) {
+function saveSecret(k, v, base = store.data.settings.base) {
   if (
     !['ai', 'fish', 'search', 'telegram', 'workshop', 'speechAPI', 'images'].includes(k) &&
     !/^mcp-[\w-]+$/.test(k)
   )
     throw Error('Неизвестный ключ');
-  if (v) {
+  const slot = k === 'ai' ? 'ai@' + endpoint(base) : k;
+  if (String(v || '').trim()) {
     if (
       !safeStorage.isEncryptionAvailable() ||
       (process.platform === 'linux' && safeStorage.getSelectedStorageBackend?.() === 'basic_text')
     )
       throw Error('Защищённое хранилище системы недоступно');
-    store.data.secrets[k] = safeStorage.encryptString(String(v).trim()).toString('base64');
-  } else delete store.data.secrets[k];
+    store.data.secrets[slot] = safeStorage.encryptString(String(v).trim()).toString('base64');
+  } else delete store.data.secrets[slot];
   if (k === 'ai') aiKeyRevision++;
   store.save();
 }
@@ -330,12 +332,14 @@ function guard(w) {
   w.webContents.on('will-attach-webview', (e) => e.preventDefault());
 }
 let seated = false,
+  seatOnTaskbar = false,
   stopTracking = null,
   freePosition = null;
 function endSeat(restore = true) {
   stopTracking?.();
   stopTracking = null;
   seated = false;
+  seatOnTaskbar = false;
   if (restore && overlay && !overlay.isDestroyed()) {
     if (freePosition) overlay.setPosition(...freePosition);
     overlay.showInactive();
@@ -344,16 +348,28 @@ function endSeat(restore = true) {
   push({ type: 'seat', value: false });
   trayMenu();
 }
-function toggleSeat() {
+function toggleSeat(taskbar = false) {
   if (seated) {
+    const same = seatOnTaskbar === taskbar;
     endSeat();
-    return;
+    if (same) return;
   }
   overlayState(true);
   freePosition = overlay.getPosition();
   seated = true;
+  seatOnTaskbar = taskbar;
   push({ type: 'seat', value: true });
   trayMenu();
+  if (taskbar) {
+    const display = screen.getDisplayMatching(overlay.getBounds());
+    const area = display.workArea;
+    const [w, h] = overlay.getSize();
+    const left = store.data.settings.overlayAnchor.endsWith('left');
+    overlay.setPosition(left ? area.x + 20 : area.x + area.width - w - 20,
+      area.y + area.height - Math.round(h * .56));
+    overlay.showInactive();
+    return;
+  }
   if (process.platform !== 'win32') return;
   if (main.isFocused()) main.minimize();
   alert('Вита на рабочем столе', 'Переключитесь на окно, на край которого сядет Вита.');
@@ -405,7 +421,7 @@ function overlayState(open) {
     alwaysOnTop: true,
     hasShadow: false,
     backgroundColor: '#00000000',
-    webPreferences: prefs,
+    webPreferences: { ...prefs, backgroundThrottling: false },
   });
   guard(overlay);
   overlay.setContentProtection(!!store.data.settings.hideCapture);
@@ -446,7 +462,7 @@ function trayMenu() {
           ? []
           : [{ label: 'Ждать обращения по имени', click: () => push({ type: 'standby' }) }]),
         { label: overlay ? 'Скрыть персонажа' : 'Персонаж поверх окон', click: () => overlayState(!overlay) },
-        { label: seated ? 'Встать' : 'Сесть на край окна', enabled: !!overlay, click: toggleSeat },
+        { label: seated ? 'Встать' : 'Сесть на край окна', enabled: !!overlay, click: () => toggleSeat(seated && seatOnTaskbar) },
         {
           label: 'Пропускать нажатия сквозь персонажа',
           type: 'checkbox',
@@ -767,6 +783,7 @@ async function execute(spec, remote = false) {
             'paste',
             'keys',
             'file',
+            'browser',
             'clipboardAI',
             'closeWindow',
             'shutdownTimer',
@@ -804,6 +821,8 @@ async function execute(spec, remote = false) {
           case 'dance':
             push({ type: 'dance' });
             return;
+          case 'browser':
+            return require('./pc-intent.cjs').openBrowser('browser', shell);
           case 'url':
             return shell.openExternal(webURL(b.value));
           case 'file':
@@ -971,7 +990,7 @@ async function chatConnection(vision = false) {
     const c = await trackModel(() => models.connection(s.model, vision), true);
     return { base: c.base, key: c.key, model: c.id };
   }
-  return { base: s.base, key: secret('ai'), model: s.cloudModel };
+  return { base: s.base, key: secret('ai@' + s.base), model: s.cloudModel };
 }
 async function draftCommand(text, signal) {
   return plan(
@@ -1866,6 +1885,7 @@ const actions = {
     })),
     overlay: !!overlay,
     seated,
+    seatOnTaskbar,
     version: app.getVersion(),
     platform: process.platform,
   }),
@@ -2020,7 +2040,6 @@ const actions = {
     ])
       if (k in input) s[k] = !!input[k];
     if (!s.name || !s.city) throw Error('Укажите имя и город');
-    if (new URL(s.base).origin !== new URL(store.data.settings.base).origin) delete store.data.secrets.ai;
     if (s.provider !== store.data.settings.provider || s.model !== store.data.settings.model) models.stop();
     if ('hotkey' in input)
       updateKeys(() => {
@@ -2053,13 +2072,35 @@ const actions = {
       app.setLoginItemSettings({ openAtLogin: s.startLogin, args: ['--login'] });
     return s;
   },
-  key: ({ name, value }) => {
+  checkUpdate: async () => {
+    const build = await require('./desktop-update.cjs').checkUpdate(app.getVersion());
+    return build && { version: build.version, page: build.page };
+  },
+  installUpdate: async () => {
+    if (process.platform !== 'win32') throw Error('Установка обновления доступна в Windows');
+    if (updating) return;
+    updating = true;
+    try {
+      const updater = require('./desktop-update.cjs');
+      const build = await updater.checkUpdate(app.getVersion());
+      if (!build) throw Error('Уже установлена последняя версия');
+      await updater.installUpdate(build, process.execPath, app.getPath('userData'));
+      setImmediate(() => app.quit());
+    } finally {
+      updating = false;
+    }
+  },
+  async discoverAi({ base }) {
+    const server = endpoint(base);
+    return require('./provider-models.cjs').discover(server, secret('ai@' + server));
+  },
+  key: ({ name, value, base }) => {
     if (name === 'telegram') {
       bot.stop();
       store.data.pairedChat = '';
       store.data.telegramOffset = 0;
     }
-    saveSecret(name, value);
+    saveSecret(name, value, name === 'ai' ? base : undefined);
     changed();
   },
   send: async (data) => {
@@ -2480,7 +2521,7 @@ const actions = {
       x.resolve(bytes);
     }
   },
-  seat: () => toggleSeat(),
+  seat: ({ taskbar } = {}) => toggleSeat(taskbar === true),
   overlay: ({ open }) => overlayState(!!open),
   show,
   overlayMenu: () => tray?.popUpContextMenu(),

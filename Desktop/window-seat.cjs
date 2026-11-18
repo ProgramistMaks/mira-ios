@@ -13,6 +13,7 @@ public static class MiraWindows {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int left, top, right, bottom; }
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect bounds);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Rect bounds, int size);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
   [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
@@ -34,7 +35,7 @@ $last=''
 while ([MiraWindows]::IsWindow($window)) {
   $r=New-Object MiraWindows+Rect
   if ([MiraWindows]::IsIconic($window)) { $line='hidden' }
-  elseif ([MiraWindows]::GetWindowRect($window,[ref]$r)) { $line="$($r.left),$($r.top),$($r.right),$($r.bottom)" }
+  elseif ([MiraWindows]::DwmGetWindowAttribute($window,9,[ref]$r,16) -eq 0 -or [MiraWindows]::GetWindowRect($window,[ref]$r)) { $line="$($r.left),$($r.top),$($r.right),$($r.bottom)" }
   else { break }
   if ($line -ne $last) { [Console]::WriteLine($line); $last=$line }
   Start-Sleep -Milliseconds 125

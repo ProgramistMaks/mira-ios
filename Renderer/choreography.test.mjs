@@ -429,13 +429,16 @@ test('both hands curl toward the palm, spread the outer digits and oppose the th
 
 test('uninterrupted idle alternates quiet shifts and sustained rest',()=>{
   rig.configure('auto');rig.begin('idle');rig.phase='idle';
+  const gestures = new Set();
   for(let cycle=0;cycle<8;cycle++){
     assert.equal(rig.clip,'idle');
     assert.ok(rig.holdUntil>=9);
     rig.age=rig.holdUntil;rig.update(1/120);
-    assert.ok(['fold','cheek','nod'].includes(rig.clip));
+    assert.ok(['fold','cheek','nod','palms','temples','heart'].includes(rig.clip));
+    gestures.add(rig.clip);
     rig.age=rig.holdUntil;rig.update(1/120);
   }
+  assert.ok(gestures.size >= 3, 'automatic resting gestures rotate through the pool');
 });
 
 test('breath continues across gesture changes and stops with Reduce Motion',()=>{

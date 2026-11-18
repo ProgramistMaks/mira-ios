@@ -34,6 +34,9 @@ function ready() {
 async function update() {
   state = await call('state');
   setReduced(state.settings.reduced);
+  $('#open').textContent = state.settings.name;
+  $('#avatar').title = state.settings.name;
+  document.title = state.settings.name;
   seated = state.seated;
   const appearance = state.settings.avatar + '/' + (state.settings.outfit || 'original');
   if ((last || 'vita/original') !== appearance)

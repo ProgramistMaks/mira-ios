@@ -114,6 +114,7 @@ async function main() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   document.body.appendChild(renderer.domElement);
   let contextLost = false;
+  renderer.domElement.addEventListener('webglcontextrestored', () => location.reload(), { once: true });
   // Install before loading: a context can disappear during model decoding too.
   renderer.domElement.addEventListener('webglcontextlost', event => {
     event.preventDefault(); contextLost = true;
@@ -162,7 +163,7 @@ async function main() {
   if (avatar.lookAt) avatar.lookAt.target = target;
   const desktopStage = location.protocol === 'mira:' && location.hostname === 'desk';
   const restingFrame = desktopStage ? .068 : 0;
-  let framingOffset = 0;
+  let framingOffset = 0, verticalCenter = 0;
   const resize = () => {
     const width = Math.max(1, nativeSize?.width ?? innerWidth);
     const viewportHeight = Math.max(1, nativeSize?.height ?? innerHeight);
@@ -171,6 +172,7 @@ async function main() {
     const distance = height * (desktopStage ? .585 : .54) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
     camera.position.set(0, center.y + height * 0.03, distance * Math.max(1, 0.65 / camera.aspect));
     camera.lookAt(0, center.y, 0); camera.position.y += (restingFrame + framingOffset) * height; camera.updateProjectionMatrix();
+    verticalCenter = camera.projectionMatrix.elements[9];
   };
   applyResize = resize; resize(); addEventListener('resize', resize);
   let rotation = 0;
@@ -240,6 +242,8 @@ async function main() {
   let previousPhase = phase;
   acting.update(0, reduced); acting.trigger('greeting'); authored.react(desktopStage ? 'arrival' : 'greeting'); details.listenCue();
   let lastPoseTime = 0;
+  const seatPoint = new THREE.Vector3();
+  const seatBone = avatar.humanoid.getRawBoneNode('hips');
   const renderFrame = (timestamp: number) => {
     // A cap is a target, not a claim about measured device performance.
     const cap = reduced ? Math.min(frameRate, 30) : frameRate;
@@ -309,7 +313,17 @@ async function main() {
     previousPhase = phase;
     details.update(delta, phase, natural ? authored.inhale : 0, natural && body.physics);
     avatar.update(delta);
-    if (active && !document.hidden) renderer.render(scene, camera);
+    if (active && !document.hidden) {
+      camera.projectionMatrix.elements[9] = verticalCenter;
+      if (seatWeight > .001 && seatBone) {
+        camera.updateMatrixWorld();
+        // The overlay window positions its 56% line at the tracked window edge.
+        seatBone.getWorldPosition(seatPoint).project(camera);
+        camera.projectionMatrix.elements[9] += (seatPoint.y + .12) * seatWeight;
+      }
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      renderer.render(scene, camera);
+    }
     const sample = cadence.sample(performance.now());
     if (sample) {
       window.companion.frameStats = sample;
