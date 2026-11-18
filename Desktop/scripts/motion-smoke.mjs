@@ -81,7 +81,24 @@ try {
       return transition;
     };
   });
-  await p.locator('#tabs [data-go=settings]').click();
+  const progress = await p.evaluate(async () => {
+    document.querySelector('#tabs [data-go=settings]').click();
+    const indicator = document.querySelector('#tabIndicator');
+    let slide;
+    for (let i = 0; i < 120 && !slide; i++) {
+      await new Promise(requestAnimationFrame);
+      slide = indicator.getAnimations().find((a) => a.transitionProperty === 'transform');
+    }
+    if (!slide) throw Error('Missing tab indicator transition');
+    slide.pause();
+    const x = [0, 55, 110, 165, 220].map((time) => {
+      slide.currentTime = time;
+      return new DOMMatrix(getComputedStyle(indicator).transform).m41;
+    });
+    slide.finish();
+    return x.map((offset) => Math.round((100 * (offset - x[0])) / (x.at(-1) - x[0])));
+  });
+  assert.deepEqual(progress, [0, 78, 97, 100, 100]);
   await expect(p.locator('#area')).toHaveAttribute('data-page', 'settings');
   const menu = p.locator('#navMenu');
   await p.locator('#navMenuButton').click();
