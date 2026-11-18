@@ -1,5 +1,12 @@
 # Verification — 2026-11-17
 
+## Vita choreography, 2026-11-18
+
+Native commit `74a17a5` passed 62 renderer tests, TypeScript checking, Swift source parsing and five IPA package guard tests. All 16 clips were recorded from the app’s WebGL renderer with Vita in front and three-quarter views. The revised dance includes an alternating support-foot regression. [Reference study](MOTION-REFERENCE-STUDY.md).
+
+The single requested package-only build stopped before macOS started. GitHub reported a payment issue or spending limit. No new IPA was produced. [Build 44271794160](https://github.com/ProgramistMaks/mira-ios/actions/runs/44271794160).
+
+
 ## Natural phrasing and 52 gesture tracks
 
 The catalogue expands to 29,952 combinations by appending 28 new gesture tracks.

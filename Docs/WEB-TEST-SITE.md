@@ -5,17 +5,9 @@ Published URL: https://mira-motion-lab.fungait8.chatgpt.site
 Owner-only Sites access; sign in with the owner's ChatGPT account. Site project:
 `appgprj_6afc1d7a03a48191ac670113db951f36`. Its source checkout is
 `/workspace/sites/mira-motion-lab`, with a separate Sites Git repository.
-Published source: `6a556b0fe43ea2709953e90a8a23545f9a9d6df3`.
-The renderer snapshot comes from native commit `a79763b` and contains 52 gesture
-tracks / 29,952 combinations. Later native changes do not update the Site automatically.
+The private deployment `appgdep_6afd6946c8108191a41a4db1caa16378` succeeded on 2026-11-18. Site source `d252a1f6df7370b6fff8cbce4d543dad3dcd2cf6` uses the renderer from native commit `74a17a526d8a29d217d15fbc514ceb29d148443a`. The clip lists matched, and their motion sources were compared byte-for-byte before publication. Both pickers expose the same 16 clips, with replay and automatic selection. The test site passed 13 contract and DOM-controller tests. The two-angle recordings use the native project's WebGL renderer in Chromium. Hosted Safari interaction and physical-device timing remain unverified.
 
-Gesture repair publication: `appgdep_6afc313cf4b08191b36fdd40485aaf7c`,
-reported succeeded on 2026-11-17. The **Тело и физика** panel has 93 control
-channels including 30 independent finger joints, shoulder/neck/pelvis controls,
-active leg IK, eye/mouth tests, spring tuning and optional denser hair geometry.
-Natural mode now has irregular secondary actions, gaze leading the head,
-velocity-preserving joint response, varied breathing and support changes. The
-reset button also restores automatic gesture selection. The full body implementation and asset limits are in [FULL-BODY.md](FULL-BODY.md).
+The **Тело и физика** panel has 93 control channels including 30 finger joints, shoulder, neck and pelvis controls, leg IK, face tests, spring tuning and optional denser hair geometry. The reset button restores automatic choreography. [Rig details](FULL-BODY.md).
 
 The Site provides real animation controls, wrist close-ups, themes, VRM import,
 browser speech, automatic conversation, audio-file amplitude synchronization,
