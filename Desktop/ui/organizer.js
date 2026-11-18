@@ -1,3 +1,4 @@
+import { appear, rowChanges } from './motion.js';
 import { $, call, esc, ico, reportError } from './shared.js';
 import { noteDocument, noteLabel, noteTag, sortedNotes, taskListOf } from './note-format.mjs';
 
@@ -64,6 +65,7 @@ function navigation() {
   const notes = mode === 'notes';
   dialog.dataset.mainList = String(selected === 'main');
   $('#orgCount').textContent = notes ? String(data.notes.length) : '';
+  const animate = rowChanges(list, '.orgRow', mode);
   list.innerHTML =
     (notes ? sortedNotes(data.notes) : data.taskLists)
       .map(
@@ -83,6 +85,7 @@ function navigation() {
           '</button>',
       )
       .join('') + (notes ? '' : '<button class="orgNewList" data-org="newList">＋ Добавить список</button>');
+  animate();
 }
 function noteEditor() {
   const n = noteById();
@@ -228,6 +231,7 @@ function format(cmd) {
   updateFormatState();
 }
 function taskPane(editId = '') {
+  const animate = rowChanges(pane, '.orgTask', selected);
   const rows = data.tasks.filter((t) => taskListOf(t) === selected);
   pane.innerHTML =
     '<div id="taskRows">' +
@@ -255,6 +259,7 @@ function taskPane(editId = '') {
           .join('')
       : '<div class="orgEmpty">В этом списке пусто — можно выдохнуть.</div>') +
     '</div><button class="taskAdd" data-org="add">＋ Добавить задачу</button>';
+  animate();
   if (editId) taskInput(editId);
 }
 function taskInput(id) {
@@ -306,6 +311,9 @@ function taskInput(id) {
   input.onblur = () => commit(false);
 }
 function paint() {
+  const key = mode + '/' + selected;
+  if (pane.dataset.selection !== key && dialog.open) appear(pane, { opacity: 0, translate: '0 4px' }, 200);
+  pane.dataset.selection = key;
   navigation();
   if (mode === 'notes') noteEditor();
   else taskPane();
@@ -448,8 +456,7 @@ dialog.addEventListener('cancel', (e) => {
   e.preventDefault();
   action('close').catch(reportError);
 });
-$('#orgPlace').onchange = (e) =>
-  call('screenWidget', { id: mode, mode: e.target.value }).catch(reportError);
+$('#orgPlace').onchange = (e) => call('screenWidget', { id: mode, mode: e.target.value }).catch(reportError);
 
 function updateFormatState() {
   const body = $('#noteBody'),

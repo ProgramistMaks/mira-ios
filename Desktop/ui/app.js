@@ -1,3 +1,12 @@
+import {
+  rollingNumber,
+  appear,
+  changeSurface,
+  rowChanges,
+  setReduced,
+  streamText,
+  motionEnabled,
+} from './motion.js';
 import { navigation } from './navigation.js';
 import { applyPalette } from './themes.mjs';
 import './error-journal.js';
@@ -88,6 +97,7 @@ const voice = new Voice(
     liveStatus = msg;
     $('#voiceStatus').textContent = msg;
     $('#voiceBar').hidden = !msg;
+    $('#voiceBar').dataset.phase = p;
     $('#voiceStart').innerHTML = ico('mic') + (voice.enabled ? 'Завершить разговор' : 'Включить микрофон');
     phase(p, state?.settings.reduced || false);
   },
@@ -221,7 +231,10 @@ function sections() {
 }
 $('#sectionNav').onclick = (e) => {
   const id = e.target.closest('button')?.dataset.section;
-  if (id) document.getElementById(id)?.scrollIntoView({ block: 'start', behavior: 'instant' });
+  if (id)
+    document
+      .getElementById(id)
+      ?.scrollIntoView({ block: 'start', behavior: motionEnabled() ? 'smooth' : 'instant' });
 };
 function boardRows(inner, height) {
   // Reserve the card border and gutter in the grid's one-pixel rows.
@@ -251,7 +264,45 @@ function renderPage() {
     page === 'voice' && ['fishQuery', 'fishKey'].includes(document.activeElement?.id)
       ? document.activeElement
       : null;
-  $('#content').innerHTML = pages[page](state, cache);
+  const content = $('#content');
+  const subpage =
+    page === 'voice'
+      ? cache.fishTab || 'search'
+      : page === 'model'
+        ? cache.modelTab || ''
+        : page === 'commands'
+          ? cache.commandTab || 'editor'
+          : '';
+  const subpageChanged = content.dataset.motionPage === page && content.dataset.subpage !== subpage;
+  content.dataset.motionPage = page;
+  content.dataset.subpage = subpage;
+  const toggleBefore = content.querySelector('.companionBar [role=switch]')?.getAttribute('aria-checked');
+  const listMotion =
+    page === 'commands' || page === 'desk'
+      ? rowChanges(
+          content,
+          page === 'desk' ? '.boardTile' : '.flowNode[data-node]',
+          page + '/' + (cache.draft?.id || '') + '/' + (cache.commandTab || ''),
+        )
+      : null;
+  if (!listMotion) delete content.dataset.motionGroup;
+  content.innerHTML = pages[page](state, cache);
+  listMotion?.();
+  if (subpageChanged) {
+    const target = content.querySelector(
+      page === 'voice'
+        ? '.fishRows'
+        : page === 'model'
+          ? '.modelSections + .stack'
+          : '.workflow, .commandPreferences',
+    );
+    appear(target, { opacity: 0, translate: page === 'voice' ? '0 10px' : '0 4px' }, 200);
+  }
+  const toggle = content.querySelector('.companionBar [role=switch]');
+  if (toggle && toggleBefore && toggleBefore !== toggle.getAttribute('aria-checked') && motionEnabled()) {
+    const thumb = toggle.querySelector('i');
+    thumb.classList.add(toggleBefore === 'true' ? 'slidingOff' : 'slidingOn');
+  }
   if (typing) {
     const next = document.getElementById(typing.id);
     next.value = typing.value;
@@ -378,8 +429,11 @@ let renderedChat, renderedTail, renderedBusy;
 function renderChat() {
   const chat = state.chats.find((c) => c.id === current),
     has = Boolean(chat?.messages.length || sending);
+  const stageChanged = $('#chatBox').hidden === has;
   $('#chatBox').hidden = !has;
   $('#welcome').hidden = has;
+  if (stageChanged && page === 'home')
+    appear($(has ? '#chatBox' : '#welcome'), { opacity: 0, translate: '0 6px' }, 200);
   $('#hero').classList.toggle('chatting', has);
   const tail = chat?.messages.at(-1)?.id;
   if (has && (current !== renderedChat || tail !== renderedTail || sending !== renderedBusy)) {
@@ -388,6 +442,9 @@ function renderChat() {
         current !== renderedChat || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 36,
       previous = scroller.scrollTop;
     $('#chatTitle').textContent = chat?.title || 'Новый чат';
+    const priorIds = new Set(
+      [...scroller.querySelectorAll('[data-message-id]')].map((el) => el.dataset.messageId),
+    );
     $('#messages').innerHTML =
       (chat?.messages || [])
         .map(
@@ -395,6 +452,8 @@ function renderChat() {
             '<div class="bubble ' +
             esc(m.role) +
             (m.error ? ' error' : '') +
+            '" data-message-id="' +
+            esc(m.id) +
             '">' +
             esc(m.text) +
             (m.stopped ? '<small class="stoppedReply">Ответ остановлен</small>' : '') +
@@ -450,9 +509,17 @@ function renderChat() {
         ? '<div id="liveReply" class="' +
           (liveReply ? 'bubble assistant' : 'busy') +
           '">' +
-          esc(liveReply || 'Мира думает…') +
+          (liveReply
+            ? esc(liveReply)
+            : '<span class="waitWave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>Мира думает…') +
           '</div>'
         : '');
+    if (renderedChat === current || (sending && !priorIds.size)) {
+      for (const el of scroller.querySelectorAll('[data-message-id]')) {
+        if (!priorIds.has(el.dataset.messageId) && !(renderedBusy && el.classList.contains('assistant')))
+          appear(el, { opacity: 0, translate: '0 -6px', scale: '.97' }, 350, 'ease-out');
+      }
+    }
     scroller.scrollTop = follow ? scroller.scrollHeight : previous;
   }
   renderedChat = current;
@@ -475,7 +542,13 @@ function renderChat() {
         btn('Редактор файлов', 'projectEditor', 'file-text') +
         btn('Убрать проект', 'delProject', 'x')
       : '');
-  $('#history').innerHTML =
+  const history = $('#history');
+  const animateHistory = rowChanges(
+    history,
+    '.historyRow',
+    (state.activeProject || '') + '/' + $('#historyQuery').value,
+  );
+  history.innerHTML =
     state.chats
       .filter(
         (x) =>
@@ -498,6 +571,7 @@ function renderChat() {
           '</button></div>',
       )
       .join('') || '<p class="empty">Разговоры сохраняются здесь.</p>';
+  animateHistory();
 }
 let modelActivity = { active: false, version: -1 };
 function syncModelActivity(activity) {
@@ -570,6 +644,7 @@ function render() {
   syncMotionTimer();
   if (!state) return;
   const look = state.settings;
+  setReduced(look.reduced);
   voice.settings = look;
   document.body.dataset.bubbles = String(look.bubbles);
   const theme =
@@ -612,7 +687,7 @@ function render() {
   $('#recentChat').disabled = !state.chats.some((chat) => chat.messages.length);
   $('#initial').textContent = (state.settings.user || 'М')[0].toUpperCase();
   $('#profile').textContent = state.settings.user || 'Мой компьютер';
-  $('#time').textContent = clock.format(new Date());
+  rollingNumber($('#time'), clock.format(new Date()));
   syncModelActivity(state.modelActivity);
   renderServices();
   cards();
@@ -2049,7 +2124,12 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.dataset.go) {
-    nav(b.dataset.go);
+    const next = b.dataset.go;
+    if (next === page && !document.documentElement.dataset.surfaceMotion) nav(next);
+    else {
+      const homeSwitch = [page, next].sort().join('/') === 'desk/home';
+      changeSurface(homeSwitch ? (next === 'desk' ? 'desk' : 'chat') : 'page', () => nav(next));
+    }
     return;
   }
   if (b.dataset.dismiss === 'modal') {
@@ -2065,7 +2145,17 @@ document.addEventListener('click', (e) => {
     call('window', { action: b.dataset.win }).catch(err);
     return;
   }
-  if (b.dataset.act) handle(b.dataset.act, b.dataset.id).catch(err);
+  if (b.dataset.act) {
+    const loading = ['weather', 'rates', 'refreshSystem', 'scanCommandApps', 'searchNow', 'find'].includes(
+      b.dataset.act,
+    );
+    if (loading) b.setAttribute('aria-busy', 'true');
+    handle(b.dataset.act, b.dataset.id)
+      .catch(err)
+      .finally(() => {
+        if (loading) b.removeAttribute('aria-busy');
+      });
+  }
 });
 document.addEventListener('change', (e) => {
   if (e.target.dataset.widget) {
@@ -2230,11 +2320,14 @@ function clearAttachments() {
 }
 function drawAttachments() {
   const el = $('#attachment');
+  const previous = new Set([...el.children].map((chip) => chip.dataset.motionId));
   el.hidden = !attachments.length;
   el.innerHTML = attachments
     .map(
       (f, i) =>
-        '<span>' +
+        '<span data-motion-id="' +
+        esc(f.id || f.name) +
+        '">' +
         (f.kind === 'image' ? '<img src="' + esc(f.data) + '" alt="">' : ico('file-text')) +
         esc(f.name) +
         '<button type="button" data-remove="' +
@@ -2246,6 +2339,9 @@ function drawAttachments() {
         '</button></span>',
     )
     .join('');
+  for (const chip of el.children)
+    if (!previous.has(chip.dataset.motionId))
+      appear(chip, { opacity: 0, scale: '.94', translate: '0 4px' }, 200);
 }
 function addAttachments(items) {
   const all = [...attachments, ...items];
@@ -2390,9 +2486,14 @@ composer.addEventListener('dragover', (e) => {
   if (e.dataTransfer.types.includes('Files')) {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
+    composer.classList.add('dropping');
   }
 });
+composer.addEventListener('dragleave', (e) => {
+  if (!composer.contains(e.relatedTarget)) composer.classList.remove('dropping');
+});
 composer.addEventListener('drop', (e) => {
+  composer.classList.remove('dropping');
   const files = Array.from(e.dataTransfer.files);
   if (files.length) {
     e.preventDefault();
@@ -2492,11 +2593,12 @@ window.desk.on(async (e) => {
     if (!sending || e.requestId !== streamId || e.chatId !== current) return;
     const scroller = $('#messages'),
       el = $('#liveReply');
+    const prior = liveReply;
     liveReply = e.text;
     if (el) {
       const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
       el.className = 'bubble assistant';
-      el.textContent = liveReply;
+      streamText(el, prior, liveReply);
       if (bottom) scroller.scrollTop = scroller.scrollHeight;
     }
     return;
@@ -2613,15 +2715,15 @@ setInterval(() => {
       : '';
 
   const now = new Date();
-  $('#time').textContent = clock.format(now);
-  document.querySelectorAll('[data-wall-time]').forEach((el) => (el.textContent = clock.format(now)));
+  rollingNumber($('#time'), clock.format(now));
+  document.querySelectorAll('[data-wall-time]').forEach((el) => rollingNumber(el, clock.format(now)));
   for (const el of document.querySelectorAll('[data-wall-date]')) {
     if (el.dataset.wallDate !== now.toDateString()) {
       el.dataset.wallDate = now.toDateString();
       el.innerHTML = pages.wallCalendar(now);
     }
   }
-  document.querySelectorAll('[data-clock]').forEach((el) => (el.textContent = timerTime(state.focus)));
+  document.querySelectorAll('[data-clock]').forEach((el) => rollingNumber(el, timerTime(state.focus)));
 }, 1000);
 setInterval(() => {
   if (page === 'desk' && !document.hidden) refreshSystem();

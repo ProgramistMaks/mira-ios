@@ -47,7 +47,7 @@ try {
   await p.locator('#introBack').click();
   await p.locator('#introNext').click();
   await expect(p.locator('#intro #silence')).toHaveValue('1.25');
-  for (let i = 0; i < 8 && (await p.locator('#intro').isVisible()); i++)
+  for (let i = 0; i < 8 && (await p.locator('#intro[open]').count()); i++)
     await p.locator('#introNext').click();
   await expect(p.locator('#intro')).not.toBeVisible();
   assert.equal((await call('state')).settings.silence, 1.25);

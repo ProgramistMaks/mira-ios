@@ -1,3 +1,4 @@
+import { appear } from './motion.js';
 import { $, call, esc, ico, recordError } from './shared.js';
 const dlg = $('#mailDialog'),
   body = $('#mailBody'),
@@ -51,6 +52,7 @@ function header(title, buttons = '') {
   $('#mailHeading').innerHTML = ico('mail') + esc(title);
   $('#mailCount').textContent = screen === 'inbox' && box() ? box().inbox.rows.length : '';
   tools.innerHTML = buttons;
+  if (dlg.dataset.screen !== screen) appear(body, { opacity: 0 }, 150);
   dlg.dataset.screen = screen;
 }
 async function load() {
@@ -496,6 +498,7 @@ async function operate(op, id) {
   if (busy) return;
   busy = true;
   dlg.setAttribute('aria-busy', 'true');
+  dlg.dataset.operation = op;
   try {
     await run(op, id);
   } catch (e) {
@@ -503,6 +506,7 @@ async function operate(op, id) {
   } finally {
     busy = false;
     dlg.removeAttribute('aria-busy');
+    delete dlg.dataset.operation;
   }
 }
 dlg.onclick = (e) => {

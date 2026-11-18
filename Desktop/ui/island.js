@@ -1,3 +1,4 @@
+import { rollingNumber, appear, setReduced } from './motion.js';
 import { esc, $ } from './shared.js';
 const call = (op, more = {}) => window.desk.call('islandAction', { op, ...more });
 let state,
@@ -22,14 +23,18 @@ async function draw() {
   const seq = ++serial,
     s = await call('state');
   if (seq !== serial) return;
+  setReduced(s.reduced);
+  const section = $('#body');
+  if (s.expanded && (!state?.expanded || section.dataset.tab !== tab))
+    appear(section, { opacity: 0, translate: '0 5px', scale: '.98' }, 200, 'cubic-bezier(.34,1.42,.7,1)');
+  section.dataset.tab = tab;
+  document.body.toggleAttribute('data-active-voice', s.voice !== 'off');
   state = s;
   $('#label').textContent = s.voice === 'off' ? s.name : s.voice === 'waiting' ? 'Жду имени' : 'Разговор';
   $('main').hidden = !s.expanded;
   $('#expand').setAttribute('aria-expanded', String(s.expanded));
   $('nav').innerHTML = Object.entries(tabs)
-    .map(
-      ([id, n]) => '<button data-tab="' + id + '" aria-current="' + (tab === id) + '">' + n + '</button>',
-    )
+    .map(([id, n]) => '<button data-tab="' + id + '" aria-current="' + (tab === id) + '">' + n + '</button>')
     .join('');
   const input = $('#line'),
     draft = input?.value || '',
@@ -101,7 +106,7 @@ document.ondrop = async (e) => {
   }
 };
 function clock() {
-  $('time').textContent = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  rollingNumber($('time'), new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
 }
 clock();
 setInterval(clock, 1000);

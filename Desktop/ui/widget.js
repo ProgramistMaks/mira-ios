@@ -1,3 +1,4 @@
+import { rollingNumber, appear, rowChanges, setReduced } from './motion.js';
 import { applyPalette } from './themes.mjs';
 import { $, esc, timerTime, timeLabel } from './shared.js';
 const call = (op, task) => window.desk.call('screenAction', { op, task });
@@ -8,6 +9,9 @@ async function draw() {
   const n = ++seq,
     s = await call('state');
   if (seq !== n) return;
+  setReduced(s.reduced);
+  if (!state) appear(document.querySelector('main'), { opacity: 0, scale: '.96' }, 200);
+  const animate = rowChanges($('main'), 'p[data-motion-id]', s.id);
   state = s;
   applyPalette(document.body, s.theme, s.customColor);
   document.body.toggleAttribute(
@@ -27,7 +31,9 @@ async function draw() {
     : s.items
         .map(
           (x) =>
-            '<p>' +
+            '<p data-motion-id="' +
+            esc(x.id) +
+            '">' +
             (s.id === 'tasks'
               ? '<button data-task="' + esc(x.id) + '" aria-label="Отметить выполненной">○</button>'
               : '') +
@@ -36,6 +42,7 @@ async function draw() {
             '</p>',
         )
         .join('') || '<p>Пока пусто</p>';
+  animate();
 }
 document.onclick = async (e) => {
   const b = e.target.closest('button');
@@ -50,6 +57,6 @@ window.desk.on((e) => {
   if (e.type === 'widget') draw();
 });
 setInterval(() => {
-  if (state?.focus && $('strong')) $('strong').textContent = timerTime(state.focus);
+  if (state?.focus && $('strong')) rollingNumber($('strong'), timerTime(state.focus));
 }, 500);
 draw();

@@ -1,0 +1,527 @@
+:root {
+  --motion-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-spring: cubic-bezier(0.34, 1.42, 0.7, 1);
+  --motion-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+.motionDeparture {
+  position: fixed;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  color: inherit;
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 0;
+  margin: 0;
+}
+.waitWave {
+  display: inline-flex;
+  height: 14px;
+  align-items: center;
+  gap: 2px;
+  margin-inline-end: 7px;
+  vertical-align: middle;
+}
+.waitWave i {
+  width: 2px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 3px;
+}
+.toastClock {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: currentColor;
+  opacity: 0.5;
+  transform-origin: left;
+}
+#toast {
+  overflow: hidden;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-still]) {
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    .boardTile {
+      transition:
+        background-color 150ms var(--motion-out),
+        color 150ms var(--motion-out),
+        box-shadow 150ms var(--motion-out),
+        border-color 150ms var(--motion-out),
+        scale 300ms var(--motion-spring);
+    }
+    button:not(:disabled):active {
+      scale: 0.96;
+      transition-duration: 0s;
+    }
+    #tabIndicator {
+      transition:
+        transform 220ms var(--motion-out),
+        width 220ms var(--motion-out);
+    }
+    :where([popover], dialog, #drawer, #widgetDrawer, #slashMenu, #toast, .homeFoot) {
+      --ms: 120ms;
+      --curve: var(--motion-out);
+      --slide: 0 -6px;
+      --zoom: 0.98;
+      transition:
+        opacity var(--ms) var(--curve),
+        translate var(--ms) var(--curve),
+        scale var(--ms) var(--curve),
+        overlay var(--ms) allow-discrete,
+        display var(--ms) allow-discrete;
+    }
+    :where([popover]:popover-open, #slashMenu:not([hidden])) {
+      --ms: 140ms;
+    }
+    dialog {
+      --ms: 180ms;
+      --slide: 0 6px;
+    }
+    dialog[open] {
+      --ms: 200ms;
+    }
+    #navMenu,
+    #drawer,
+    #widgetDrawer,
+    .homeFoot {
+      --ms: 400ms;
+      --curve: var(--motion-drawer);
+      --zoom: 1;
+      --slide: calc(100% + 16px) 0;
+    }
+    #drawer {
+      --slide: calc(-100% - 16px) 0;
+    }
+    #toast {
+      --ms: 200ms;
+      --slide: 40px 0;
+      --zoom: 0.95;
+    }
+    #toast:not([hidden]) {
+      --ms: 350ms;
+      --curve: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    dialog::backdrop {
+      transition:
+        opacity 180ms var(--motion-out),
+        overlay 180ms allow-discrete,
+        display 180ms allow-discrete;
+    }
+    dialog:not([open])::backdrop {
+      opacity: 0;
+    }
+    :is(
+      [popover]:not(:popover-open),
+      dialog:not([open]),
+      #drawer[hidden],
+      #widgetDrawer[hidden],
+      #slashMenu[hidden],
+      #toast[hidden],
+      #home:not(.widgets-open) .homeFoot
+    ) {
+      opacity: 0;
+      translate: var(--slide);
+      scale: var(--zoom);
+      pointer-events: none;
+    }
+    @starting-style {
+      :is(
+        [popover]:popover-open,
+        dialog[open],
+        #drawer:not([hidden]),
+        #widgetDrawer:not([hidden]),
+        #slashMenu:not([hidden]),
+        #toast:not([hidden]),
+        #home.widgets-open .homeFoot
+      ) {
+        opacity: 0;
+        translate: var(--slide);
+        scale: var(--zoom);
+      }
+      dialog[open]::backdrop {
+        opacity: 0;
+      }
+    }
+    .toastClock {
+      animation: mira-countdown 4.5s linear both;
+    }
+    .waitWave i {
+      animation: mira-wave 900ms cubic-bezier(0.77, 0, 0.175, 1) infinite;
+    }
+    .waitWave i:nth-child(2) {
+      animation-delay: 90ms;
+    }
+    .waitWave i:nth-child(3) {
+      animation-delay: 180ms;
+    }
+    .waitWave i:nth-child(4) {
+      animation-delay: 270ms;
+    }
+    .waitWave i:nth-child(5) {
+      animation-delay: 360ms;
+    }
+    #voiceBar:is([data-phase='listening'], [data-phase='speaking']) .pulse,
+    body[data-active-voice] #expand i {
+      animation: mira-pulse 1.4s var(--motion-out) infinite;
+    }
+    #voiceBar[data-phase='speaking'] .pulse {
+      border-radius: 2px;
+      animation: mira-wave 0.65s ease-in-out infinite;
+    }
+    #voiceBar:not([hidden]),
+    #agendaForm,
+    #chatOptions:not([hidden]),
+    .inspector[data-edit-node] {
+      transition:
+        opacity 0.2s var(--motion-out),
+        translate 0.2s var(--motion-out);
+    }
+    @starting-style {
+      #voiceBar:not([hidden]),
+      #agendaForm,
+      #chatOptions:not([hidden]) {
+        opacity: 0;
+        translate: 0 5px;
+      }
+    }
+    .wires .alt {
+      animation: mira-wire 1.2s linear infinite;
+    }
+    #introProgress i {
+      transition:
+        background-color 200ms var(--motion-out),
+        width 200ms var(--motion-out);
+    }
+  }
+  :root[data-surface-motion]:not([data-still]) {
+    view-transition-name: none;
+  }
+  :root[data-surface-motion]:not([data-still]) #area[data-page='home'] #hero,
+  :root[data-surface-motion]:not([data-still]) #content:not([hidden]) {
+    view-transition-name: mira-surface;
+  }
+  ::view-transition {
+    pointer-events: none;
+  }
+  ::view-transition-group(mira-surface) {
+    animation-duration: 120ms;
+  }
+  ::view-transition-old(mira-surface) {
+    animation: mira-fade 120ms ease-out reverse both;
+  }
+  ::view-transition-new(mira-surface) {
+    animation: mira-fade 120ms ease-out both;
+  }
+  :root:is([data-surface-motion='desk'], [data-surface-motion='chat'])::view-transition-group(mira-surface) {
+    animation-duration: 360ms;
+  }
+  :root:is([data-surface-motion='desk'], [data-surface-motion='chat'])::view-transition-old(mira-surface),
+  :root:is([data-surface-motion='desk'], [data-surface-motion='chat'])::view-transition-new(mira-surface) {
+    animation: mira-wipe 0.36s ease-in-out both;
+    mask-size: 100% 230%;
+    mask-repeat: no-repeat;
+    mix-blend-mode: plus-lighter;
+  }
+  :root[data-surface-motion='desk']::view-transition-old(mira-surface) {
+    mask-image: linear-gradient(#000 43.4783%, transparent 56.5217%);
+  }
+  :root[data-surface-motion='desk']::view-transition-new(mira-surface) {
+    mask-image: linear-gradient(transparent 43.4783%, #000 56.5217%);
+  }
+  :root[data-surface-motion='chat']::view-transition-old(mira-surface) {
+    mask-image: linear-gradient(to top, #000 43.4783%, transparent 56.5217%);
+    animation-direction: reverse;
+  }
+  :root[data-surface-motion='chat']::view-transition-new(mira-surface) {
+    mask-image: linear-gradient(to top, transparent 43.4783%, #000 56.5217%);
+    animation-direction: reverse;
+  }
+}
+@keyframes mira-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes mira-wipe {
+  from {
+    mask-position: 0 0;
+  }
+  to {
+    mask-position: 0 100%;
+  }
+}
+@keyframes mira-countdown {
+  to {
+    scale: 0 1;
+  }
+}
+@keyframes mira-wave {
+  0%,
+  70%,
+  100% {
+    scale: 1 0.65;
+  }
+  35% {
+    scale: 1 1.7;
+  }
+}
+@keyframes mira-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.4;
+  }
+}
+@keyframes mira-wire {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+.weatherGlyph {
+  display: inline-block;
+  position: relative;
+  width: 31px;
+  height: 26px;
+  margin-inline-end: 6px;
+  vertical-align: middle;
+}
+.weatherGlyph i {
+  position: absolute;
+  pointer-events: none;
+}
+.weatherSun {
+  left: 3px;
+  top: 1px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e7b853;
+}
+.weatherCloud {
+  left: 5px;
+  top: 11px;
+  width: 21px;
+  height: 9px;
+  border-radius: 8px;
+  background: currentColor;
+  opacity: 0.68;
+}
+.weatherCloud::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  bottom: 3px;
+  background: inherit;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+[data-sky='sun'] .weatherCloud,
+.weatherFall {
+  display: none;
+}
+[data-sky='sun'] .weatherSun {
+  width: 18px;
+  height: 18px;
+  top: 3px;
+  left: 5px;
+  outline: 2px dotted #ce9a37;
+  outline-offset: 2px;
+}
+:is([data-sky='rain'], [data-sky='snow'], [data-sky='storm'], [data-sky='mist']) .weatherSun {
+  display: none;
+}
+:is([data-sky='rain'], [data-sky='snow'], [data-sky='storm']) .weatherFall {
+  display: block;
+  left: 8px;
+  top: 20px;
+  width: 2px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 2px;
+  box-shadow:
+    6px -2px currentColor,
+    12px 0 currentColor;
+}
+[data-sky='snow'] .weatherFall {
+  height: 2px;
+}
+[data-sky='mist'] .weatherFall {
+  display: block;
+  left: 3px;
+  top: 21px;
+  width: 19px;
+  height: 1px;
+  background: currentColor;
+  box-shadow: 4px 3px currentColor;
+}
+#compose.dropping #messageForm {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+}
+.modelCard progress {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-still]) {
+    .weatherGlyph .weatherCloud {
+      animation: mira-drift 4s ease-in-out infinite alternate;
+    }
+    [data-sky='sun'] .weatherSun {
+      animation: mira-turn 24s linear infinite;
+    }
+    .weatherFall {
+      animation: mira-rain 1s ease-in infinite;
+    }
+    [data-sky='snow'] .weatherFall {
+      animation-duration: 2s;
+    }
+    [data-sky='mist'] .weatherFall {
+      animation: mira-drift 5s ease-in-out infinite alternate;
+    }
+    [aria-busy='true'] > svg,
+    #mailDialog[data-operation='refresh'] [data-mail='refresh'] svg {
+      animation: mira-turn 0.8s linear infinite;
+    }
+    .pendingCaption {
+      animation: mira-pulse 1.9s ease-in-out infinite;
+    }
+    #compose.dropping #messageForm {
+      animation: mira-drop 0.18s var(--motion-out);
+    }
+    #intro[data-step='done'] #introMark svg {
+      animation: mira-badge 0.55s var(--motion-spring);
+    }
+  }
+}
+@keyframes mira-rain {
+  from {
+    translate: 1px -2px;
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.8;
+  }
+  to {
+    translate: -1px 4px;
+    opacity: 0;
+  }
+}
+@keyframes mira-drift {
+  from {
+    translate: -2px 0;
+  }
+  to {
+    translate: 2px 0;
+  }
+}
+@keyframes mira-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes mira-drop {
+  from {
+    scale: 0.985;
+  }
+  to {
+    scale: 1;
+  }
+}
+@keyframes mira-badge {
+  from {
+    scale: 0.8;
+    opacity: 0;
+  }
+  to {
+    scale: 1;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-still]) #navMenu {
+    --slide: calc(100% + 12px) 0;
+    transition-property: translate, display, overlay;
+    transition-duration: 400ms;
+    transition-timing-function: var(--motion-drawer);
+    transition-behavior: normal, allow-discrete, allow-discrete;
+  }
+  :root:not([data-still]) #navMenu:not(:popover-open) {
+    opacity: 1;
+  }
+  @starting-style {
+    :root:not([data-still]) #navMenu:popover-open {
+      opacity: 1;
+    }
+  }
+}
+.motionDeparture > * {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-still]) {
+    .overlayActions {
+      transition: opacity 0.2s var(--motion-out);
+    }
+    .companionBar .slidingOn::before {
+      animation: mira-thumb 0.2s var(--motion-spring);
+    }
+    .companionBar .slidingOff::before {
+      animation: mira-thumb 0.2s var(--motion-spring) reverse;
+    }
+  }
+}
+@keyframes mira-thumb {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(14px);
+  }
+}
+.rollingDigit {
+  display: inline-block;
+  overflow: hidden;
+  height: 1em;
+  line-height: 1;
+  vertical-align: -0.08em;
+  font-variant-numeric: tabular-nums;
+}
+.rollingDigit > span {
+  display: block;
+  position: relative;
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-still]) .rollingDigit > span {
+    animation: mira-roll 200ms var(--motion-out);
+  }
+  :root:not([data-still]) .rollingDigit > span::before {
+    content: attr(data-previous) / '';
+    position: absolute;
+    inset: auto 0 100%;
+    pointer-events: none;
+  }
+}
+@keyframes mira-roll {
+  from {
+    translate: 0 100%;
+  }
+  to {
+    translate: 0 0;
+  }
+}

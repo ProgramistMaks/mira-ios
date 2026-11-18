@@ -1,3 +1,4 @@
+import { appear, rowChanges } from './motion.js';
 import { $, call, esc, ico, reportError } from './shared.js';
 import { calendarStart, localKey, occursOn } from './calendar-dates.mjs';
 
@@ -171,7 +172,24 @@ function reminders() {
   );
 }
 function paint() {
+  const marked = (el) => [...el.querySelectorAll('.monthCells .marked')].map((b) => b.dataset.id);
+  const oldDays = new Set(marked(body));
+  const monthKey = mode === 'events' ? month.getFullYear() + '/' + month.getMonth() : '';
+  const sameMonth = body.dataset.monthKey === monthKey;
+  body.dataset.monthKey = monthKey;
+  const animate = rowChanges(
+    body,
+    '.agendaRow,.reminderGrid article',
+    mode + (mode === 'events' ? day.toDateString() : ''),
+  );
   body.innerHTML = mode === 'events' ? calendar() : reminders();
+  animate();
+  if (dialog.open && mode === 'events') {
+    if (!sameMonth) appear(body.querySelector('.monthCells'), { opacity: 0 }, 140);
+    else
+      for (const day of body.querySelectorAll('.monthCells .marked'))
+        if (!oldDays.has(day.dataset.id)) appear(day, { opacity: 0, scale: '.98' }, 150);
+  }
 }
 function begin(row) {
   const now = new Date();

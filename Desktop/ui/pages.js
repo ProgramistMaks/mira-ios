@@ -151,6 +151,25 @@ function clockFace(now) {
     '</div></div>'
   );
 }
+function weatherGlyph(code) {
+  const condition =
+    code === 0
+      ? 'sun'
+      : code < 4
+        ? 'cloud'
+        : code < 50
+          ? 'mist'
+          : (code >= 71 && code <= 77) || code === 85 || code === 86
+            ? 'snow'
+            : code >= 95
+              ? 'storm'
+              : 'rain';
+  return (
+    '<span class="weatherGlyph" aria-hidden="true" data-sky="' +
+    condition +
+    '"><i class="weatherSun"></i><i class="weatherCloud"></i><i class="weatherFall"></i></span>'
+  );
+}
 export function desk(s, c, only) {
   const w = c.weather,
     r = c.rates,
@@ -253,6 +272,7 @@ export function desk(s, c, only) {
       ) +
         (w
           ? '<div class="clock">' +
+            weatherGlyph(w.code) +
             temperature(w.temp) +
             '</div><p>' +
             esc(w.city) +
@@ -452,6 +472,7 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
       };
       body =
         '<div class="boardValue">' +
+        (id === 'weather' && w ? weatherGlyph(w.code) : '') +
         esc(value[id]) +
         '</div>' +
         btn('Подробнее', 'day', 'chevron-right', '', id);
@@ -517,6 +538,11 @@ function widgetBoard(s, c, { w, r, sys, prefs, temperature, now }) {
 }
 export function newRoutine() {
   return { name: 'Новая команда', phrase: '', hotkey: '', blocks: [{ kind: 'say', value: 'Привет!' }] };
+}
+const blockKeys = new WeakMap();
+function blockKey(block) {
+  if (!blockKeys.has(block)) blockKeys.set(block, crypto.randomUUID());
+  return blockKeys.get(block);
 }
 export function commands(s, c) {
   const d = c.draft,
@@ -710,7 +736,9 @@ export function commands(s, c) {
         p.x +
         'px;top:' +
         p.y +
-        'px" data-node="' +
+        'px" data-motion-id="' +
+        blockKey(n) +
+        '" data-node="' +
         i +
         '"><b>' +
         ico(commandsIcon[n.kind] || 'blocks') +
@@ -1090,7 +1118,7 @@ function voiceLibrary(s, c) {
     (c.fishError && !favorites
       ? esc(c.fishError)
       : c.fishLoading && !favorites
-        ? 'Ищу голоса…'
+        ? '<span class="pendingCaption">Ищу голоса…</span>'
         : !rows.length
           ? favorites
             ? 'Пока нет избранных голосов'
@@ -1334,7 +1362,15 @@ export function ai(s, c) {
           (m.recommended ? 'Подходит по объёму ОЗУ' : 'Возможны медленная работа и нехватка памяти') +
           ' · ориентир ' +
           m.ram +
-          ' ГБ ОЗУ</p></div>' +
+          ' ГБ ОЗУ</p>' +
+          (m.busy
+            ? '<progress aria-label="Загрузка модели" max="' +
+              m.bytes +
+              '" value="' +
+              Math.max(0, progress || 0) +
+              '"></progress>'
+            : '') +
+          '</div>' +
           (m.busy
             ? btn('Пауза · ' + Math.floor((progress / m.bytes) * 100) + '%', 'pauseDownload', 'pause')
             : m.installed

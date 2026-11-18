@@ -71,6 +71,10 @@ export function toast(message) {
   const el = $('#toast');
   if (!el) return;
   el.textContent = errorMessage(message);
+  const clock = document.createElement('span');
+  clock.className = 'toastClock';
+  clock.ariaHidden = 'true';
+  el.append(clock);
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 4500);

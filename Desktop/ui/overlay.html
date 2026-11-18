@@ -33,7 +33,6 @@
         justify-content: center;
         gap: 3px;
         opacity: 0;
-        transition: opacity 0.2s;
       }
       body:hover nav,
       nav:focus-within {
@@ -55,10 +54,11 @@
         cursor: move;
       }
     </style>
+    <link rel="stylesheet" href="motion.css" />
   </head>
   <body>
     <iframe id="avatar" src="/renderer/index.html" title="Персонаж"></iframe>
-    <nav>
+    <nav class="overlayActions">
       <b title="Перетащи, чтобы переместить">⠿</b><button id="open">Мира</button
       ><button id="more" title="Настройки персонажа">•••</button>
     </nav>

@@ -1,3 +1,4 @@
+import { setReduced } from './motion.js';
 import { $, call, avatar } from './shared.js';
 let state,
   last,
@@ -32,6 +33,7 @@ function ready() {
 }
 async function update() {
   state = await call('state');
+  setReduced(state.settings.reduced);
   seated = state.seated;
   const appearance = state.settings.avatar + '/' + (state.settings.outfit || 'original');
   if ((last || 'vita/original') !== appearance)

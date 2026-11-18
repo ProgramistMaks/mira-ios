@@ -125,6 +125,7 @@ class Island {
         return {
           name: d.settings.name,
           theme: d.settings.theme,
+          reduced: d.settings.reduced,
           expanded: this.expanded,
           voice: this.voice(),
           notes: d.notes.slice(0, 4),

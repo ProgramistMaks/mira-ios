@@ -1,3 +1,4 @@
+import { appear } from './motion.js';
 import { $, esc, field, select, ico, call, recordError } from './shared.js';
 import { themeList } from './pages.js';
 
@@ -199,7 +200,14 @@ export function openSetup(state, finished) {
   function draw() {
     steps = list();
     const [id, title, n, body] = steps[step];
-    $('#intro').dataset.step = id;
+    if (dialog.dataset.step !== id)
+      appear(
+        dialog.querySelector('.introPage'),
+        { opacity: 0, translate: '20px 0' },
+        350,
+        'cubic-bezier(.16,1,.3,1)',
+      );
+    dialog.dataset.step = id;
     $('#introTitle').textContent = title;
     $('#introInfo').textContent = n;
     $('#introFields').innerHTML = body();
