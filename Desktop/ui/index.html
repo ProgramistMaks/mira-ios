@@ -53,7 +53,7 @@
           <div id="hero">
             <div id="welcome">
               <div class="today" id="today"></div>
-              <h1>Твоя <em id="heroName">Мира</em><span class="shine">✦</span></h1>
+              <h1><em id="heroName">Мира</em><span class="shine">✦</span></h1>
               <p id="hello"></p>
             </div>
             <div id="chatBox" hidden>
@@ -101,7 +101,13 @@
           </div>
           <div class="homeFoot">
             <div class="subhead">
-              <h2>Сегодня</h2>
+              <h2>Виджеты</h2>
+              <button
+                class="text"
+                data-act="widgets"
+                data-i="sliders-horizontal"
+                aria-label="Расставить виджеты"
+              ></button>
               <button class="text" data-go="desk">Рабочий стол <i data-i="arrow-up-right"></i></button>
             </div>
             <div id="todayCards" class="todayCards"></div>
@@ -130,7 +136,20 @@
         <h3>История чатов</h3>
         <button data-dismiss="drawer" class="plain" aria-label="Закрыть" data-i="x"></button>
       </div>
+      <div id="historyTools"></div>
+      <input
+        id="historyQuery"
+        class="control"
+        placeholder="Поиск по разговорам"
+        aria-label="Поиск по разговорам"
+      />
       <div id="history"></div>
+    </aside>
+    <aside id="widgetDrawer" hidden>
+      <div class="subhead">
+        <b>Рабочий стол</b><button data-act="dismissWidget" aria-label="Закрыть" data-i="x"></button>
+      </div>
+      <div id="widgetBody"></div>
     </aside>
     <dialog id="modal">
       <div class="subhead">

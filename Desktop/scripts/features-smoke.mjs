@@ -135,7 +135,7 @@ try {
     .toBe(true);
   console.log('Wardrobe and command generation passed');
   await go('desk');
-  await p.locator('[data-act=widgets]').click();
+  await p.locator('#content [data-act=widgets]').click();
   await p.locator('[data-widget=weather]').uncheck();
   await p.locator('[data-act=widgetUp][data-id=tasks]').click();
   await p.locator('[data-act=saveWidgets]').click();

@@ -220,7 +220,11 @@ async function weather(city) {
 }
 async function rates() {
   const d = await (await response('https://www.cbr-xml-daily.ru/daily_json.js')).json();
-  return { date: d.Date, USD: d.Valute.USD.Value, EUR: d.Valute.EUR.Value, CNY: d.Valute.CNY.Value };
+  return {
+    date: d.Date,
+    RUB: 1,
+    ...Object.fromEntries(['USD', 'EUR', 'CNY'].map((k) => [k, d.Valute[k].Value / d.Valute[k].Nominal])),
+  };
 }
 async function fishVoices(key, query = '', page = 1) {
   if (!key) throw Error('Укажите ключ Fish Audio');

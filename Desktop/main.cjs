@@ -80,7 +80,13 @@ let main,
   overlayLock = false,
   cursorTimer,
   decoding;
+let island, screenWidgets;
+const { catalog: systemApps, launch: launchSystem, windowsOnly } = require('./launchers.cjs');
 const push = (data) => {
+  if (data.type === 'refresh') {
+    island?.notify();
+    screenWidgets?.notify();
+  }
   for (const w of [main, overlay]) if (w && !w.isDestroyed()) w.webContents.send('update', data);
 };
 const changed = () => {
@@ -297,6 +303,7 @@ function overlayState(open) {
     webPreferences: prefs,
   });
   guard(overlay);
+  overlay.setContentProtection(!!store.data.settings.hideCapture);
   overlay.setAlwaysOnTop(true, 'floating');
   overlay.setIgnoreMouseEvents(overlayLock, { forward: true });
   overlay.on('closed', () => {
@@ -544,35 +551,29 @@ async function importFile(kind) {
   changed();
   return { id, name };
 }
-async function findFiles(query) {
+let fileIndex;
+async function prepareIndex(force = false) {
   const roots = store.data.files.filter((f) => f.kind === 'folder');
   if (!roots.length) throw Error('Добавьте папку для поиска в настройках');
+  fileIndex ??= new (require('./file-index.cjs').FileIndex)(store.dir);
+  return fileIndex.prepare(
+    roots,
+    (store.data.excludedDirs || []).map((x) => x.path),
+    force,
+  );
+}
+async function findFiles(query, ext = '') {
   const q = normal(query);
   if (q.length < 2) throw Error('Введите хотя бы два символа');
-  const items = [];
-  let seen = 0;
-  for (const root of roots) {
-    const queue = [root.path];
-    for (let i = 0; i < queue.length && seen < 18000 && items.length < 30; i++) {
-      const dir = queue[i],
-        children = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
-      for (const f of children) {
-        if (++seen > 18000 || items.length >= 30) break;
-        if (f.isSymbolicLink() || f.name.startsWith('.')) continue;
-        if (f.isDirectory()) {
-          if (!['node_modules', '$RECYCLE.BIN'].includes(f.name)) queue.push(path.join(dir, f.name));
-          continue;
-        }
-        if (f.isFile() && normal(f.name).includes(q)) {
-          const id = uid(),
-            p = path.join(dir, f.name);
-          foundFiles.set(id, p);
-          items.push({ id, name: f.name, folder: path.relative(root.path, dir) || root.name });
-        }
-      }
-    }
-  }
-  return items;
+  const data = await prepareIndex();
+  return data.rows
+    .filter((r) => normal(r.name).includes(q) && (!ext || path.extname(r.name).toLowerCase() === '.' + ext))
+    .slice(0, 30)
+    .map((r) => {
+      const id = uid();
+      foundFiles.set(id, r.path);
+      return { id, name: r.name, folder: r.folder };
+    });
 }
 const foundFiles = new Map();
 async function openFile(id) {
@@ -687,7 +688,7 @@ async function execute(spec, remote = false) {
             throw Error('Добавь в календарь встречу со ссылкой');
           }
           case 'clipboardAI': {
-            const original = clipboard.readText();
+            const original = await clipboard.readText();
             if (!original.trim()) throw Error('Скопируй текст в буфер обмена');
             const { base, key, model } = await chatConnection();
             const result = await network.ai(
@@ -706,11 +707,11 @@ async function execute(spec, remote = false) {
                 ? { chat_template_kwargs: { enable_thinking: false } }
                 : {},
             );
-            if (clipboard.readText() !== original) {
+            if ((await clipboard.readText()) !== original) {
               addItem('notes', result);
               alert('Буфер изменился', 'Результат записан в заметки');
             } else {
-              clipboard.writeText(result);
+              await clipboard.writeText(result);
               alert('Буфер обмена', 'Готовый текст скопирован');
             }
             return;
@@ -753,7 +754,7 @@ async function execute(spec, remote = false) {
           case 'keys':
           case 'paste': {
             if (process.platform !== 'win32') throw Error('Системный ввод доступен в Windows');
-            if (b.kind === 'paste') clipboard.writeText(b.value);
+            if (b.kind === 'paste') await clipboard.writeText(b.value);
             const key =
               b.kind === 'paste'
                 ? '^v'
@@ -790,7 +791,13 @@ async function execute(spec, remote = false) {
 function getChat(id) {
   let c = store.data.chats.find((c) => c.id === id);
   if (!c) {
-    c = { id: uid(), title: 'Новый чат', messages: [], created: Date.now() };
+    c = {
+      id: uid(),
+      title: 'Новый чат',
+      project: store.data.activeProject || '',
+      messages: [],
+      created: Date.now(),
+    };
     store.data.chats.unshift(c);
   }
   return c;
@@ -994,6 +1001,11 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
     };
   }
   if ((m = text.match(/^открой\s+(.+)/iu))) {
+    const system = Object.entries(systemApps).find(([, v]) => normal(v[0]) === normal(m[1]));
+    if (system && !remote) {
+      await launchSystem(system[0], app, shell);
+      return { text: 'Открыла ' + system[1][0] + '.' };
+    }
     const f = d.files.find((f) => normal(f.name) === normal(m[1]));
     if (f && !remote) {
       await openFile(f.id);
@@ -1028,6 +1040,9 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
         s.name +
         '. ' +
         s.role +
+        (d.projects?.find((p) => p.id === chat.project)?.instructions
+          ? '\nИнструкции проекта: ' + d.projects.find((p) => p.id === chat.project).instructions
+          : '') +
         style +
         (d.notes.some((n) => n.remember)
           ? '\nПользователь попросил помнить эти сведения: ' +
@@ -1199,9 +1214,131 @@ const gitWorkshop = () => new Workshop(store.data.workshopRepo, secret('workshop
 const voiceLibrary = new (require('./voice-library.cjs').VoiceLibrary)();
 const panelNames = ['chess', 'cat', 'shadow', 'freedoom'];
 const actions = {
+  screenWidget: ({ id, mode }) => screenWidgets.set(id, mode),
+  islandAction: (args) => island.action(args),
+  reindex: async () => {
+    const d = await prepareIndex(true);
+    const status = { count: d.rows.length, time: d.time, limited: d.limited };
+    store.data.indexStatus = status;
+    changed();
+    return status;
+  },
+  excludeDir: async ({ id }) => {
+    const rows = store.data.excludedDirs || [];
+    if (id) store.data.excludedDirs = rows.filter((v) => v.id !== id);
+    else {
+      const p = await pick({ properties: ['openDirectory'] });
+      if (p && !rows.some((x) => p === x.path))
+        store.data.excludedDirs = [...rows, { id: uid(), name: path.basename(p), path: p }];
+    }
+    changed();
+  },
+  screenshot: async () => {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const size = {
+      width: Math.round(display.size.width * display.scaleFactor),
+      height: Math.round(display.size.height * display.scaleFactor),
+    };
+    const sources = await require('electron').desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: size,
+    });
+    const shot = sources.find((x) => x.display_id === String(display.id)) || sources[0];
+    if (!shot || shot.thumbnail.isEmpty()) throw Error('Экран недоступен для захвата');
+    const dest = await dialog.showSaveDialog(main, {
+      defaultPath: 'Снимок-' + Date.now() + '.png',
+      filters: [{ name: 'PNG', extensions: ['png'] }],
+    });
+    if (!dest.canceled) {
+      await fsp.writeFile(dest.filePath, shot.thumbnail.toPNG());
+      await island.shelf([dest.filePath]);
+      return true;
+    }
+  },
+  project: ({ name, id, remove, instructions }) => {
+    let list = store.data.projects || [];
+    if (remove) {
+      list = list.filter((x) => x.id !== id);
+      for (const c of store.data.chats) if (c.project === id) c.project = '';
+      if (store.data.activeProject === id) store.data.activeProject = '';
+    } else if (name !== undefined) {
+      const title = String(name).trim().slice(0, 100);
+      if (!title) throw Error('Введите название');
+      const p = id ? list.find((x) => x.id === id) : { id: uid() };
+      if (!p) throw Error('Проект не найден');
+      Object.assign(p, {
+        name: title,
+        instructions: String(instructions || '')
+          .trim()
+          .slice(0, 4000),
+      });
+      if (!id) list = [...list, p];
+      store.data.activeProject = p.id;
+    } else if (!id || list.some((x) => x.id === id)) store.data.activeProject = id || '';
+    store.data.projects = list;
+    changed();
+  },
+  projectFile: async ({ op, id, name, text, revision }) => {
+    const p = store.data.projects?.find((x) => x.id === id);
+    if (!p) throw Error('Выбери проект');
+    const editor = require('./project-files.cjs');
+    if (op === 'folder') {
+      const root = await pick({ properties: ['openDirectory'] });
+      if (!root) return false;
+      p.root = await fsp.realpath(root);
+      changed();
+      return true;
+    }
+    if (op === 'list') return editor.list(p.root);
+    if (op === 'read') return editor.read(p.root, name);
+    if (op === 'save') return editor.save(p.root, { name, text, revision });
+    throw Error('Неизвестное действие редактора');
+  },
+  messageCopy: async ({ id, index }) => {
+    const msg = store.data.chats.find((c) => c.id === id)?.messages[index];
+    if (msg) await clipboard.writeText(msg.text);
+  },
+  launchOptions: () =>
+    Object.entries(systemApps)
+      .filter(([id]) => process.platform === 'win32' || !windowsOnly(id))
+      .map(([id, [name]]) => [id, name]),
+  launchSystem: ({ id }) => launchSystem(id, app, shell),
+  shortcut: ({ kind, target, name, id }) => {
+    const list = store.data.shortcuts || [];
+    if (id) store.data.shortcuts = list.filter((x) => x.id !== id);
+    else {
+      const valid =
+        kind === 'system'
+          ? Object.hasOwn(systemApps, target)
+          : kind === 'file'
+            ? store.data.files.some((x) => x.id === target)
+            : kind === 'routine' && store.data.routines.some((x) => x.id === target);
+      if (!valid || !String(name || '').trim()) throw Error('Выбери действие и название');
+      if (list.length >= 32) throw Error('Можно закрепить до 32 ярлыков');
+      store.data.shortcuts = [...list, { id: uid(), kind, target, name: String(name).trim().slice(0, 70) }];
+    }
+    changed();
+  },
+  crypto: async () => {
+    const { cryptoCoin: coin, currency } = store.data.settings;
+    const u = new URL('https://api.coingecko.com/api/v3/simple/price');
+    u.search = new URLSearchParams({ ids: coin, vs_currencies: currency, include_24hr_change: 'true' });
+    const r = await fetch(u, { signal: AbortSignal.timeout(14000) });
+    if (!r.ok) throw Error('Котировка сейчас недоступна');
+    const item = (await r.json())[coin];
+    if (!Number.isFinite(item?.[currency])) throw Error('Нет котировки');
+    return {
+      coin,
+      currency,
+      value: item[currency],
+      change: item[currency + '_24h_change'],
+      time: Date.now(),
+    };
+  },
   micMode: ({ mode }) => {
     if (!['waiting', 'talking', 'off'].includes(mode)) return;
     micMode = mode;
+    island?.notify();
     main.webContents.setBackgroundThrottling(mode === 'off' && !store.data.motionPort);
     trayMenu();
   },
@@ -1359,6 +1496,11 @@ const actions = {
           .trim()
           .slice(0, k === 'role' ? 2500 : 160);
     for (const [k, items] of Object.entries({
+      degree: ['C', 'F'],
+      exchangeFrom: ['USD', 'EUR', 'CNY', 'RUB'],
+      exchangeTo: ['USD', 'EUR', 'CNY', 'RUB'],
+      currency: ['usd', 'eur', 'rub'],
+      cryptoCoin: ['bitcoin', 'ethereum', 'solana'],
       outfit: outfits.map((o) => o.id),
       theme: ['cream', 'night', 'sage', 'rose', 'graphite', 'coal', 'mist', 'system'],
       provider: ['local', 'endpoint'],
@@ -1373,6 +1515,15 @@ const actions = {
         s[k] = input[k];
       }
     }
+    for (const [k, [lo, hi]] of Object.entries({
+      speechRate: [0.65, 1.6],
+      speechVolume: [0, 1],
+      sensitivity: [0.003, 0.04],
+      silence: [0.4, 2],
+    })) {
+      if (k in input && Number.isFinite(+input[k])) s[k] = Math.min(hi, Math.max(lo, +input[k]));
+    }
+    if ('wakeAlias' in input) s.wakeAlias = String(input.wakeAlias).trim().slice(0, 50);
     if ('widgets' in input) s.widgets = require('./core.cjs').widgetLayout(input.widgets);
     if ('accent' in input) {
       if (input.accent && !/^#[\da-f]{6}$/i.test(input.accent)) throw Error('Выберите цвет');
@@ -1402,7 +1553,19 @@ const actions = {
     }
     if (s.stt === 'speechAPI' && !s.speechService.sttModel) throw Error('Укажи модель распознавания');
     if (s.voice === 'speechAPI' && !s.speechService.ttsModel) throw Error('Укажи модель озвучивания');
-    for (const k of ['reduced', 'showAvatar', 'glass']) if (k in input) s[k] = !!input[k];
+    for (const k of [
+      'reduced',
+      'showAvatar',
+      'glass',
+      'island',
+      'islandPin',
+      'hideCapture',
+      'startHidden',
+      'startLogin',
+      'startListening',
+      'bubbles',
+    ])
+      if (k in input) s[k] = !!input[k];
     if (!s.name || !s.city) throw Error('Укажите имя и город');
     if (new URL(s.base).origin !== new URL(store.data.settings.base).origin) delete store.data.secrets.ai;
     if (s.provider !== store.data.settings.provider || s.model !== store.data.settings.model) models.stop();
@@ -1414,6 +1577,14 @@ const actions = {
       store.data.settings = s;
       changed();
     }
+    if (['island', 'islandPin', 'hideCapture'].some((k) => k in input)) {
+      island.configure();
+      screenWidgets.configure();
+      main.setContentProtection(!!s.hideCapture);
+      overlay?.setContentProtection(!!s.hideCapture);
+    }
+    if ('startLogin' in input && process.platform === 'win32')
+      app.setLoginItemSettings({ openAtLogin: s.startLogin, args: ['--login'] });
     return s;
   },
   key: ({ name, value }) => {
@@ -1534,9 +1705,9 @@ const actions = {
     return importFile(kind);
   },
   openFile: ({ id }) => openFile(id),
-  find: ({ query }) => {
+  find: ({ query, ext }) => {
     foundFiles.clear();
-    return findFiles(query);
+    return findFiles(query, ext);
   },
   url: ({ url }) => shell.openExternal(webURL(url)),
   weather: () => network.weather(store.data.settings.city),
@@ -1750,6 +1921,7 @@ function init() {
       (origin === 'mira://desk' || origin.startsWith('mira://desk/')),
   );
   main = new BrowserWindow({
+    show: !(store.data.settings.startHidden && process.argv.includes('--login')),
     width: 1280,
     height: 820,
     minWidth: 820,
@@ -1761,8 +1933,23 @@ function init() {
     webPreferences: prefs,
   });
   guard(main);
+  island = new (require('./island.cjs').Island)(store, prefs, guard, main, changed, () => micMode);
+  island.configure();
+  main.setContentProtection(!!store.data.settings.hideCapture);
+  screenWidgets = new (require('./screen-widgets.cjs').ScreenWidgets)(
+    store,
+    prefs,
+    guard,
+    main,
+    changed,
+    actions,
+  );
+  screenWidgets.configure();
   if (store.data.motionPort) configureMotionOutput(store.data.motionPort);
-  main.webContents.once('did-finish-load', () => emitTrigger('ready'));
+  main.webContents.once('did-finish-load', () => {
+    emitTrigger('ready');
+    if (store.data.settings.startListening) push({ type: 'standby' });
+  });
   main.loadURL('mira://desk/index.html');
   main.on('close', (e) => {
     if (!closing) {
@@ -1800,9 +1987,12 @@ ipcMain.handle('desk', async (e, name, data = {}) => {
     !e.senderFrame.url.startsWith('mira://desk/')
   )
     throw Error('Недоступно');
+  const widgetId = screenWidgets?.identify(e.sender);
+  if (widgetId && name === 'screenAction') return screenWidgets.action(widgetId, data || {});
   if (
     !Object.hasOwn(actions, name) ||
     (e.sender !== main?.webContents &&
+      !(e.sender === island?.win?.webContents && name === 'islandAction') &&
       !(e.sender === overlay?.webContents && ['state', 'show', 'overlayMenu', 'overlay'].includes(name)))
   )
     throw Error('Недоступно');

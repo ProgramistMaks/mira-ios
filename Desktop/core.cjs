@@ -30,6 +30,8 @@ const widgetNames = {
   rates: 'Курсы валют',
   music: 'Плеер',
   system: 'Система',
+  crypto: 'Криптовалюта',
+  launch: 'Быстрый запуск',
 };
 function widgetLayout(input) {
   const seen = new Set(),
@@ -49,6 +51,24 @@ const defaults = () => ({
     role: 'Дружелюбный личный компаньон. Отвечай по-русски.',
     theme: 'cream',
     widgets: widgetLayout(),
+    island: false,
+    islandPin: true,
+    hideCapture: false,
+    clipMemory: false,
+    startHidden: false,
+    startLogin: false,
+    startListening: false,
+    bubbles: true,
+    speechRate: 1,
+    speechVolume: 1,
+    sensitivity: 0.012,
+    silence: 0.78,
+    degree: 'C',
+    exchangeFrom: 'USD',
+    exchangeTo: 'RUB',
+    cryptoCoin: 'bitcoin',
+    currency: 'usd',
+    wakeAlias: '',
     accent: '',
     glow: 55,
     glass: false,
@@ -121,9 +141,14 @@ class Store {
     fs.renameSync(temp, this.file);
   }
   public() {
-    const { secrets, telegramOffset, pairedChat, ...state } = this.data;
+    const { secrets, telegramOffset, pairedChat, shelf, excludedDirs, ...state } = this.data;
     return {
       ...state,
+      projects: (state.projects || []).map(({ root, ...p }) => ({
+        ...p,
+        folder: root ? path.basename(root) : '',
+      })),
+      excludedDirs: (excludedDirs || []).map(({ id, name }) => ({ id, name })),
       paired: Boolean(pairedChat),
       keys: Object.keys(secrets).filter((k) => Boolean(secrets[k])),
       files: state.files.map(({ id, name, kind }) => ({ id, name, kind })),

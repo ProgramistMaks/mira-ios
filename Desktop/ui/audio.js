@@ -94,7 +94,7 @@ export class Voice {
     if (!this.enabled || this.busy || this.playing) return;
     let power = 0;
     for (const x of buf) power += x * x;
-    const voiced = Math.sqrt(power / buf.length) > 0.012,
+    const voiced = Math.sqrt(power / buf.length) > (this.settings?.sensitivity ?? 0.012),
       sec = buf.length / this.ctx.sampleRate;
     if (!this.recording) {
       this.pre.push(buf);
@@ -107,7 +107,7 @@ export class Voice {
       this.onStatus('Слышу тебя…', 'listening');
     } else this.frames.push(buf);
     this.quiet = voiced ? 0 : this.quiet + sec;
-    if (this.quiet < 0.78 && this.frames.length * sec < 70) return;
+    if (this.quiet < (this.settings?.silence ?? 0.78) && this.frames.length * sec < 70) return;
     const bytes = wav(join(this.frames), this.ctx.sampleRate);
     this.reset();
     this.turn(bytes).catch((e) => this.onError(e));
@@ -156,7 +156,10 @@ export class Voice {
         meter = ctx.createAnalyser();
       meter.fftSize = 512;
       src.buffer = b;
-      src.connect(meter).connect(ctx.destination);
+      src.playbackRate.value = this.settings?.speechRate ?? 1;
+      const output = ctx.createGain();
+      output.gain.value = this.settings?.speechVolume ?? 1;
+      src.connect(meter).connect(output).connect(ctx.destination);
       this.speaker = src;
       const values = new Float32Array(meter.fftSize);
       const step = () => {
@@ -172,6 +175,7 @@ export class Voice {
         src.onended = resolve;
         src.start();
       });
+      output.disconnect();
       meter.disconnect();
       src.disconnect();
     } finally {

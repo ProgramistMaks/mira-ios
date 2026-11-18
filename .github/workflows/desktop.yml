@@ -44,6 +44,8 @@ jobs:
         env:
           MIRA_EVIDENCE: build/desktop-evidence
         run: node Desktop/scripts/features-smoke.mjs
+      - name: Test island, clipboard, pinned windows and project files
+        run: node Desktop/scripts/workspace-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: Mira-Windows-x64

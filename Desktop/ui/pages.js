@@ -121,14 +121,83 @@ const listBox = (s, kind, label, icon, placeholder) =>
     (s[kind].length ? s[kind].map((i) => entry(i, kind)).join('') : empty(placeholder)) +
       acts(btn('Добавить', 'add-' + kind, 'plus')),
   );
-export function desk(s, c) {
+const onOff = (label, key, current) =>
+  select(
+    label,
+    key,
+    [
+      ['on', 'Включено'],
+      ['off', 'Выключено'],
+    ],
+    current ? 'on' : 'off',
+  );
+const scale = (title, key, value, items) =>
+  select(
+    title,
+    key,
+    items.map((x) => [String(x), String(x)]),
+    String(value),
+  );
+export function desk(s, c, only) {
   const w = c.weather,
     r = c.rates,
     sys = c.sys;
   const music =
     '<div id="musicSlot"></div>' +
     acts(btn(s.music ? 'Сменить дорожку' : 'Выбрать дорожку', 'music', 'folder-open'));
+  const prefs = s.settings;
+  const money = ['USD', 'EUR', 'CNY', 'RUB'].map((x) => [x, x]);
+  const temperature = (n) => Math.round(prefs.degree === 'F' ? 32 + n * 1.8 : n) + '°' + prefs.degree;
   const cards = {
+    launch: box(
+      'Быстрый запуск',
+      'play',
+      (s.shortcuts || [])
+        .map(
+          (x) =>
+            '<div class="entry"><span>' +
+            esc(x.name) +
+            '</span>' +
+            btn('Запустить', 'shortcutGo', 'play', '', x.id) +
+            btn('Убрать', 'dropShortcut', 'x', '', x.id) +
+            '</div>',
+        )
+        .join('') + btn('Добавить ярлык', 'addShortcut', 'plus'),
+    ),
+    crypto: box(
+      'Криптовалюта',
+      'banknote',
+      select(
+        'Монета',
+        'cryptoCoin',
+        [
+          ['bitcoin', 'Bitcoin'],
+          ['ethereum', 'Ethereum'],
+          ['solana', 'Solana'],
+        ],
+        prefs.cryptoCoin,
+      ) +
+        select(
+          'Валюта',
+          'currency',
+          [
+            ['usd', 'USD'],
+            ['eur', 'EUR'],
+            ['rub', 'RUB'],
+          ],
+          prefs.currency,
+        ) +
+        (c.crypto?.coin === prefs.cryptoCoin && c.crypto.currency === prefs.currency
+          ? '<strong>' +
+            esc(c.crypto.value.toLocaleString('ru-RU')) +
+            ' ' +
+            esc(prefs.currency.toUpperCase()) +
+            '</strong><p>' +
+            esc(timeLabel(c.crypto.time)) +
+            '</p>'
+          : '') +
+        btn('Обновить', 'crypto', 'refresh-cw'),
+    ),
     focus: box(
       'Фокус',
       'timer',
@@ -156,29 +225,46 @@ export function desk(s, c) {
     weather: box(
       'Погода',
       'cloud-sun',
-      w
-        ? '<div class="clock">' +
-            Math.round(w.temp) +
-            '°</div><p>' +
+      select(
+        'Температура',
+        'degree',
+        [
+          ['C', '°C'],
+          ['F', '°F'],
+        ],
+        prefs.degree,
+      ) +
+        (w
+          ? '<div class="clock">' +
+            temperature(w.temp) +
+            '</div><p>' +
             esc(w.city) +
             '</p><p class="muted">Максимум на три дня · ' +
-            w.days.map((n) => Math.round(n) + '°').join(' / ') +
+            w.days.map(temperature).join(' / ') +
             '</p>' +
             acts(btn('Обновить', 'weather', 'refresh-cw'))
-        : '<p>' + esc(s.settings.city) + '</p>' + acts(btn('Узнать погоду', 'weather', 'cloud-sun')),
+          : '<p>' + esc(s.settings.city) + '</p>' + acts(btn('Узнать погоду', 'weather', 'cloud-sun'))),
     ),
     rates: box(
       'Курсы валют',
       'banknote',
-      (r
-        ? '<p>USD · ' +
-          r.USD.toFixed(2) +
-          ' ₽ &nbsp; EUR · ' +
-          r.EUR.toFixed(2) +
-          ' ₽</p><p class="muted">' +
-          esc(timeLabel(r.date)) +
-          ' · ЦБ РФ</p>'
-        : '') + acts(btn('Получить курсы', 'rates', 'refresh-cw')),
+      select('Из', 'exchangeFrom', money, prefs.exchangeFrom) +
+        select('В', 'exchangeTo', money, prefs.exchangeTo) +
+        btn('Поменять местами', 'swapRates', 'rotate-ccw') +
+        (r
+          ? '<p>1 ' +
+            prefs.exchangeFrom +
+            ' = ' +
+            (r[prefs.exchangeFrom] / r[prefs.exchangeTo]).toLocaleString('ru-RU', {
+              maximumFractionDigits: 4,
+            }) +
+            ' ' +
+            prefs.exchangeTo +
+            '</p><p>' +
+            esc(timeLabel(r.date)) +
+            ' · ЦБ РФ</p>'
+          : '') +
+        acts(btn('Получить курсы', 'rates', 'refresh-cw')),
     ),
     music: box('Плеер', 'music-2', music),
     system: box(
@@ -197,6 +283,21 @@ export function desk(s, c) {
         : '<p class="muted">Получаю показания…</p>',
     ),
   };
+  for (const id of ['tasks', 'focus', 'notes', 'events']) {
+    const mode = s.screenWidgets?.[id];
+    const place = select(
+      'На экране ПК',
+      'place-' + id,
+      [
+        ['off', 'В приложении'],
+        ['window', 'В отдельном окне'],
+        ['pin', 'Поверх окон'],
+      ],
+      mode ? (mode.pin ? 'pin' : 'window') : 'off',
+    );
+    cards[id] = cards[id].replace('</article>', place + '</article>');
+  }
+  if (only) return cards[only] || '';
   const active = s.settings.widgets.filter((w) => w.visible);
   return (
     heading(
@@ -540,6 +641,25 @@ export function voice(s, c) {
     heading('Голос') +
     '<div class="grid">' +
     box(
+      'Параметры разговора',
+      'audio-lines',
+      scale('Скорость речи', 'speechRate', a.speechRate, [0.7, 0.85, 1, 1.15, 1.3, 1.5]) +
+        scale('Громкость воспроизведения', 'speechVolume', a.speechVolume, [0, 0.25, 0.5, 0.75, 1]) +
+        scale('Пауза до ответа, сек', 'silence', a.silence, [0.45, 0.6, 0.78, 1, 1.4, 2]) +
+        select(
+          'Чувствительность микрофона',
+          'sensitivity',
+          [
+            ['0.006', 'Высокая'],
+            ['0.012', 'Средняя'],
+            ['0.025', 'Низкая'],
+          ],
+          String(a.sensitivity),
+        ) +
+        field('Слово активации', 'wakeAlias', a.wakeAlias || a.name) +
+        btn('Сохранить слово', 'saveWake', 'save'),
+    ) +
+    box(
       'Локальные голоса',
       'volume-2',
       '<p>Ирина · русский женский голос · 63,2 МБ</p>' +
@@ -557,7 +677,7 @@ export function voice(s, c) {
       '<p class="muted">Мира слушает до паузы, отвечает вслух и снова включает микрофон. В ожидании имени речь распознаётся на этом компьютере.</p>' +
         acts(
           btn('Начать разговор', 'voice', 'mic', 'primary'),
-          btn('Ждать обращения «' + a.name + '»', 'standby', 'audio-lines'),
+          btn('Ждать обращения «' + (a.wakeAlias || a.name) + '»', 'standby', 'audio-lines'),
         ),
     ) +
     box(
@@ -927,7 +1047,26 @@ export function settings(s, c) {
   const a = s.settings;
   return (
     heading('Настройки') +
+    '<input class="control" id="prefsQuery" placeholder="Найти настройку" aria-label="Поиск настроек">' +
     '<div class="grid">' +
+    box(
+      'Остров на экране',
+      'monitor',
+      btn('Сохранить снимок экрана', 'screenshot', 'monitor') +
+        onOff('Показывать остров', 'island', a.island) +
+        onOff('Закрепить поверх окон', 'islandPin', a.islandPin) +
+        onOff('Исключать окна Миры из захвата экрана', 'hideCapture', a.hideCapture),
+    ) +
+    box(
+      'При запуске',
+      'play',
+      (s.platform === 'win32'
+        ? onOff('Запуск при входе в Windows', 'startLogin', a.startLogin) +
+          onOff('При входе сворачивать в трей', 'startHidden', a.startHidden)
+        : '') +
+        onOff('Ждать обращения при запуске', 'startListening', a.startListening) +
+        onOff('Пузыри сообщений ИИ', 'bubbles', a.bubbles),
+    ) +
     box(
       'Уведомления',
       'bell',
@@ -1047,6 +1186,17 @@ export function settings(s, c) {
         acts(
           btn('Добавить файл', 'linkFile', 'plus'),
           btn('Папка для поиска', 'linkFolder', 'folder-open'),
+          btn('Перестроить индекс', 'reindex', 'refresh-cw'),
+          btn('Исключить папку', 'excludeDir', 'folder-open'),
+          ...(s.excludedDirs || []).map((x) => btn('Вернуть ' + x.name, 'excludeDir', 'x', '', x.id)),
+          s.indexStatus
+            ? '<p>' +
+                s.indexStatus.count +
+                ' файлов · ' +
+                esc(timeLabel(s.indexStatus.time)) +
+                (s.indexStatus.limited ? ' · достигнут лимит индекса' : '') +
+                '</p>'
+            : '',
           btn('Найти файл', 'find', 'search'),
         ),
     ) +

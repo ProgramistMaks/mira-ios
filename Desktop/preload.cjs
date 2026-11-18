@@ -1,5 +1,6 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('desk', {
+  filePath: (f) => webUtils.getPathForFile(f),
   call: (name, data) => ipcRenderer.invoke('desk', name, data),
   on: (fn) => {
     const handler = (_, event) => fn(event);

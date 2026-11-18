@@ -36,7 +36,7 @@ let waitingForName = false,
   lastMicMode = 'off';
 const voice = new Voice(
   async (text) => {
-    const next = address(text, state.settings.name, waitingForName);
+    const next = address(text, state.settings.wakeAlias || state.settings.name, waitingForName);
     waitingForName = next.waiting;
     if (next.text) return send(next.text, true);
     return next.reply;
@@ -47,7 +47,8 @@ const voice = new Voice(
       lastMicMode = mode;
       call('micMode', { mode }).catch(err);
     }
-    if (mode === 'waiting' && msg && p !== 'speaking') msg = 'Жду обращения «' + state.settings.name + '»';
+    if (mode === 'waiting' && msg && p !== 'speaking')
+      msg = 'Жду обращения «' + (state.settings.wakeAlias || state.settings.name) + '»';
     liveStatus = msg;
     $('#voiceStatus').textContent = msg;
     $('#voiceBar').hidden = !msg;
@@ -101,6 +102,8 @@ function renderFrame() {
 function nav(next) {
   if (!pages.names[next]) return;
   pages.captureDraft(cache.draft);
+  cache.openWidget = null;
+  drawWidget();
   page = next;
   if (page === 'commands' && !cache.draft && state.routines.length)
     cache.draft = structuredClone(state.routines[0]);
@@ -114,6 +117,19 @@ function nav(next) {
         if (page === 'voice') renderPage();
       })
       .catch(() => {});
+}
+function drawWidget() {
+  const drawer = $('#widgetDrawer');
+  drawer.hidden = !cache.openWidget;
+  if (!cache.openWidget) {
+    $('#widgetBody').replaceChildren();
+    return;
+  }
+  $('#widgetBody').innerHTML = pages.desk(state, cache, cache.openWidget);
+  if (cache.openWidget === 'music' && state.music) {
+    setMusic();
+    $('#widgetBody #musicSlot')?.append(music);
+  }
 }
 function renderPage() {
   if (page === 'home') return;
@@ -138,19 +154,36 @@ music.addEventListener('play', () => {
 });
 function cards() {
   const s = state;
-  const rows = [
-    ['list-checks', 'green', 'Задачи', s.tasks.filter((x) => !x.done).length + ' в списке', 'tasks'],
-    ['timer', 'gold', 'Фокус', timerTime(s.focus), 'focus'],
-    [
+  const meta = {
+    focus: ['timer', 'gold', timerTime(s.focus)],
+    tasks: ['list-checks', 'green', s.tasks.filter((t) => !t.done).length + ' в списке'],
+    events: [
       'calendar-days',
       '',
-      'Календарь',
-      s.events.find((x) => !x.fired)
-        ? timeLabel(s.events.filter((x) => !x.fired).sort((a, b) => a.time - b.time)[0].time)
-        : 'Нет напоминаний',
-      'events',
+      s.events
+        .filter((e) => !e.fired)
+        .sort((a, b) => a.time - b.time)
+        .map((e) => timeLabel(e.time))[0] || 'Нет напоминаний',
     ],
-  ];
+    notes: ['notebook-pen', 'gold', s.notes[0]?.text || 'Записать заметку'],
+    music: ['music-2', '', s.music?.name || 'Выбрать дорожку'],
+    weather: [
+      'cloud-sun',
+      'gold',
+      cache.weather
+        ? Math.round(s.settings.degree === 'F' ? cache.weather.temp * 1.8 + 32 : cache.weather.temp) +
+          '°' +
+          s.settings.degree
+        : s.settings.city,
+    ],
+    rates: ['banknote', 'green', s.settings.exchangeFrom + ' / ' + s.settings.exchangeTo],
+    system: ['cpu', '', cache.sys ? cache.sys.ram + '% памяти' : 'Показания ПК'],
+    launch: ['play', 'green', (s.shortcuts || []).length + ' ярлыков'],
+    crypto: ['banknote', 'gold', s.settings.cryptoCoin],
+  };
+  const rows = s.settings.widgets
+    .filter((w) => w.visible)
+    .map(({ id }) => [meta[id][0], meta[id][1], s.widgetNames[id], meta[id][2], id]);
   $('#todayCards').innerHTML = rows
     .map(
       ([ic, cl, k, v, id]) =>
@@ -203,6 +236,12 @@ function renderChat() {
               .join('') +
             (m.draft ? btn('Открыть сценарий', 'openDraft', 'workflow', '', String(index)) : '') +
             (m.files || []).map((f) => btn(f.name, 'openFile', 'file-text', '', f.id)).join('') +
+            (m.role === 'assistant' && !m.error
+              ? '<div class="replyActions">' +
+                btn('Копировать', 'copyMessage', 'copy', '', String(index)) +
+                btn('В заметки', 'noteMessage', 'plus', '', String(index)) +
+                '</div>'
+              : '') +
             '</div>',
         )
         .join('') + (sending ? '<div class="busy">Мира думает…</div>' : '');
@@ -210,9 +249,29 @@ function renderChat() {
   }
   $('#send').innerHTML = ico(sending ? 'circle-stop' : 'arrow-up');
   $('#send').title = sending ? 'Остановить' : 'Отправить';
+  $('#historyTools').innerHTML =
+    select(
+      'Проект',
+      'chatProject',
+      [['', 'Без проекта'], ...(state.projects || []).map((x) => [x.id, x.name])],
+      state.activeProject || '',
+    ) +
+    btn('Новый проект', 'addProject', 'plus') +
+    (state.activeProject
+      ? btn('Параметры проекта', 'editProject', 'sliders-horizontal') +
+        btn('Редактор файлов', 'projectEditor', 'file-text') +
+        btn('Убрать проект', 'delProject', 'x')
+      : '');
   $('#history').innerHTML =
     state.chats
-      .filter((x) => x.messages.length || x.id === current)
+      .filter(
+        (x) =>
+          (x.project || '') === (state.activeProject || '') &&
+          (x.messages.length || x.id === current) &&
+          [x.title, ...x.messages.map((m) => m.text)].some((t) =>
+            t?.toLocaleLowerCase().includes($('#historyQuery').value.trim().toLocaleLowerCase()),
+          ),
+      )
       .map(
         (c) =>
           '<div class="historyRow"><button data-act="openChat" data-id="' +
@@ -232,6 +291,8 @@ function render() {
   syncMotionTimer();
   if (!state) return;
   const look = state.settings;
+  voice.settings = look;
+  document.body.dataset.bubbles = String(look.bubbles);
   document.body.dataset.theme =
     look.theme === 'system'
       ? matchMedia('(prefers-color-scheme: dark)').matches
@@ -281,6 +342,7 @@ function render() {
     .map(([b, t]) => '<span><i class="' + (b ? 'on' : '') + '"></i>' + t + '</span>')
     .join('');
   cards();
+  drawWidget();
   renderChat();
   renderPage();
   renderFrame();
@@ -475,14 +537,171 @@ async function handle(action, id) {
       closeModal();
       return;
     case 'day':
-      nav('desk');
-      if (id === 'tasks' || id === 'events') {
-        const panels = [...$('#content').querySelectorAll('.box')];
-        panels
-          .find((p) => p.querySelector('[data-act="add-' + id + '"]'))
-          ?.scrollIntoView({ block: 'nearest' });
+      cache.openWidget = id;
+      if (id === 'system') cache.sys = await call('system');
+      drawWidget();
+      return;
+    case 'dismissWidget':
+      cache.openWidget = null;
+      drawWidget();
+      return;
+    case 'saveWake':
+      await saveSettings({ wakeAlias: val('wakeAlias') });
+      return;
+    case 'swapRates':
+      await saveSettings({
+        exchangeTo: state.settings.exchangeFrom,
+        exchangeFrom: state.settings.exchangeTo,
+      });
+      return;
+    case 'crypto':
+      cache.crypto = await call('crypto');
+      renderPage();
+      drawWidget();
+      return;
+    case 'addProject':
+    case 'editProject': {
+      const p = action === 'editProject' && state.projects.find((x) => x.id === state.activeProject);
+      modal(
+        p ? 'Параметры проекта' : 'Новый проект',
+        field('Название', 'projectName', p?.name || '') +
+          '<label class="field">Инструкции для Миры<textarea id="projectRole" maxlength="4000">' +
+          esc(p?.instructions || '') +
+          '</textarea></label>' +
+          btn('Сохранить', 'saveProject', 'check', 'primary', p?.id || ''),
+      );
+      return;
+    }
+    case 'projectEditor': {
+      const p = state.projects.find((x) => x.id === state.activeProject);
+      if (!p) return;
+      const data = p.folder ? await call('projectFile', { op: 'list', id: p.id }) : { files: [] };
+      modal(
+        'Файлы · ' + p.name,
+        btn(p.folder || 'Выбрать рабочую папку', 'projectFolder', 'folder-open') +
+          (data.files.length
+            ? select(
+                'Открыть текстовый файл',
+                'projectEntry',
+                data.files.map((n) => [n, n]),
+                '',
+              )
+            : '') +
+          (data.files.length
+            ? btn('Открыть', 'projectRead', 'file-text')
+            : '<p>Здесь появятся текстовые файлы выбранной папки.</p>') +
+          (data.truncated ? '<p>Показана часть файлов.</p>' : ''),
+      );
+      return;
+    }
+    case 'projectFolder':
+      if (await call('projectFile', { op: 'folder', id: state.activeProject })) {
+        await refresh();
+        await handle('projectEditor');
       }
       return;
+    case 'projectRead': {
+      const name = val('projectEntry'),
+        id = state.activeProject;
+      cache.editing = { id, ...(await call('projectFile', { op: 'read', id, name })) };
+      modal(
+        name,
+        '<textarea id="projectText" aria-label="Текст файла" spellcheck="false"></textarea>' +
+          btn('Сохранить файл', 'projectWrite', 'check', 'primary') +
+          btn('Добавить в чат', 'projectAttach', 'message-circle'),
+      );
+      $('#projectText').value = cache.editing.text;
+      return;
+    }
+    case 'projectWrite': {
+      const { id, name, revision } = cache.editing;
+      const saved = await call('projectFile', {
+        op: 'save',
+        id,
+        name,
+        revision,
+        text: $('#projectText').value,
+      });
+      cache.editing.revision = saved.revision;
+      toast('Файл сохранён');
+      return;
+    }
+    case 'projectAttach': {
+      attachment = { name: cache.editing.name, text: $('#projectText').value };
+      closeModal();
+      $('#drawer').hidden = true;
+      nav('home');
+      $('#attachment').hidden = false;
+      $('#attachment').textContent = attachment.name;
+      $('#prompt').focus();
+      return;
+    }
+    case 'copyMessage':
+      await call('messageCopy', { id: current, index: Number(id) });
+      return;
+    case 'noteMessage': {
+      const m = state.chats.find((c) => c.id === current)?.messages[Number(id)];
+      if (m) {
+        await call('add', { kind: 'notes', text: m.text });
+        toast('Ответ сохранён в заметки');
+      }
+      return;
+    }
+    case 'saveProject':
+      await call('project', { id, name: val('projectName'), instructions: val('projectRole') });
+      current = '';
+      closeModal();
+      await refresh();
+      return;
+    case 'delProject':
+      await call('project', { id: state.activeProject, remove: true });
+      current = '';
+      await refresh();
+      return;
+    case 'reindex': {
+      const d = await call('reindex');
+      toast('В индексе файлов: ' + d.count);
+      return;
+    }
+    case 'excludeDir':
+      await call('excludeDir', { id });
+      return;
+    case 'screenshot':
+      if (await call('screenshot')) toast('Снимок сохранён на полке');
+      return;
+    case 'addShortcut': {
+      const options = [
+        ...(await call('launchOptions')).map(([id, n]) => ['system:' + id, n]),
+        ...state.routines.map((r) => ['routine:' + r.id, 'Команда · ' + r.name]),
+        ...state.files.map((f) => ['file:' + f.id, 'Файл · ' + f.name]),
+      ];
+      modal(
+        'Новый ярлык',
+        select('Действие', 'launchTarget', options, '') +
+          field('Название', 'launchName') +
+          btn('Закрепить', 'saveShortcut', 'plus', 'primary'),
+      );
+      return;
+    }
+    case 'saveShortcut': {
+      const [kind, target] = val('launchTarget').split(':');
+      await call('shortcut', {
+        kind,
+        target,
+        name: val('launchName') || $('#launchTarget').selectedOptions[0].textContent,
+      });
+      closeModal();
+      return;
+    }
+    case 'dropShortcut':
+      await call('shortcut', { id });
+      return;
+    case 'shortcutGo': {
+      const r = state.shortcuts?.find((x) => x.id === id);
+      if (r)
+        await call({ routine: 'run', file: 'openFile', system: 'launchSystem' }[r.kind], { id: r.target });
+      return;
+    }
     case 'toggleTask':
       await call('toggleTask', { id });
       return;
@@ -507,10 +726,14 @@ async function handle(action, id) {
       return;
     case 'weather':
       cache.weather = await call('weather');
+      cards();
+      drawWidget();
       renderPage();
       return;
     case 'rates':
       cache.rates = await call('rates');
+      cards();
+      drawWidget();
       renderPage();
       return;
     case 'source':
@@ -536,12 +759,18 @@ async function handle(action, id) {
       modal(
         'Поиск на ПК',
         field('Имя файла в выбранных папках', 'fileQ') +
+          select(
+            'Формат',
+            'fileExt',
+            [['', 'Все форматы'], ...['pdf', 'docx', 'txt', 'png', 'jpg', 'exe', 'lnk'].map((x) => [x, x])],
+            '',
+          ) +
           btn('Найти', 'findGo', 'search', 'primary') +
           '<div id="found"></div>',
       );
       return;
     case 'findGo': {
-      const found = await call('find', { query: val('fileQ') });
+      const found = await call('find', { query: val('fileQ'), ext: val('fileExt') });
       $('#found').innerHTML =
         found
           .map(
@@ -1168,6 +1397,15 @@ document.addEventListener('change', (e) => {
     return;
   }
   const v = e.target.value;
+  if (e.target.id.startsWith('place-')) {
+    call('screenWidget', { id: e.target.id.slice(6), mode: v }).catch(err);
+    return;
+  }
+  if (e.target.id === 'chatProject') {
+    current = '';
+    call('project', { id: v }).then(refresh).catch(err);
+    return;
+  }
   const settings = {
     accent: { accent: v },
     glow: { glow: +v },
@@ -1178,6 +1416,17 @@ document.addEventListener('change', (e) => {
     sysVoice: { systemVoice: v },
     stt: { stt: v },
     quiet: { quiet: v === 'on' },
+    ...Object.fromEntries(
+      ['island', 'islandPin', 'hideCapture', 'startHidden', 'startLogin', 'startListening', 'bubbles'].map(
+        (k) => [k, { [k]: v === 'on' }],
+      ),
+    ),
+    ...Object.fromEntries(
+      ['speechRate', 'speechVolume', 'sensitivity', 'silence'].map((k) => [k, { [k]: Number(v) }]),
+    ),
+    ...Object.fromEntries(
+      ['degree', 'exchangeFrom', 'exchangeTo', 'cryptoCoin', 'currency'].map((k) => [k, { [k]: v }]),
+    ),
     theme: { theme: v },
     fps: { fps: +v },
     reduced: { reduced: v === 'on' },
@@ -1319,6 +1568,21 @@ window.desk.on(async (e) => {
       await toggleVoice(true);
       return;
     }
+    if (e.type === 'openWidget') {
+      nav('home');
+      await handle('day', e.id);
+      return;
+    }
+    if (e.type === 'islandChat') {
+      nav('home');
+      if (e.id) {
+        current = e.id;
+        await call('project', { id: state.chats.find((c) => c.id === current)?.project || '' });
+      }
+      if (e.text) await send(e.text);
+      else renderChat();
+      return;
+    }
     if (e.type === 'toggleVoice') {
       await toggleVoice();
       return;
@@ -1417,3 +1681,12 @@ async function boot() {
   setupAvatar();
 }
 boot().catch(err);
+
+$('#historyQuery').oninput = renderChat;
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'prefsQuery') {
+    const q = e.target.value.trim().toLocaleLowerCase();
+    for (const card of document.querySelectorAll('#content .box'))
+      card.hidden = !card.textContent.toLocaleLowerCase().includes(q);
+  }
+});

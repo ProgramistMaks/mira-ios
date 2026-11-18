@@ -1,0 +1,65 @@
+@font-face {
+  font-family: Nunito;
+  src: url(nunito.ttf);
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  font:
+    16px Nunito,
+    system-ui;
+  margin: 0;
+  padding: 12px;
+  background: #f8f4eb;
+  color: #352f2e;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border: 1px solid #9e948655;
+}
+body[data-dark] {
+  background: #262729;
+  color: #f8f4eb;
+}
+header {
+  display: flex;
+  align-items: center;
+  -webkit-app-region: drag;
+}
+b {
+  flex: 1;
+}
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 3px 8px;
+  -webkit-app-region: no-drag;
+}
+button:hover,
+button[aria-pressed='true'] {
+  background: #99867a39;
+}
+main {
+  flex: 1;
+  overflow: auto;
+  padding: 5px 0;
+}
+main p {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+main strong {
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+}
+footer {
+  text-align: right;
+}
+footer button {
+  font-size: 0.85rem;
+}

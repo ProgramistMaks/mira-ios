@@ -1,0 +1,102 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 3px;
+  background: transparent;
+  color: #f8f5ef;
+  font: 14px system-ui;
+}
+header,
+main {
+  background: #202024;
+  border: 1px solid #444349;
+}
+header {
+  height: 39px;
+  display: flex;
+  align-items: center;
+  border-radius: 24px;
+  padding: 0 9px;
+}
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 6px 8px;
+}
+button:hover,
+button[aria-current='true'] {
+  background: #414045;
+}
+#expand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+i {
+  background: #b2cbaf;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+time {
+  margin-left: auto;
+  color: #d7d0c7;
+}
+main {
+  margin-top: 4px;
+  border-radius: 22px;
+  padding: 12px;
+  height: 336px;
+}
+nav {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #48474a;
+  margin-bottom: 8px;
+}
+section {
+  height: 268px;
+  overflow: auto;
+}
+section button {
+  background: #38373a;
+  margin: 3px;
+}
+section p {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.row {
+  display: flex;
+  align-items: center;
+}
+.row button:first-child {
+  flex: 1;
+  text-align: left;
+}
+input {
+  background: #333238;
+  border: 1px solid #62616a;
+  border-radius: 14px;
+  padding: 8px;
+  max-width: 75%;
+}
+#error {
+  position: absolute;
+  bottom: 8px;
+  background: #402833;
+  border-radius: 8px;
+  margin: 0;
+}
+#error:empty {
+  display: none;
+}
