@@ -18,7 +18,9 @@ import {
 import * as pages from './pages.js';
 import { noteLabel, sortedNotes, taskListOf } from './note-format.mjs';
 import { boardSizing } from './board-sizing.js';
+import { commands, parseCommand } from './chat-commands.mjs';
 import { Voice } from './audio.js';
+import { canRevise } from './chat-history.mjs';
 import { openOrganizer, syncOrganizer } from './organizer.js';
 import { openMail } from './mail.js';
 import { openAgenda, syncAgenda } from './agenda.js';
@@ -27,7 +29,10 @@ let state,
   page = 'home',
   current = '',
   sending = false,
-  attachment,
+  streamId = null,
+  liveReply = '',
+  attachments = [],
+  draftEpoch = 0,
   refreshId = 0,
   liveStatus = '',
   drag = -1,
@@ -151,6 +156,7 @@ function renderFrame() {
 }
 function nav(next) {
   if (!pages.names[next]) return;
+  if (next !== 'home') closeSlash();
   if (voice.testing && next !== 'voice') {
     voice.stop(false);
     cache.testingMic = false;
@@ -363,13 +369,19 @@ function cards() {
     )
     .join('');
 }
+let renderedChat, renderedTail, renderedBusy;
 function renderChat() {
   const chat = state.chats.find((c) => c.id === current),
     has = Boolean(chat?.messages.length || sending);
   $('#chatBox').hidden = !has;
   $('#welcome').hidden = has;
   $('#hero').classList.toggle('chatting', has);
-  if (has) {
+  const tail = chat?.messages.at(-1)?.id;
+  if (has && (current !== renderedChat || tail !== renderedTail || sending !== renderedBusy)) {
+    const scroller = $('#messages'),
+      follow =
+        current !== renderedChat || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 36,
+      previous = scroller.scrollTop;
     $('#chatTitle').textContent = chat?.title || 'Новый чат';
     $('#messages').innerHTML =
       (chat?.messages || [])
@@ -380,6 +392,24 @@ function renderChat() {
             (m.error ? ' error' : '') +
             '">' +
             esc(m.text) +
+            (m.stopped ? '<small class="stoppedReply">Ответ остановлен</small>' : '') +
+            (m.attachments || [])
+              .map((item) =>
+                item.kind === 'image'
+                  ? '<button class="chatImage" data-act="viewChatImage" data-id="' +
+                    esc(item.id) +
+                    '"><img src="/chat-images/' +
+                    esc(item.id) +
+                    '" alt="' +
+                    esc(item.name) +
+                    '"></button>'
+                  : '<details class="chatDoc"><summary>' +
+                    esc(item.name) +
+                    '</summary><pre>' +
+                    esc(item.text) +
+                    '</pre></details>',
+              )
+              .join('') +
             (m.sources || [])
               .map(
                 (r, i) =>
@@ -394,6 +424,14 @@ function renderChat() {
               .join('') +
             (m.draft ? btn('Открыть сценарий', 'openDraft', 'workflow', '', String(index)) : '') +
             (m.files || []).map((f) => btn(f.name, 'openFile', 'file-text', '', f.id)).join('') +
+            (!sending && m.role === 'user' && canRevise(chat.messages[index + 1])
+              ? '<div class="replyActions">' + btn('Изменить', 'editTurn', 'pencil', '', m.id) + '</div>'
+              : '') +
+            (!sending && canRevise(m)
+              ? '<div class="replyActions">' +
+                btn('Ответить заново', 'redoTurn', 'refresh-cw', '', m.id) +
+                '</div>'
+              : '') +
             (m.role === 'assistant' && !m.error
               ? '<div class="replyActions">' +
                 btn('Копировать', 'copyMessage', 'copy', '', String(index)) +
@@ -402,9 +440,19 @@ function renderChat() {
               : '') +
             '</div>',
         )
-        .join('') + (sending ? '<div class="busy">Мира думает…</div>' : '');
-    $('#messages').scrollTop = $('#messages').scrollHeight;
+        .join('') +
+      (sending
+        ? '<div id="liveReply" class="' +
+          (liveReply ? 'bubble assistant' : 'busy') +
+          '">' +
+          esc(liveReply || 'Мира думает…') +
+          '</div>'
+        : '');
+    scroller.scrollTop = follow ? scroller.scrollHeight : previous;
   }
+  renderedChat = current;
+  renderedTail = tail;
+  renderedBusy = sending;
   $('#send').innerHTML = ico(sending ? 'circle-stop' : 'arrow-up');
   $('#send').title = sending ? 'Остановить' : 'Отправить';
   $('#send').setAttribute('aria-label', $('#send').title);
@@ -546,24 +594,49 @@ function err(e) {
 async function send(input, voiceMode = false) {
   if (sending) return;
   let text = String(input || '').trim();
-  if (!text && !attachment) return;
-  if (attachment) {
-    text += (text ? '\n\n' : '') + 'Файл ' + attachment.name + '\n' + attachment.text;
-    attachment = null;
-    $('#attachment').hidden = true;
+  const files = voiceMode ? [] : attachments;
+  if (!text && !files.length) return;
+  if (!text)
+    text = files.some((f) => f.kind === 'image')
+      ? 'Что на изображении?'
+      : 'Расскажи, что в приложенных документах.';
+  const cmd = parseCommand(text);
+  if (!voiceMode && cmd?.key === 'screen' && !files.some((f) => f.kind === 'image')) {
+    await addScreen();
+    return;
   }
+  if (cmd?.key === 'think' && files.length) {
+    toast('Для /think убери вложения или отправь их отдельным сообщением.');
+    return;
+  }
+  if (
+    files.some((f) => f.kind === 'image') &&
+    state.settings.provider === 'local' &&
+    !state.models.find((m) => m.id === state.settings.model)?.visionInstalled
+  ) {
+    toast('Для отправки изображения скачай модуль выбранной модели в разделе «ИИ».');
+    return;
+  }
+  closeSlash();
   nav('home');
-  $('#prompt').value = '';
+  if (!voiceMode) {
+    $('#prompt').value = '';
+    clearAttachments();
+  }
   sending = true;
+  streamId = crypto.randomUUID();
+  liveReply = '';
   renderChat();
   phase('thinking', state.settings.reduced);
   try {
     if (!current) current = await call('newChat');
-    const r = await call('send', { id: current, text, voiceMode });
+    const r = await call('send', { id: current, text, voiceMode, attachments: files, requestId: streamId });
     current = r.id;
     return r.text;
   } finally {
     sending = false;
+    streamId = null;
+    liveReply = '';
     await refresh();
     phase(voice.enabled ? 'listening' : 'idle', state.settings.reduced);
   }
@@ -582,8 +655,9 @@ async function toggleVoice(standby = false) {
 function newChat() {
   if (sending) return;
   current = '';
-  attachment = null;
-  $('#attachment').hidden = true;
+  clearAttachments();
+  closeSlash();
+  $('#prompt').value = '';
   nav('home');
   $('#prompt').focus();
 }
@@ -629,12 +703,13 @@ function drawWidgets() {
   );
 }
 async function moveBoardTile(from, to) {
-  const layout = [...state.settings.widgets],
-    a = layout.findIndex((w) => w.id === from),
-    b = layout.findIndex((w) => w.id === to);
+  const visible = state.settings.widgets.filter((w) => w.visible);
+  const a = visible.findIndex((w) => w.id === from),
+    b = visible.findIndex((w) => w.id === to);
   if (a < 0 || b < 0 || a === b) return;
-  layout.splice(b, 0, layout.splice(a, 1)[0]);
-  await saveSettings({ widgets: layout });
+  visible.splice(b, 0, visible.splice(a, 1)[0]);
+  let index = 0;
+  await saveSettings({ widgets: state.settings.widgets.map((w) => (w.visible ? visible[index++] : w)) });
 }
 const boardContent = $('#content');
 const sizingBoard = boardSizing(
@@ -785,10 +860,8 @@ async function handle(action, id) {
     case 'attachNote': {
       const note = state.notes.find((n) => n.id === id);
       if (note) {
-        attachment = { name: 'Заметка', text: note.text };
+        addAttachments([{ name: 'Заметка', text: note.text }]);
         closeModal();
-        $('#attachment').textContent = 'Заметка ×';
-        $('#attachment').hidden = false;
         $('#prompt').focus();
       }
       return;
@@ -908,13 +981,57 @@ async function handle(action, id) {
       return;
     }
     case 'projectAttach': {
-      attachment = { name: cache.editing.name, text: $('#projectText').value };
+      addAttachments([{ name: cache.editing.name, text: $('#projectText').value }]);
       closeModal();
       $('#drawer').hidden = true;
       nav('home');
-      $('#attachment').hidden = false;
-      $('#attachment').textContent = attachment.name;
       $('#prompt').focus();
+      return;
+    }
+    case 'editTurn':
+    case 'redoTurn': {
+      if (sending) return;
+      const chat = state.chats.find((c) => c.id === current),
+        index = chat?.messages.findIndex((m) => m.id === id);
+      if (index == null || index < 0) return;
+      const editing = action === 'editTurn',
+        last = chat.messages.at(-1).id;
+      cache.revision = { id: current, target: id, last, editing };
+      const later = index + (editing ? 2 : 1) < chat.messages.length;
+      if (!editing && !later) return handle('applyRevision');
+      modal(
+        editing ? 'Изменить сообщение' : 'Ответить заново',
+        (editing
+          ? '<label class="field">Сообщение<textarea id="revisionText" rows="5">' +
+            esc(chat.messages[index].text) +
+            '</textarea></label>'
+          : '') +
+          (later ? '<p>Новый ответ заменит продолжение разговора с этого места.</p>' : '') +
+          btn(editing ? 'Отправить изменение' : 'Заменить продолжение', 'applyRevision', 'arrow-up'),
+      );
+      if (editing) $('#revisionText').focus();
+      return;
+    }
+    case 'applyRevision': {
+      const draft = cache.revision;
+      if (!draft || draft.id !== current || sending) return;
+      const text = draft.editing ? val('revisionText') : undefined;
+      if (draft.editing && !text.trim()) return;
+      if ($('#modal').open) closeModal();
+      cache.revision = null;
+      sending = true;
+      streamId = crypto.randomUUID();
+      liveReply = '';
+      renderChat();
+      try {
+        const answer = await call('reviseChat', { ...draft, text, requestId: streamId });
+        if (voice.enabled) await voice.speak(answer);
+      } finally {
+        sending = false;
+        streamId = null;
+        liveReply = '';
+        await refresh();
+      }
       return;
     }
     case 'copyMessage':
@@ -931,6 +1048,9 @@ async function handle(action, id) {
     case 'saveProject':
       await call('project', { id, name: val('projectName'), instructions: val('projectRole') });
       current = '';
+      clearAttachments();
+      closeSlash();
+      $('#prompt').value = '';
       closeModal();
       await refresh();
       return;
@@ -1020,7 +1140,19 @@ async function handle(action, id) {
     case 'source':
       await call('url', { url: id });
       return;
+    case 'viewChatImage':
+      modal(
+        'Изображение',
+        '<img class="fullChatImage" src="/chat-images/' + esc(id) + '" alt="Изображение из разговора">',
+      );
+      return;
     case 'openChat':
+      if (sending) return;
+      if (current !== id) {
+        clearAttachments();
+        closeSlash();
+        $('#prompt').value = '';
+      }
       current = id;
       nav('home');
       return;
@@ -1304,6 +1436,12 @@ async function handle(action, id) {
       $('#prompt').value = 'Найди в интернете ';
       $('#prompt').focus();
       return;
+    case 'removeVision':
+      await call('removeModel', { id, vision: true });
+      return refresh();
+    case 'downloadVision':
+      await call('download', { id, vision: true });
+      return refresh();
     case 'download':
       await call('download', { id });
       await refresh();
@@ -1886,6 +2024,13 @@ document.addEventListener('change', (e) => {
     return;
   }
   if (e.target.id === 'chatProject') {
+    if (sending) {
+      renderChat();
+      return;
+    }
+    clearAttachments();
+    closeSlash();
+    $('#prompt').value = '';
     current = '';
     call('project', { id: v }).then(refresh).catch(err);
     return;
@@ -1998,27 +2143,192 @@ $('#messageForm').onsubmit = (e) => {
   }
   send(val('prompt')).catch(err);
 };
-$('#prompt').onkeydown = (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+const promptField = $('#prompt'),
+  slashMenu = $('#slashMenu');
+let slashRows = [],
+  slashIndex = 0;
+function clearAttachments() {
+  draftEpoch++;
+  attachments = [];
+  drawAttachments();
+}
+function drawAttachments() {
+  const el = $('#attachment');
+  el.hidden = !attachments.length;
+  el.innerHTML = attachments
+    .map(
+      (f, i) =>
+        '<span>' +
+        (f.kind === 'image' ? '<img src="' + esc(f.data) + '" alt="">' : ico('file-text')) +
+        esc(f.name) +
+        '<button type="button" data-remove="' +
+        i +
+        '" aria-label="Убрать ' +
+        esc(f.name) +
+        '">' +
+        ico('x') +
+        '</button></span>',
+    )
+    .join('');
+}
+function addAttachments(items) {
+  const all = [...attachments, ...items];
+  if (all.length > 8 || all.filter((x) => x.kind === 'image').length > 4)
+    throw Error('Можно добавить восемь вложений, из них до четырёх изображений');
+  if (all.reduce((n, f) => n + (f.text?.length || 0), 0) > 45000)
+    throw Error('В приложенных документах больше 45 000 знаков');
+  attachments = all;
+  drawAttachments();
+}
+async function addScreen() {
+  const epoch = draftEpoch,
+    shot = await call('chatScreen');
+  if (epoch !== draftEpoch) return;
+  addAttachments([shot]);
+  promptField.focus();
+}
+function closeSlash() {
+  slashMenu.hidden = true;
+  $('#slash').setAttribute('aria-expanded', 'false');
+  promptField.removeAttribute('aria-activedescendant');
+}
+function showSlash(fromButton = false) {
+  const value = fromButton && !/^\/[a-z]*$/i.test(promptField.value) ? '/' : promptField.value;
+  if (!/^\/[a-z]*$/i.test(value)) {
+    closeSlash();
+    return;
+  }
+  slashRows = commands.filter(([id]) => ('/' + id).startsWith(value.toLowerCase()));
+  if (!slashRows.length) {
+    closeSlash();
+    return;
+  }
+  slashIndex = Math.min(slashIndex, slashRows.length - 1);
+  slashMenu.hidden = false;
+  $('#slash').setAttribute('aria-expanded', 'true');
+  slashMenu.innerHTML = slashRows
+    .map(
+      ([key, label], i) =>
+        '<button type="button" role="option" id="slashOption' +
+        i +
+        '" aria-selected="' +
+        (i === slashIndex) +
+        '" data-key="' +
+        key +
+        '"><strong>/' +
+        key +
+        '</strong> ' +
+        esc(label) +
+        '</button>',
+    )
+    .join('');
+  promptField.setAttribute('aria-activedescendant', 'slashOption' + slashIndex);
+  slashMenu.children[slashIndex].scrollIntoView({ block: 'nearest' });
+}
+async function chooseSlash(key) {
+  const before = promptField.value;
+  closeSlash();
+  promptField.value = '/' + key + ' ' + (/^\/[a-z]*$/i.test(before) ? '' : before);
+  promptField.focus();
+  if (key === 'screen') await addScreen();
+  if (key === 'think') toast('Уровни: auto, off, low, medium, high');
+}
+$('#slash').onclick = () => {
+  if (!slashMenu.hidden) {
+    closeSlash();
+    return;
+  }
+  if (!promptField.value) promptField.value = '/';
+  slashIndex = 0;
+  promptField.focus();
+  showSlash(true);
+};
+slashMenu.onclick = (e) => {
+  const button = e.target.closest('[data-key]');
+  if (button) chooseSlash(button.dataset.key).catch(err);
+};
+promptField.oninput = () => {
+  slashIndex = 0;
+  showSlash();
+};
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('#slashMenu,#slash,#prompt')) closeSlash();
+});
+promptField.onkeydown = (e) => {
+  if (e.isComposing) return;
+  if (!slashMenu.hidden) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSlash();
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      slashIndex = (slashIndex + (e.key === 'ArrowDown' ? 1 : -1) + slashRows.length) % slashRows.length;
+      const row = slashMenu.children[slashIndex];
+      for (const b of slashMenu.children) b.setAttribute('aria-selected', String(b === row));
+      promptField.setAttribute('aria-activedescendant', row.id);
+      row.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+      e.preventDefault();
+      slashMenu.children[slashIndex].click();
+      return;
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     $('#messageForm').requestSubmit();
   }
 };
 $('#attach').onclick = async () => {
+  const epoch = draftEpoch;
   try {
-    const a = await call('import', { kind: 'attachment' });
-    if (a) {
-      attachment = await (await import('./documents.js')).readAttachment(a);
-      $('#attachment').hidden = false;
-      $('#attachment').textContent = a.name + ' ×';
-    }
+    const files = await call('chatFiles');
+    if (!files.length) return;
+    const { readAttachment } = await import('./documents.js');
+    const added = [];
+    for (const file of files) added.push(file.kind === 'image' ? file : await readAttachment(file));
+    if (epoch === draftEpoch) addAttachments(added);
   } catch (e) {
     err(e);
   }
 };
-$('#attachment').onclick = () => {
-  attachment = null;
-  $('#attachment').hidden = true;
+async function attachFromBrowser(files) {
+  const epoch = draftEpoch;
+  if (files.length + attachments.length > 8) throw Error('Можно добавить до восьми файлов');
+  const { readDropped } = await import('./documents.js'),
+    added = [];
+  for (const file of files) added.push(await readDropped(file));
+  if (epoch === draftEpoch) addAttachments(added);
+}
+promptField.addEventListener('paste', (e) => {
+  const files = Array.from(e.clipboardData?.files || []);
+  if (!files.length) return;
+  e.preventDefault();
+  attachFromBrowser(files).catch(err);
+});
+const composer = $('#compose');
+composer.addEventListener('dragover', (e) => {
+  if (e.dataTransfer.types.includes('Files')) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }
+});
+composer.addEventListener('drop', (e) => {
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length) {
+    e.preventDefault();
+    attachFromBrowser(files).catch(err);
+  }
+});
+$('#attachment').onclick = (e) => {
+  const b = e.target.closest('[data-remove]');
+  if (b) {
+    attachments.splice(Number(b.dataset.remove), 1);
+    drawAttachments();
+  }
 };
 $('#mic').onclick = $('#voiceStart').onclick = () => toggleVoice().catch(err);
 $('#voiceEnd').onclick = () => voice.stop();
@@ -2070,6 +2380,19 @@ document.addEventListener('keydown', (e) => {
   }
 });
 window.desk.on(async (e) => {
+  if (e.type === 'chatText') {
+    if (!sending || e.requestId !== streamId || e.chatId !== current) return;
+    const scroller = $('#messages'),
+      el = $('#liveReply');
+    liveReply = e.text;
+    if (el) {
+      const bottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 40;
+      el.className = 'bubble assistant';
+      el.textContent = liveReply;
+      if (bottom) scroller.scrollTop = scroller.scrollHeight;
+    }
+    return;
+  }
   try {
     if (e.type === 'refresh' || e.type === 'models' || e.type === 'downloaded') {
       await refresh();

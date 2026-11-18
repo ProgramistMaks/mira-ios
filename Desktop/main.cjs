@@ -38,7 +38,12 @@ const {
 } = require('./core.cjs');
 const { Mail } = require('./mail.cjs');
 const { NoteFiles } = require('./note-files.cjs');
-let mail, noteFiles;
+const { extensions, fileKind } = require('./ui/chat-formats.mjs');
+const { ChatMedia, previewImage } = require('./chat-media.cjs');
+const { parseCommand } = require('./ui/chat-commands.mjs');
+let mail, noteFiles, chatMedia;
+const activeChats = new Set();
+const { revise } = require('./chat-revision.cjs');
 const sessionMailKeys = new Map();
 const commandLibrary = require('./command-library.cjs');
 const { calendarStart, occursOn } = require('./ui/calendar-dates.mjs');
@@ -205,7 +210,8 @@ async function localResource(req) {
   if (u.hostname !== 'desk') return new Response(null, { status: 404 });
   const name = decodeURIComponent(u.pathname);
   let file;
-  if (name === '/renderer/character.vrm') {
+  if (/^\/chat-images\/[a-f\d-]{36}\.jpg$/.test(name)) file = chatMedia.file(path.basename(name));
+  else if (name === '/renderer/character.vrm') {
     file = characterFile(store, renderer);
   } else if (name === '/music' && store.data.music) {
     file = store.data.music.path;
@@ -519,6 +525,28 @@ async function pick(options) {
   const a = await dialog.showOpenDialog(main, { properties: ['openFile'], ...options });
   return a.canceled ? null : a.filePaths[0];
 }
+async function captureDisplay() {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const size = {
+    width: Math.round(display.size.width * display.scaleFactor),
+    height: Math.round(display.size.height * display.scaleFactor),
+  };
+  const sources = await require('electron').desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: size,
+  });
+  const shot = sources.find((x) => x.display_id === String(display.id)) || sources[0];
+  if (!shot || shot.thumbnail.isEmpty()) throw Error('Экран недоступен для захвата');
+  return shot;
+}
+async function readChatFile(file) {
+  const name = path.basename(file),
+    stat = await fsp.stat(file);
+  if (!stat.isFile()) throw Error('Выбери обычный файл');
+  const kind = fileKind(name, stat.size);
+  if (kind === 'text') return { name, text: (await fsp.readFile(file, 'utf8')).slice(0, 35000) };
+  return { name, kind, bytes: await fsp.readFile(file) };
+}
 async function importFile(kind) {
   const filters = {
     avatar: [{ name: 'Персонаж VRM', extensions: ['vrm'] }],
@@ -535,13 +563,7 @@ async function importFile(kind) {
     id = uid(),
     stat = await fsp.stat(file);
   if (kind === 'attachment') {
-    const ext = path.extname(name).toLowerCase().slice(1);
-    if (['docx', 'pdf'].includes(ext)) {
-      if (stat.size > 20 * 1024 * 1024) throw Error('Выбери документ меньше 20 МБ');
-      return { name, kind: ext, bytes: await fsp.readFile(file) };
-    }
-    if (stat.size > 150000) throw Error('Выберите текстовый файл меньше 150 КБ');
-    return { name, text: (await fsp.readFile(file, 'utf8')).slice(0, 35000) };
+    return readChatFile(file);
   }
   if (kind === 'music') {
     store.data.music = { path: file, name };
@@ -852,10 +874,10 @@ function searchWeb(query, signal) {
     store.data.settings.searchFallback,
   );
 }
-async function chatConnection() {
+async function chatConnection(vision = false) {
   const s = store.data.settings;
   if (s.provider === 'local') {
-    const c = await models.connection(s.model);
+    const c = await models.connection(s.model, vision);
     return { base: c.base, key: c.key, model: c.id };
   }
   return { base: s.base, key: secret('ai'), model: s.cloudModel };
@@ -884,9 +906,43 @@ async function draftCommand(text, signal) {
     store.data.files,
   );
 }
-async function answer(text, chat, signal, remote = false, spokenReply = false) {
+async function answer(text, chat, signal, remote = false, spokenReply = false, onText) {
   const d = store.data,
     s = d.settings;
+  const cmd = parseCommand(text);
+  if (cmd?.key === 'think') {
+    const level = cmd.argument.toLowerCase();
+    if (level && !['auto', 'off', 'low', 'medium', 'high'].includes(level))
+      return { control: true, text: 'Доступны уровни auto, off, low, medium и high.' };
+    if (level) chat.reasoning = level;
+    return {
+      control: true,
+      text:
+        'Глубина размышлений в этом разговоре: ' +
+        (chat.reasoning || 'auto') +
+        '.' +
+        (s.provider !== 'local' && new URL(s.base).hostname === 'api.anthropic.com'
+          ? ' Этот сервис использует свой режим размышления.'
+          : ''),
+    };
+  }
+  const files = chat.messages.at(-1)?.attachments || [];
+  if (cmd?.key === 'screen' && !files.some((f) => f.kind === 'image'))
+    throw Error('Приложи снимок экрана перед отправкой');
+  if (
+    cmd &&
+    !cmd.argument &&
+    !files.length &&
+    !chat.messages.slice(0, -1).some((m) => !m.control && !m.error)
+  )
+    return { text: 'Добавь текст или файл, к которому нужно применить /' + cmd.key + '.', control: true };
+  if (
+    files.length &&
+    files.every((f) => f.kind === 'text') &&
+    /^(запиши|добавь заметку|запомни)(?=[\s,:.!]|$)/iu.test(text + ' ')
+  )
+    text += '\n' + files.map((f) => 'Файл ' + f.name + '\n' + f.text).join('\n');
+  else if (cmd || files.length) return converse(text, chat, signal, remote, spokenReply, onText);
   let m;
   if ((m = text.match(/^(?:создай|собери|составь) (?:команду|сценарий)\s*[:—-]?\s*(.+)/isu))) {
     const draft = await draftCommand(m[1], signal);
@@ -1079,16 +1135,34 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
       return { text: 'Открыла сайт в браузере.' };
     }
   }
-  const { base, key, model } = await chatConnection();
-  const recent = chat.messages
-    .filter((x) => !x.error)
-    .slice(-16)
-    .map(({ role, text: t }) => ({ role, content: t }));
+  return converse(text, chat, signal, remote, spokenReply, onText);
+}
+async function converse(text, chat, signal, remote, spokenReply, onText) {
+  const d = store.data,
+    s = d.settings,
+    recent = await chatMedia.messages(chat);
+  const vision = recent.some((m) => Array.isArray(m.content));
+  const { base, key, model } = await chatConnection(vision);
   const style = spokenReply ? ' Ответь для разговора вслух, коротко и без разметки.' : '';
+  const level = chat.reasoning || 'auto';
   const localOptions =
     s.provider === 'local'
-      ? { max_tokens: spokenReply ? 320 : 1536, chat_template_kwargs: { enable_thinking: false } }
-      : {};
+      ? {
+          max_tokens:
+            level === 'high'
+              ? 2304
+              : level === 'medium'
+                ? 1536
+                : level === 'low'
+                  ? 768
+                  : spokenReply
+                    ? 320
+                    : 1536,
+          chat_template_kwargs: { enable_thinking: level !== 'auto' && level !== 'off' },
+        }
+      : level !== 'auto' && new URL(base).hostname !== 'api.anthropic.com'
+        ? { reasoning_effort: level === 'off' ? 'none' : level }
+        : {};
   const messages = [
     {
       role: 'system',
@@ -1113,7 +1187,10 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
     },
     ...recent,
   ];
-  const connector = !remote && d.tools.find((t) => normal(text).startsWith('через ' + normal(t.name) + ' '));
+  const connector =
+    !remote &&
+    !chat.messages.at(-1)?.attachments?.length &&
+    d.tools.find((t) => normal(text).startsWith('через ' + normal(t.name) + ' '));
   if (connector) {
     const config = { ...connector, token: secret('mcp-' + connector.id) };
     const listed = await network.mcp(config, 'tools/list', {}, signal);
@@ -1156,7 +1233,21 @@ async function answer(text, chat, signal, remote = false, spokenReply = false) {
       ),
     };
   }
-  return { text: await network.ai(base, key, model, messages, signal, localOptions) };
+  return {
+    generated: true,
+    text: await network.ai(base, key, model, messages, signal, localOptions, onText),
+  };
+}
+function streamToChat(chatId, requestId) {
+  if (typeof requestId !== 'string' || requestId.length > 64) return null;
+  let last = 0;
+  return (text) => {
+    const now = Date.now();
+    if (now - last < 60) return;
+    last = now;
+    if (main && !main.isDestroyed())
+      main.webContents.send('update', { type: 'chatText', chatId, requestId, text });
+  };
 }
 async function chatSend(data, signal, remote = false) {
   const text = String(data.text || '')
@@ -1164,21 +1255,74 @@ async function chatSend(data, signal, remote = false) {
     .slice(0, 45000);
   if (!text) throw Error('Введите сообщение');
   const chat = getChat(data.id);
-  if (chat.messages.length === 0) chat.title = text.slice(0, 48);
-  chat.messages.push({ role: 'user', text, time: Date.now() });
-  changed();
+  const update = remote ? null : streamToChat(chat.id, data.requestId);
+  let partial = '';
+  if (activeChats.has(chat.id)) throw Error('В этом разговоре уже готовится ответ');
+  activeChats.add(chat.id);
   try {
-    const a = await answer(text, chat, signal, remote, data.voiceMode === true);
-    signal.throwIfAborted();
-    chat.messages.push({ role: 'assistant', ...a, time: Date.now() });
-    changed();
-    return { id: chat.id, ...a };
-  } catch (e) {
-    if (!signal.aborted) {
-      chat.messages.push({ role: 'assistant', text: errorText(e), error: true, time: Date.now() });
+    const attachments = await chatMedia.save(remote ? [] : data.attachments),
+      control = parseCommand(text)?.key === 'think';
+    if (chat.messages.length === 0) chat.title = text.slice(0, 48);
+    chat.messages.push({
+      role: 'user',
+      id: uid(),
+      text,
+      time: Date.now(),
+      ...(attachments.length ? { attachments } : {}),
+      ...(control ? { control } : {}),
+    });
+    try {
       changed();
+    } catch (e) {
+      chat.messages.pop();
+      await chatMedia.remove(attachments);
+      throw e;
     }
-    throw e;
+    try {
+      const a = await answer(
+        text,
+        chat,
+        signal,
+        remote,
+        data.voiceMode === true,
+        update
+          ? (text) => {
+              partial = text;
+              update(text);
+            }
+          : undefined,
+      );
+      signal.throwIfAborted();
+      chat.messages.push({ role: 'assistant', id: uid(), generated: !!a.generated, ...a, time: Date.now() });
+      changed();
+      return { id: chat.id, ...a };
+    } catch (e) {
+      if (signal.aborted) {
+        if (partial) {
+          chat.messages.push({
+            role: 'assistant',
+            id: uid(),
+            generated: true,
+            stopped: true,
+            text: partial,
+            time: Date.now(),
+          });
+          changed();
+        }
+        return { id: chat.id, text: '', stopped: true };
+      }
+      chat.messages.push({
+        role: 'assistant',
+        id: uid(),
+        text: errorText(e),
+        error: true,
+        time: Date.now(),
+      });
+      changed();
+      throw e;
+    }
+  } finally {
+    activeChats.delete(chat.id);
   }
 }
 let communityPacks = [];
@@ -1349,18 +1493,20 @@ const actions = {
     }
     changed();
   },
-  screenshot: async () => {
-    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const size = {
-      width: Math.round(display.size.width * display.scaleFactor),
-      height: Math.round(display.size.height * display.scaleFactor),
-    };
-    const sources = await require('electron').desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: size,
+  chatScreen: async () => previewImage((await captureDisplay()).thumbnail, 'Снимок экрана'),
+  chatFiles: async () => {
+    const r = await dialog.showOpenDialog(main, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Изображения и документы', extensions }],
     });
-    const shot = sources.find((x) => x.display_id === String(display.id)) || sources[0];
-    if (!shot || shot.thumbnail.isEmpty()) throw Error('Экран недоступен для захвата');
+    if (r.canceled) return [];
+    if (r.filePaths.length > 8) throw Error('Выбери до восьми файлов');
+    const files = [];
+    for (const f of r.filePaths) files.push(await readChatFile(f));
+    return files;
+  },
+  screenshot: async () => {
+    const shot = await captureDisplay();
     const dest = await dialog.showSaveDialog(main, {
       defaultPath: 'Снимок-' + Date.now() + '.png',
       filters: [{ name: 'PNG', extensions: ['png'] }],
@@ -1587,24 +1733,27 @@ const actions = {
     version: app.getVersion(),
     platform: process.platform,
   }),
-  async removeModel({ id }) {
+  async removeModel({ id, vision }) {
+    if (activeChats.size) throw Error('Дождись завершения ответа');
     const model = models.list().find((m) => m.id === id);
     if (!model) return false;
     const result = await dialog.showMessageBox(main, {
       type: 'question',
-      message: 'Удалить с компьютера ' + model.name + ' ' + model.quant + '?',
+      message: vision
+        ? 'Удалить модуль изображений ' + model.name + ' для всех её вариантов точности?'
+        : 'Удалить с компьютера ' + model.name + ' ' + model.quant + '?',
       buttons: ['Оставить', 'Удалить'],
       defaultId: 0,
       cancelId: 0,
     });
     if (result.response !== 1) return false;
-    await models.remove(id);
+    await models.remove(id, vision === true);
     changed();
     return true;
   },
   system,
   models: () => models.list(),
-  download: ({ id }) => models.startDownload(id),
+  download: ({ id, vision }) => models.startDownload(id, vision === true),
   pauseDownload: () => models.cancel(),
   settings: (input) => {
     const s = { ...store.data.settings };
@@ -1770,6 +1919,27 @@ const actions = {
       if (job === own) job = null;
     }
   },
+  reviseChat: async (data) => {
+    const chat = store.data.chats.find((c) => c.id === data.id);
+    if (!chat || job || activeChats.has(chat.id)) throw Error('Разговор недоступен или ответ ещё готовится');
+    const own = new AbortController();
+    job = own;
+    activeChats.add(chat.id);
+    try {
+      return await revise(
+        chat,
+        data,
+        (branch, text) =>
+          converse(text, branch, own.signal, true, false, streamToChat(chat.id, data.requestId)),
+        changed,
+        (items) => chatMedia.remove(items),
+        own.signal,
+      );
+    } finally {
+      activeChats.delete(chat.id);
+      if (job === own) job = null;
+    }
+  },
   spoken: ({ id, error }) => spoken.get(id)?.(error),
   stop: () => {
     executing?.abort();
@@ -1780,9 +1950,12 @@ const actions = {
     changed();
     return c.id;
   },
-  deleteChat: ({ id }) => {
+  deleteChat: async ({ id }) => {
+    if (activeChats.has(id)) throw Error('Дождись завершения ответа');
+    const removed = store.data.chats.find((c) => c.id === id);
     store.data.chats = store.data.chats.filter((c) => c.id !== id);
     changed();
+    if (removed) await chatMedia.remove(removed.messages.flatMap((m) => m.attachments || []));
   },
   speech: async ({ text, continuous, fishPreview }) => {
     voiceJob?.abort();
@@ -2172,6 +2345,7 @@ function mailKeychain() {
 }
 function init() {
   store = new Store(app.getPath('userData'));
+  chatMedia = new ChatMedia(store.dir);
   noteFiles = new NoteFiles(store, changed);
   mail = new Mail(
     store,

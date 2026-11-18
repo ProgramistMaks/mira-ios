@@ -165,6 +165,14 @@ class Store {
         widgets: widgetLayout(disk.settings?.widgets),
       },
     };
+    let migrated = false;
+    for (const chat of this.data.chats)
+      for (const message of chat.messages)
+        if (!message.id) {
+          message.id = uid();
+          migrated = true;
+        }
+    if (migrated) this.save();
   }
   save() {
     const temp = this.file + '.tmp';

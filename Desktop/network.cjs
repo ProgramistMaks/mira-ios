@@ -1,4 +1,5 @@
 const { endpoint, webURL } = require('./core.cjs');
+const { streamText } = require('./chat-stream.cjs');
 async function response(url, options = {}, timeout = 25000, fetcher = fetch) {
   const signal = options.signal
     ? AbortSignal.any([options.signal, AbortSignal.timeout(timeout)])
@@ -12,7 +13,23 @@ const post = (body, key) => ({
   headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: 'Bearer ' + key } : {}) },
   body: JSON.stringify(body),
 });
-async function ai(base, key, model, messages, signal, localOptions = {}) {
+async function chatFetch(url, options) {
+  const r = await fetch(url, options);
+  if (![400, 422, 501].includes(r.status)) return r;
+  const body = JSON.parse(options.body);
+  if (!body.stream) return r;
+  const detail = (await r.clone().text()).slice(0, 2000);
+  if (
+    !/stream/i.test(detail) ||
+    !/unsupported|not (?:supported|available|allowed)|unrecognized|unknown|must be false|disabled|не поддерж/iu.test(
+      detail,
+    )
+  )
+    return r;
+  await r.body?.cancel();
+  return fetch(url, { ...options, body: JSON.stringify({ ...body, stream: false }) });
+}
+async function ai(base, key, model, messages, signal, localOptions = {}, onText) {
   if (new URL(endpoint(base)).hostname === 'api.anthropic.com') {
     const r = await response(
       'https://api.anthropic.com/v1/messages',
@@ -26,16 +43,38 @@ async function ai(base, key, model, messages, signal, localOptions = {}) {
         body: JSON.stringify({
           model,
           max_tokens: 1500,
+          ...(onText ? { stream: true } : {}),
           system: messages
             .filter((m) => m.role === 'system')
             .map((m) => m.content)
             .join('\n'),
-          messages: messages.filter((m) => m.role !== 'system'),
+          messages: messages
+            .filter((m) => m.role !== 'system')
+            .map((m) => ({
+              ...m,
+              content: Array.isArray(m.content)
+                ? m.content.map((p) =>
+                    p.type === 'image_url'
+                      ? {
+                          type: 'image',
+                          source: {
+                            type: 'base64',
+                            media_type: 'image/jpeg',
+                            data: p.image_url.url.slice(23),
+                          },
+                        }
+                      : p,
+                  )
+                : m.content,
+            })),
         }),
         signal,
       },
       180000,
+      chatFetch,
     );
+    if (onText && r.headers.get('content-type')?.includes('text/event-stream'))
+      return streamText(r, 'anthropic', onText, signal);
     const text = (await r.json()).content
       ?.filter((c) => c.type === 'text')
       .map((c) => c.text)
@@ -45,9 +84,12 @@ async function ai(base, key, model, messages, signal, localOptions = {}) {
   }
   const r = await response(
     endpoint(base) + '/chat/completions',
-    { ...post({ model, messages, stream: false, ...localOptions }, key), signal },
+    { ...post({ model, messages, stream: !!onText, ...localOptions }, key), signal },
     180000,
+    chatFetch,
   );
+  if (onText && r.headers.get('content-type')?.includes('text/event-stream'))
+    return streamText(r, 'openai', onText, signal);
   const data = await r.json(),
     text = data.choices?.[0]?.message?.content;
   if (typeof text !== 'string' || !text.trim()) throw Error('Модель вернула пустой ответ');

@@ -1355,6 +1355,30 @@ export function ai(s, c) {
           (m.installed || (!m.busy && m.partial)
             ? rowAction('removeModel', m.id, 'trash-2', 'Удалить файл модели')
             : '') +
+          (m.installed && m.visionBytes
+            ? m.visionInstalled
+              ? '<span class="chip">Распознаёт изображения</span>'
+              : m.visionBusy
+                ? btn(
+                    'Приостановить модуль ' +
+                      Math.round((c.progress?.vision ? c.progress.count / c.progress.total : 0) * 100) +
+                      '%',
+                    'pauseDownload',
+                    'pause',
+                  )
+                : btn(
+                    (m.visionPartial ? 'Продолжить загрузку модуля · ' : 'Скачать модуль изображений · ') +
+                      (m.visionBytes / 1e6).toFixed(0) +
+                      ' МБ',
+                    'downloadVision',
+                    'image',
+                    '',
+                    m.id,
+                  )
+            : '') +
+          (!m.visionBusy && (m.visionInstalled || m.visionPartial)
+            ? rowAction('removeVision', m.id, 'trash-2', 'Удалить модуль изображений')
+            : '') +
           '</div>'
         );
       })

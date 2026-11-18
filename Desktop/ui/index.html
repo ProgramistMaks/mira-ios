@@ -81,6 +81,7 @@
               <div id="messages" aria-live="polite"></div>
             </div>
             <div id="compose">
+              <div id="slashMenu" role="listbox" aria-label="Слэш-команды" hidden></div>
               <div id="attachment" hidden></div>
               <form id="messageForm">
                 <button
@@ -98,8 +99,9 @@
                 ></textarea
                 ><button
                   type="button"
-                  data-act="abilities"
                   id="slash"
+                  aria-controls="slashMenu"
+                  aria-expanded="false"
                   aria-label="Слэш-команды"
                   title="Слэш-команды"
                 >
@@ -107,7 +109,7 @@
                 ><button
                   type="button"
                   id="attach"
-                  title="Добавить текстовый файл"
+                  title="Прикрепить изображение или документ"
                   aria-label="Добавить файл"
                   data-i="paperclip"
                 ></button

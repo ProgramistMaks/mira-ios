@@ -98,6 +98,21 @@ const catalog = [
     quant +
     '.gguf',
 }));
+// Vision encoders belong to a specific upstream model revision, independently of the text quantization.
+const encoders = {
+  qwen2: [668227264, '7035e9cb8d7c6a9681d07eef9a364783e86ea4cd73faab2eabb4f43a101830c7'],
+  qwen4: [672423616, 'cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864'],
+  qwen9: [918166080, 'f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f'],
+  qwen27: [927607488, 'cbb841a9ee0636b2ec172f5bb8df2ea8dfeb01e90fe7c6126581d662a0b4e43e'],
+  gemma: [851251328, '731199e016ec5f227b8293fef839899472e0ee4c51adf5f9e5cb66f6558fa142'],
+};
+function encoder(m) {
+  const data = encoders[m.id === 'qwen9q3' ? 'qwen9' : m.id];
+  return data && { bytes: data[0], hash: data[1], url: new URL('mmproj-F16.gguf', m.url).href };
+}
+function encoderPath(dir, m) {
+  return path.join(dir, encoder(m).hash + '.mmproj.gguf');
+}
 const bytesAt = (p) => {
   try {
     return fs.statSync(p).size;
@@ -179,18 +194,26 @@ class LocalModels {
       recommended: os.totalmem() / 2 ** 30 >= m.ram - 0.5,
       installed: bytesAt(path.join(this.dir, m.id + '.gguf')) === m.bytes,
       partial: bytesAt(path.join(this.dir, m.id + '.gguf.part')),
-      busy: this.active?.id === m.id,
+      busy: this.active?.id === m.id && !this.active.vision,
+      visionBytes: encoder(m)?.bytes || 0,
+      visionPartial: encoder(m) ? bytesAt(encoderPath(this.dir, m) + '.part') : 0,
+      visionInstalled: !!encoder(m) && bytesAt(encoderPath(this.dir, m)) === encoder(m).bytes,
+      visionBusy: !!encoder(m) && this.active?.vision === encoder(m).hash,
     }));
   }
-  startDownload(id) {
+  startDownload(id, vision = false) {
     const m = catalog.find((x) => x.id === id);
     if (!m) throw Error('Неизвестная модель');
     if (this.active) throw Error('Уже идёт загрузка');
-    const file = path.join(this.dir, id + '.gguf');
-    if (bytesAt(file) === m.bytes) return;
+    const asset = vision ? encoder(m) : m;
+    if (!asset) throw Error('У этой модели нет модуля изображений');
+    const file = vision ? encoderPath(this.dir, m) : path.join(this.dir, id + '.gguf');
+    if (bytesAt(file) === asset.bytes) return;
     const abort = new AbortController();
-    this.active = { id, abort };
-    download(m, file, abort.signal, (count) => this.notify({ type: 'download', id, count, total: m.bytes }))
+    this.active = { id, abort, vision: vision ? asset.hash : null };
+    download(asset, file, abort.signal, (count) =>
+      this.notify({ type: 'download', id, count, total: asset.bytes, vision }),
+    )
       .then(() => this.notify({ type: 'downloaded', id }))
       .catch((e) =>
         this.notify({
@@ -203,19 +226,38 @@ class LocalModels {
         this.notify({ type: 'models' });
       });
   }
-  async remove(id) {
+  async remove(id, visionOnly = false) {
     const model = catalog.find((m) => m.id === id);
     if (!model) throw Error('Неизвестная модель');
-    if (this.active?.id === id || this.starting)
-      throw Error('Сначала дождитесь остановки загрузки или запуска модели');
-    if (this.server?.id === id) {
+    if (this.active || this.starting) throw Error('Сначала дождитесь остановки загрузки или запуска модели');
+    const module = encoder(model);
+    if (visionOnly && !module) throw Error('Для этой модели модуль изображений недоступен');
+    const current = catalog.find((m) => m.id === this.server?.id);
+    if (
+      (!visionOnly && this.server?.id === id) ||
+      (visionOnly && this.server?.vision && current && encoder(current)?.hash === module.hash)
+    ) {
       const child = this.server.child,
         closed = new Promise((resolve) => child.once('close', resolve));
       this.stop();
       await closed;
     }
     const file = path.join(this.dir, model.id + '.gguf');
-    await Promise.all([fsp.rm(file, { force: true }), fsp.rm(file + '.part', { force: true })]);
+    const files = visionOnly ? [] : [file, file + '.part'];
+    if (
+      encoder(model) &&
+      (visionOnly ||
+        !catalog.some(
+          (m) =>
+            m.id !== id &&
+            encoder(m)?.hash === encoder(model).hash &&
+            bytesAt(path.join(this.dir, m.id + '.gguf')) === m.bytes,
+        ))
+    ) {
+      const proj = encoderPath(this.dir, model);
+      files.push(proj, proj + '.part');
+    }
+    await Promise.all(files.map((f) => fsp.rm(f, { force: true })));
   }
   cancel() {
     this.active?.abort.abort();
@@ -225,13 +267,11 @@ class LocalModels {
     this.server?.child.kill();
     this.server = null;
   }
-  async connection(id) {
-    if (this.starting) {
-      await this.starting;
-      if (this.server?.id === id) return this.server;
-    }
-    if (this.server?.id === id && !this.server.child.killed) return this.server;
-    const pending = this.launch(id);
+  async connection(id, vision = false) {
+    while (this.starting) await this.starting;
+    if (this.server?.id === id && (!vision || this.server.vision) && !this.server.child.killed)
+      return this.server;
+    const pending = this.launch(id, vision);
     this.starting = pending;
     try {
       return await pending;
@@ -239,11 +279,17 @@ class LocalModels {
       if (this.starting === pending) this.starting = null;
     }
   }
-  async launch(id) {
+  async launch(id, vision) {
     const m = catalog.find((x) => x.id === id),
       file = path.join(this.dir, (m?.id || '') + '.gguf');
     if (!m || bytesAt(file) !== m.bytes)
       throw Error('Скачайте модель во вкладке «ИИ» или выберите подключённый сервис');
+    if (vision && (!encoder(m) || bytesAt(encoderPath(this.dir, m)) !== encoder(m).bytes))
+      throw Error(
+        encoder(m)
+          ? 'Скачай модуль изображений для ' + m.name + ' в разделе «ИИ».'
+          : 'Для изображений выбери модель с поддержкой зрения.',
+      );
     this.stop();
     const generation = this.generation,
       port = await freePort(),
@@ -254,6 +300,7 @@ class LocalModels {
       [
         '-m',
         file,
+        ...(vision ? ['--mmproj', encoderPath(this.dir, m)] : []),
         '--host',
         '127.0.0.1',
         '--port',
@@ -273,7 +320,7 @@ class LocalModels {
     child.once('error', (e) => {
       error = e;
     });
-    const server = { child, id, key, base: 'http://127.0.0.1:' + port + '/v1' };
+    const server = { child, id, key, vision, base: 'http://127.0.0.1:' + port + '/v1' };
     this.server = server;
     child.once('exit', () => {
       if (this.server === server) this.server = null;
@@ -281,9 +328,7 @@ class LocalModels {
     try {
       for (let n = 0; n < 360; n++) {
         if (error || child.exitCode !== null || this.generation !== generation)
-          throw Error(
-            'Движок остановился. Проверьте свободную память или выберите модель меньшего размера',
-          );
+          throw Error('Движок остановился. Проверьте свободную память или выберите модель меньшего размера');
         try {
           const r = await fetch('http://127.0.0.1:' + port + '/health', {
             headers: { Authorization: 'Bearer ' + key },

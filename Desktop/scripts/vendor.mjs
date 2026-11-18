@@ -5,6 +5,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const dir = path.join(root, 'ui/vendor');
 await mkdir(dir, { recursive: true });
 const files = {
+  'xlsx.mjs': '@e965/xlsx/xlsx.mjs',
+  'cpexcel.full.mjs': '@e965/xlsx/dist/cpexcel.full.mjs',
+  'SheetJS-LICENSE.txt': '@e965/xlsx/LICENSE',
   'chess.js': 'chess.js/dist/esm/chess.js',
   'chess-LICENSE.txt': 'chess.js/LICENSE',
   'fflate.js': 'fflate/esm/browser.js',

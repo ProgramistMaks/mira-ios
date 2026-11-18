@@ -237,7 +237,12 @@ try {
   await p.locator('#panelWidgets').click();
   await p.locator('#content [data-act=widgets]').click();
   await p.locator('[data-widget=weather]').uncheck();
-  await p.locator('[data-act=widgetUp][data-id=tasks]').click();
+  const allWidgets = await p
+    .locator('#modal [data-widget]')
+    .evaluateAll((inputs) => inputs.map((el) => el.dataset.widget));
+  const distance = allWidgets.indexOf('tasks') - allWidgets.indexOf('notes');
+  assert.ok(distance > 0);
+  for (let i = 0; i < distance; i++) await p.locator('[data-act=widgetUp][data-id=tasks]').click();
   await p.locator('[data-act=saveWidgets]').click();
   await expect(p.locator('#content .box h3').first()).toHaveText('Мои задачи');
   await expect(p.locator('#content .box h3', { hasText: 'Погода' })).toHaveCount(0);
