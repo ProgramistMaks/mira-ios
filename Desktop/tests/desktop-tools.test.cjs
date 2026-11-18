@@ -66,7 +66,7 @@ test('Git lists actual local refs, switches clean branches, rejects dirty and no
   await assert.rejects(branches(sub), /корневую/);
 });
 test('Voice intents use fixed targets and do not treat questions or command suffixes as executable', async () => {
-  for (const text of ['Открой браузер гугол', 'Открой Браузер-Бугл.', 'Мира, открой браузер Google, пожалуйста!', 'Open Google'])
+  for (const text of ['Открой браузер гугол', 'Открывай браузер Google.', 'Открой Браузер-Бугл.', 'Мира, открой браузер Google, пожалуйста!', 'Open Google'])
     assert.equal(desktopIntent(text), 'browser');
   for (const [text, id] of [
     ['запусти google chrome', 'chrome'],
