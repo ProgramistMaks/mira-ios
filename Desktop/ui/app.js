@@ -1543,16 +1543,19 @@ async function handle(action, id) {
       cache.modelPreview = !cache.modelPreview;
       render();
       return;
-    case 'playModelClip':
-      cache.gesture = id;
+    case 'playNayuClip':
+    case 'playModelClip': {
+      const clip = action === 'playNayuClip' ? val('nayuClip') : id;
+      cache.gesture = clip;
       if (!cache.modelPreview && !state.overlay) {
         cache.modelPreview = true;
         render();
       }
-      avatar()?.configureChoreography(id);
+      avatar()?.configureChoreography(clip);
       avatar()?.replayGesture();
-      await call('motion', { id });
+      await call('motion', { id: clip });
       return;
+    }
     case 'showAvatar':
       if ($('#navMenu').matches(':popover-open')) $('#navMenu').hidePopover();
       return saveSettings({ showAvatar: !state.settings.showAvatar });

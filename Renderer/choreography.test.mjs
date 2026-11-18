@@ -498,3 +498,43 @@ test('the seated preview lowers its framing to keep the feet in view', () => {
   assert.equal(rig.track, 'chairOut');
   assert.ok(rig.viewOffset > -.06);
 });
+
+test('all 49 Nayu takes retain their duration and produce distinct animated poses on Mira', async () => {
+  const {NAYU_CHOREOGRAPHY,NayuMotion} = await import('./nayu-motion.mjs');
+  const bytes = await readFile(new URL('./motions/nayu-motion.bin', import.meta.url));
+  const pack = new NayuMotion(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+  assert.equal(Object.keys(pack.clips).length,49);
+  assert.equal(pack.bones.length,52);
+  const target = await loader.parseAsync(file.buffer.slice(file.byteOffset,file.byteOffset+file.byteLength),'');
+  VRMUtils.rotateVRM0(target.userData.vrm);
+  const body = target.userData.vrm;
+  const transfer = new ChoreographyRig(body,()=>.25,pack);
+  for (const [id,clip] of Object.entries(pack.clips)) {
+    assert.ok(NAYU_CHOREOGRAPHY.some(entry=>entry.id===id));
+    transfer.configure(id);
+    transfer.replay();
+    assert.equal(transfer.duration,clip.duration/clip.speed);
+    const points=[];
+    for (let i=0;i<8;i++) {
+      transfer.update(.05,{playbackDelta:transfer.duration/8});
+      assert.equal(transfer.track,id);
+      for (const name of ['hips','head','rightHand','leftFoot','rightIndexIntermediate']) {
+        const bone = body.humanoid.getNormalizedBoneNode(name);
+        const values=[...bone.getWorldPosition(new Vector3()).toArray(),...bone.quaternion.toArray()];
+        assert.ok(values.every(Number.isFinite),id);
+        points.push(values.map(x=>x.toFixed(3)).join(','));
+      }
+    }
+    assert.ok(new Set(points).size>5,id);
+  }
+  transfer.configure('auto');
+  transfer.react('arrival');
+  transfer.update(.016);
+  assert.equal(transfer.track,'nayu_portal_appear');
+  const duration = transfer.trackDuration('nayu_portal_appear');
+  for (let time=0;time<duration+.1;time+=.05) transfer.update(.05);
+  assert.equal(transfer.track,'nayu_greet');
+  transfer.react('dance');
+  transfer.update(.016);
+  assert.equal(transfer.track,'nayu_dance_in');
+});

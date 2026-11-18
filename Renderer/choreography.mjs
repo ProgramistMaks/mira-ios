@@ -2,6 +2,7 @@ import {Quaternion, Vector3} from 'three';
 import pack from './motions/authored.json' with {type:'json'};
 import {SHOTS, at, sampleHand, danceHands, welcomeHands} from './staged-gestures.mjs';
 import {guideHands,referencePose} from './reference-poses.mjs';
+import {NAYU_CHOREOGRAPHY,NAYU_IDLE} from './nayu-motion.mjs';
 
 const titles = {
   idle:'Перенос веса', ...Object.fromEntries(Object.entries(SHOTS).map(([id,shot])=>[id,shot.title])),
@@ -28,13 +29,7 @@ const sourceSequences = {
   desktopChair: [{ id:'chairIn' }, { id:'chairIdle', loop:true }],
   chairRise: [{ id:'chairOut' }],
 };
-function segmentAt(sequence, time) {
-  for (const [index, action] of sequence.entries()) {
-    const hold = action.hold ?? pack.clips[action.id].duration;
-    if (time < hold || index === sequence.length - 1) return { ...action, time };
-    time -= hold;
-  }
-}
+const nayuTitles = Object.fromEntries(NAYU_CHOREOGRAPHY.map(({id,title})=>[id,title]));
 const fingerCurl = {open:[.14,.045,.1,.16,.22],soft:[.22,.18,.29,.39,.47],
   loose:[.24,.43,.56,.64,.71],curled:[.39,1.12,1.22,1.25,1.27],index:[.10,.025,.94,1.03,1.08]};
 const sides = ['left','right'];
@@ -42,8 +37,10 @@ const smooth = t => {t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t);};
 const depth = n => n.parent ? 1+depth(n.parent) : 0;
 
 export class ChoreographyRig {
-  constructor(avatar, random = Math.random) {
+  /** @param {import('./nayu-motion.mjs').NayuMotion | null} nayu */
+  constructor(avatar, random = Math.random, nayu = null) {
     this.random=random;
+    this.nayu=nayu;
     this.root=avatar.scene;
     const bone=name=>avatar.humanoid.getNormalizedBoneNode(name);
     this.basis=this.root.getWorldQuaternion(new Quaternion());
@@ -52,7 +49,9 @@ export class ChoreographyRig {
       const node=bone(name);
       if (!node) return [];
       return [{name,index,node,rest:this.inverseBasis.clone().multiply(node.getWorldQuaternion(new Quaternion())),
-        from:node.quaternion.clone(),previous:node.quaternion.clone(),axis:new Vector3(),speed:0,localRest:node.quaternion.clone()}];
+        from:node.quaternion.clone(),previous:node.quaternion.clone(),axis:new Vector3(),speed:0,
+        localRest:node.quaternion.clone(), localPosition:node.position.clone(),
+        fromPosition:node.position.clone(), restParent:node.parent.getWorldQuaternion(new Quaternion()).invert()}];
     }).sort((a,b)=>depth(a.node)-depth(b.node));
     const byNode=new Map(this.entries.map(entry=>[entry.node,entry]));
     for (const entry of this.entries) {
@@ -77,7 +76,8 @@ export class ChoreographyRig {
   }
   bind(stance, targets, articulation) { Object.assign(this,{stance,targets,articulation}); }
   configure(id) {
-    if(id!=='auto' && (!Object.hasOwn(titles,id) || SHOTS[id]?.automaticOnly)) id='auto';
+    if(id!=='auto' && (!Object.hasOwn(titles,id) || SHOTS[id]?.automaticOnly) &&
+        !(this.nayu && Object.hasOwn(nayuTitles,id))) id='auto';
     if(id===this.mode) return;
     this.mode=id;
     if (!this.seated && this.clip !== 'chairRise') this.begin(id==='auto'?'idle':id);
@@ -88,13 +88,25 @@ export class ChoreographyRig {
     this.begin(value ? 'desktopChair' : 'chairRise', true);
   }
   get desktopSeating() { return this.clip === 'desktopChair' || this.clip === 'chairRise'; }
-  get fullBodyPreview() { return Boolean(sourceSequences[this.clip]) && !this.desktopSeating; }
+  sequence(id) { return this.nayu?.sequences[id] ?? sourceSequences[id]; }
+  trackDuration(id) {
+    const motion = this.nayu?.clips[id] || pack.clips[id];
+    return motion.duration/(motion.speed||1);
+  }
+  segmentAt(sequence, time) {
+    for (const [index,action] of sequence.entries()) {
+      const hold = action.hold ?? this.trackDuration(action.id);
+      if (time<hold || index===sequence.length-1) return { ...action,time };
+      time-=hold;
+    }
+  }
+  get fullBodyPreview() { return Boolean(this.sequence(this.clip)) && !this.desktopSeating; }
   get duration() {
-    const sequence = sourceSequences[this.clip];
-    if (sequence) return sequence.reduce((time, action) => time + (action.hold ?? pack.clips[action.id].duration), 0);
+    const sequence = this.sequence(this.clip);
+    if (sequence) return sequence.reduce((time, action) => time + (action.hold ?? this.trackDuration(action.id)), 0);
     return SHOTS[this.clip]?.duration ?? (this.clip==='dance'?6 : this.clip==='walk'?4 : 4.8);
   }
-  get title() { return this.clip==='chairRise'?'Встаёт со стула':titles[this.clip] ?? titles.chairIdle; }
+  get title() { return this.clip==='chairRise'?'Встаёт со стула':titles[this.clip] ?? nayuTitles[this.clip] ?? titles.chairIdle; }
   prepareTransition(dt) {
     this.fade=0;
     this.fromPosition.copy(this.hips.position);
@@ -102,6 +114,7 @@ export class ChoreographyRig {
       .multiplyScalar(dt>0?1/dt:0).clampLength(0,this.scale*2);
     for(const entry of this.entries){
       entry.from.copy(entry.node.quaternion);
+      entry.fromPosition.copy(entry.node.position);
       entry.speed=0;
       if(dt>0){
         this.q.copy(entry.previous).invert().multiply(entry.from);
@@ -120,7 +133,7 @@ export class ChoreographyRig {
     this.priorViewOffset=this.viewOffset;
     this.clip=id; this.age=0; this.direct=direct; this.track=null;
     this.targets?.resetTwist();
-    this.stance?.beginTransfer(dt>0 && !sourceSequences[id]);
+    this.stance?.beginTransfer(dt>0 && !this.sequence(id));
     this.prepareTransition(dt);
     this.holdUntil=id==='chairRise'?this.duration:id==='idle'?9+this.random()*8:Math.max(this.duration,3+this.random()*3);
     this.history=[...this.history.filter(old=>old!==id),id].slice(-4);
@@ -128,12 +141,17 @@ export class ChoreographyRig {
   replay() { if (!this.desktopSeating) this.begin(this.mode==='auto'?this.clip:this.mode,true); }
   react(kind) {
     if(this.desktopSeating || (this.mode!=='auto' && kind!=='dance')) return;
-    if(kind==='dance'){this.begin('dance',true);this.holdUntil=12;}
-    else if(kind==='greeting')this.begin('welcome',true);
-    else if(kind==='arrival')this.begin('arrival',true);
+    if(kind==='dance'){this.begin(this.nayu?'nayu_dance':'dance',true);this.holdUntil=this.nayu?this.duration:12;}
+    else if(kind==='greeting')this.begin(this.nayu?'nayu_greet':'welcome',true);
+    else if(kind==='arrival')this.begin(this.nayu?'nayu_welcome':'arrival',true);
     else if(kind==='touch')this.begin(this.clip==='temples'?'heart':'temples',true);
   }
   choose(phase) {
+    if(this.nayu && (phase==='idle'||phase==='listening')) {
+      const candidates = NAYU_IDLE.filter(id=>!this.history.includes(id));
+      if(candidates.includes('nayu_idle_breathe') && this.random()<.55) return 'nayu_idle_breathe';
+      return candidates[Math.floor(this.random()*candidates.length)];
+    }
     if(phase==='idle' && this.clip!=='idle')return 'idle';
     const candidates=pools[phase].filter(id=>!this.history.includes(id));
     if(!candidates.length)return this.history.find(id=>pools[phase].includes(id));
@@ -170,8 +188,8 @@ export class ChoreographyRig {
     this.age+=clipStep;this.fade+=clipStep;this.renderPose(dt);
   }
   renderPose(dt) {
-    const sequence = sourceSequences[this.clip];
-    const segment = sequence ? segmentAt(sequence, this.age) : null;
+    const sequence = this.sequence(this.clip);
+    const segment = sequence ? this.segmentAt(sequence, this.age) : null;
     if (segment && this.track && this.track !== segment.id) this.prepareTransition(this.previousDt);
     this.track = segment?.id;
     this.previousDt=dt;
@@ -186,9 +204,13 @@ export class ChoreographyRig {
     // Store it in local bone space so it remains valid on a rotated turntable.
     if (shot && this.stageBase) {
       this.hips.position.copy(this.stageBase.position);
-      for (let i=0;i<this.entries.length;i++) this.entries[i].node.quaternion.copy(this.stageBase.rotations[i]);
+      for (let i=0;i<this.entries.length;i++) {
+        const entry = this.entries[i];
+        entry.node.quaternion.copy(this.stageBase.rotations[i]);
+        if (entry.node !== this.hips) entry.node.position.copy(entry.localPosition);
+      }
     } else {
-      this.sampleSource(source,segment?.time ?? (shot?0:this.age),segment?.loop ?? !segment);
+      this.sampleSource(source,segment?.time ?? (shot?0:this.age),segment?.loop ?? Boolean(!segment || this.nayu?.clips[source]?.loop));
       if (this.clip === 'jump' && source === 'jumpAir') {
         // The imported game clip is in-place. Add root travel only in the composite preview.
         const progress = segment.time / segment.hold;
@@ -202,7 +224,8 @@ export class ChoreographyRig {
     this.stance?.sampleLanding();
     // Crossfade *after* solving both arms and the support foot so their
     // transition starts at the actual previous displayed pose.
-    const blend=smooth(this.fade/(this.clip==='arrival'?.12:sequence?.length>1?.24:.4));
+    const fadeTime = this.nayu?.clips[source]?.fade ?? (this.clip==='arrival'?.12:sequence?.length>1?.24:.4);
+    const blend=fadeTime<=0 ? 1 : smooth(this.fade/fadeTime);
     if(blend<1) {
       // Carry the displayed velocity through an interruption, then let it die
       // away. Replaying from a static snapshot stalls a moving hand for a frame.
@@ -211,6 +234,7 @@ export class ChoreographyRig {
       for(const e of this.entries){
         this.a.copy(e.from).multiply(this.q.setFromAxisAngle(e.axis,e.speed*coast));
         e.node.quaternion.slerp(this.a,1-blend);
+        if (e.node !== this.hips) e.node.position.lerp(e.fromPosition,1-blend);
       }
     }
     this.stance?.transferFeet(this.fade);
@@ -220,16 +244,39 @@ export class ChoreographyRig {
     }
   }
   sampleSource(id,t,loop=true) {
-    const c=pack.clips[id],frame=Math.min(c.frames-1,(loop?t%c.duration:t)*c.fps);
-    const i=Math.floor(frame),j=Math.min(c.frames-1,i+1),u=frame-i;
+    const imported = this.nayu?.clips[id];
+    const clip = imported || pack.clips[id];
+    const elapsed = t*(clip.speed || 1);
+    const time = loop ? elapsed%clip.duration : Math.min(elapsed,clip.duration);
+    const frame = imported ? 0 : Math.min(clip.frames-1,time*clip.fps);
+    const i=Math.floor(frame),j=Math.min(clip.frames-1,i+1);
+    const keys = imported ? this.nayu.blend(clip,time) : null;
+    const u=keys ? keys.alpha : frame-i;
     this.root.getWorldQuaternion(this.rootQ);
-    this.v.fromArray(c.positions,i*3).lerp(this.v2.fromArray(c.positions,j*3),u)
-      .multiplyScalar(this.scale).applyQuaternion(this.inverseBasis);
+    if (keys) {
+      this.nayu.position(keys.from,this.v);
+      this.nayu.position(keys.to,this.v2);
+    } else {
+      this.v.fromArray(clip.positions,i*3);
+      this.v2.fromArray(clip.positions,j*3);
+    }
+    this.v.lerp(this.v2,u).multiplyScalar(this.scale).applyQuaternion(this.inverseBasis);
     this.hips.position.copy(this.origin).add(this.v);
     for(const e of this.entries){
       const offset=e.index*4,stride=pack.bones.length*4;
-      this.a.fromArray(c.rotations,i*stride+offset).normalize();
-      this.b.fromArray(c.rotations,j*stride+offset).normalize();
+      if (keys) {
+        this.nayu.rotation(keys.from,e.index,this.a);
+        this.nayu.rotation(keys.to,e.index,this.b);
+        if (e.node !== this.hips) {
+          this.nayu.translation(keys.from,e.index,this.v);
+          this.nayu.translation(keys.to,e.index,this.v2);
+          e.node.position.copy(e.localPosition).add(this.v.lerp(this.v2,u).multiplyScalar(this.scale).applyQuaternion(e.restParent));
+        }
+      } else {
+        if (e.node !== this.hips) e.node.position.copy(e.localPosition);
+        this.a.fromArray(clip.rotations,i*stride+offset).normalize();
+        this.b.fromArray(clip.rotations,j*stride+offset).normalize();
+      }
       this.q.copy(this.a).slerp(this.b,u).premultiply(this.inverseBasis)
         .multiply(this.basis).multiply(e.rest).premultiply(this.rootQ);
       // Normalized VRM bones are unscaled. Parent entries have already been

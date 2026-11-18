@@ -1,3 +1,4 @@
+import { NayuMotion } from './nayu-motion.mjs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRM, VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
@@ -134,7 +135,13 @@ async function main() {
   scene.add(new THREE.HemisphereLight(0xfff9ee, 0x777a67, 0.85));
   const loader = new GLTFLoader();
   loader.register(parser => new VRMLoaderPlugin(parser));
-  const gltf = await loader.loadAsync('character.vrm');
+  const desktopStage = location.protocol === 'mira:' && location.hostname === 'desk';
+  const [gltf, nayu] = await Promise.all([
+    loader.loadAsync('character.vrm'),
+    desktopStage ? fetch('nayu-motion.bin')
+      .then(response => response.ok ? response.arrayBuffer() : Promise.reject(Error('Motion pack unavailable')))
+      .then(buffer => new NayuMotion(buffer)).catch(() => null) : null,
+  ]);
   const avatar = gltf.userData.vrm as VRM | undefined;
   if (!avatar) throw new Error('No VRM avatar');
   VRMUtils.removeUnnecessaryVertices(avatar.scene);
@@ -143,7 +150,7 @@ async function main() {
   VRMUtils.combineSkeletons(avatar.scene);
   VRMUtils.combineMorphs(avatar);
   avatar.scene.traverse(object => { object.frustumCulled = false; });
-  const authored = new ChoreographyRig(avatar);
+  const authored = new ChoreographyRig(avatar, Math.random, nayu);
   choreography = authored;
   choreography.configure(choreographyMode);
   // Bring the sample's T-pose into a relaxed resting pose.
@@ -161,7 +168,6 @@ async function main() {
   const target = new THREE.Object3D(); target.position.set(0, center.y + height * 0.24, 3);
   scene.add(target);
   if (avatar.lookAt) avatar.lookAt.target = target;
-  const desktopStage = location.protocol === 'mira:' && location.hostname === 'desk';
   const restingFrame = desktopStage ? .068 : 0;
   let framingOffset = 0, verticalCenter = 0, cameraDistance = 0;
   const resize = () => {

@@ -933,6 +933,13 @@ export function model(s, c) {
             btn('По ситуации', 'playModelClip', 'orbit', '', 'auto'),
             btn('Потанцевать', 'dance', 'music-2'),
           ) +
+          ((c.catalog?.nayuClips || []).length
+            ? '<div class="row">' +
+              select('Исходные анимации Astra', 'nayuClip',
+                c.catalog.nayuClips.map(clip=>[clip.id,clip.title]),
+                c.gesture?.startsWith('nayu_') ? c.gesture : 'nayu_welcome') +
+              btn('Проиграть клип', 'playNayuClip', 'play') + '</div>'
+            : '') +
           '<div class="clipList">' +
           (c.catalog?.clips || [])
             .map(

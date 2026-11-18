@@ -275,7 +275,7 @@ async function localResource(req) {
   } else if (name === '/music' && store.data.music) {
     file = store.data.music.path;
   } else if (
-    /^\/renderer\/(index\.html|avatar\.js|choreography\.json|expression-catalog\.json|body-catalog\.json)$/.test(
+    /^\/renderer\/(index\.html|avatar\.js|choreography\.json|expression-catalog\.json|body-catalog\.json|nayu-motion\.bin)$/.test(
       name,
     )
   )
