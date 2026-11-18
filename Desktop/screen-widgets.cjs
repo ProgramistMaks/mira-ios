@@ -71,6 +71,7 @@ class ScreenWidgets {
       return {
         id,
         theme: d.settings.theme,
+        customColor: d.settings.customColor,
         focus: id === 'focus' ? d.focus : null,
         items:
           id === 'focus'

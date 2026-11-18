@@ -63,3 +63,9 @@ footer {
 footer button {
   font-size: 0.85rem;
 }
+
+body[data-palette-tone],
+body[data-theme='paper'] {
+  background: var(--panel);
+  color: var(--ink);
+}

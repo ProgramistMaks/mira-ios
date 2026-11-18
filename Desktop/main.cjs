@@ -1,3 +1,5 @@
+const { themeIds } = require('./ui/themes.mjs');
+const { pinnedTabs } = require('./ui/nav-layout.mjs');
 const { manifest } = require('./extensions.cjs'),
   speechAPI = require('./speech-api.cjs');
 const { outfits, characterFile } = require('./wardrobe.cjs');
@@ -751,8 +753,7 @@ async function execute(spec, remote = false) {
             activeFocus(+b.value);
             return;
           case 'theme':
-            if (!['cream', 'night', 'sage', 'rose', 'graphite', 'coal', 'mist', 'system'].includes(b.value))
-              throw Error('Неизвестная тема');
+            if (!themeIds.includes(b.value)) throw Error('Неизвестная тема');
             store.data.settings.theme = b.value;
             changed();
             return;
@@ -1842,7 +1843,7 @@ const actions = {
       currency: ['usd', 'eur', 'rub'],
       cryptoCoin: ['bitcoin', 'ethereum', 'solana'],
       outfit: outfits.map((o) => o.id),
-      theme: ['cream', 'night', 'sage', 'rose', 'graphite', 'coal', 'mist', 'system'],
+      theme: themeIds,
       provider: ['local', 'endpoint'],
       fps: [30, 60, 120, 240],
       graphLines: ['round', 'angular'],
@@ -1894,6 +1895,11 @@ const actions = {
     for (const name of ['microphoneId', 'speakerId'])
       if (name in input) s[name] = String(input[name] || '').slice(0, 256);
     if ('widgets' in input) s.widgets = require('./core.cjs').widgetLayout(input.widgets);
+    if ('navTabs' in input) s.navTabs = pinnedTabs(input.navTabs);
+    if ('customColor' in input) {
+      if (!/^#[a-f0-9]{6}$/i.test(input.customColor)) throw Error('Выберите цвет фона');
+      s.customColor = input.customColor;
+    }
     if ('accent' in input) {
       if (input.accent && !/^#[\da-f]{6}$/i.test(input.accent)) throw Error('Выберите цвет');
       s.accent = input.accent;

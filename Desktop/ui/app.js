@@ -1,3 +1,5 @@
+import { navigation } from './navigation.js';
+import { applyPalette } from './themes.mjs';
 import './error-journal.js';
 import { updateBackdrop } from './backgrounds.js';
 import { address, followUpDelay } from './wake.mjs';
@@ -113,10 +115,7 @@ navigator.mediaDevices?.addEventListener('devicechange', () => {
   if (page === 'voice' || voice.enabled) refreshAudioDevices().catch(err);
 });
 const clock = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' });
-const tabs = $('#tabs');
-tabs.innerHTML = Object.entries(pages.tabIcons)
-  .map(([id, icon]) => '<button data-go="' + id + '">' + ico(icon) + pages.names[id] + '</button>')
-  .join('');
+const drawNav = navigation(pages.names, pages.tabIcons, saveSettings, err);
 icons();
 const avatarFrame = $('#avatar');
 let avatarReadyTimer;
@@ -161,6 +160,7 @@ function renderFrame() {
 }
 function nav(next) {
   if (!pages.names[next]) return;
+  if ($('#navMenu').matches(':popover-open')) $('#navMenu').hidePopover();
   if (next !== 'home') closeSlash();
   if (voice.testing && next !== 'voice') {
     voice.stop(false);
@@ -179,7 +179,7 @@ function nav(next) {
   page = next;
   $('#home').classList.remove('widgets-open');
   $('#panelWidgets').setAttribute('aria-expanded', 'false');
-  $('#drawer').hidden = true;
+  setHistory(false);
   render();
   if (page === 'desk') refreshSystem();
   if (page === 'voice') refreshAudioDevices().catch(err);
@@ -552,6 +552,10 @@ function renderServices() {
     voice.enabled,
   );
   const enabled = s.ttsEnabled !== false;
+  const output = $('#composerVoice');
+  output.setAttribute('aria-pressed', String(enabled));
+  output.title = enabled ? 'Отключить озвучку' : 'Включить озвучку';
+  output.setAttribute('aria-label', output.title);
   const ready = s.voice !== 'fish' || (state.keys.includes('fish') && s.fishVoice);
   service(
     '#serviceVoice',
@@ -568,12 +572,13 @@ function render() {
   const look = state.settings;
   voice.settings = look;
   document.body.dataset.bubbles = String(look.bubbles);
-  document.body.dataset.theme =
+  const theme =
     look.theme === 'system'
       ? matchMedia('(prefers-color-scheme: dark)').matches
         ? 'night'
         : 'cream'
       : look.theme;
+  applyPalette(document.body, theme, look.customColor);
   document.body.dataset.glass = String(!!look.glass);
   document.body.dataset.noBlur = String(look.disableBlur);
   document.body.dataset.windowButtons = String(look.windowButtonBackground);
@@ -584,6 +589,8 @@ function render() {
   document.body.style.setProperty('--glow-alpha', (look.glow ?? 55) + '%');
   if (look.accent) document.body.style.setProperty('--accent', look.accent);
   else document.body.style.removeProperty('--accent');
+  drawNav(look.navTabs, page);
+  $('#topOverlay').setAttribute('aria-pressed', String(state.overlay));
   $('#area').dataset.page = page;
   updateBackdrop(page === 'home', look.reduced);
   $('#content').hidden = page === 'home';
@@ -600,7 +607,7 @@ function render() {
       ? state.models.find((m) => m.id === look.model)?.name || 'Локальная модель'
       : look.cloudModel || 'Сервис ИИ';
   $('#heroName').textContent = look.name;
-  $('#hello').textContent = state.settings.user ? 'Привет, ' + state.settings.user + '!' : 'О чём поговорим?';
+  $('#hello').textContent = state.settings.user ? 'Привет, ' + state.settings.user + '!' : 'С чего начнём?';
   $('#homeCharacter').setAttribute('aria-pressed', String(look.showAvatar));
   $('#recentChat').disabled = !state.chats.some((chat) => chat.messages.length);
   $('#initial').textContent = (state.settings.user || 'М')[0].toUpperCase();
@@ -908,7 +915,7 @@ async function handle(action, id) {
       return;
     case 'chooseProject':
       closeModal();
-      $('#drawer').hidden = false;
+      setHistory(true);
       return;
     case 'attachNote': {
       const note = state.notes.find((n) => n.id === id);
@@ -1036,7 +1043,7 @@ async function handle(action, id) {
     case 'projectAttach': {
       addAttachments([{ name: cache.editing.name, text: $('#projectText').value }]);
       closeModal();
-      $('#drawer').hidden = true;
+      setHistory(false);
       nav('home');
       $('#prompt').focus();
       return;
@@ -1296,6 +1303,7 @@ async function handle(action, id) {
       await call('motion', { id });
       return;
     case 'showAvatar':
+      if ($('#navMenu').matches(':popover-open')) $('#navMenu').hidePopover();
       return saveSettings({ showAvatar: !state.settings.showAvatar });
     case 'seat':
       await call('seat');
@@ -2049,7 +2057,8 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (b.dataset.dismiss === 'drawer') {
-    $('#drawer').hidden = true;
+    setHistory(false);
+    $('#historyBtn').focus();
     return;
   }
   if (b.dataset.win) {
@@ -2093,6 +2102,7 @@ document.addEventListener('change', (e) => {
     return;
   }
   const settings = {
+    customColor: { customColor: v },
     accent: { accent: v },
     glow: { glow: +v },
     glass: { glass: v === 'on' },
@@ -2397,9 +2407,9 @@ $('#attachment').onclick = (e) => {
   }
 };
 $('#serviceMic').onclick = () => toggleVoice(false, true).catch(err);
-$('#serviceVoice').onclick = async () => {
+$('#composerVoice').onclick = $('#serviceVoice').onclick = async () => {
   const button = $('#serviceVoice');
-  button.disabled = true;
+  $('#composerVoice').disabled = button.disabled = true;
   try {
     const enabled = state.settings.ttsEnabled === false;
     state.settings.ttsEnabled = enabled;
@@ -2410,7 +2420,7 @@ $('#serviceVoice').onclick = async () => {
     await refresh();
     err(e);
   } finally {
-    button.disabled = false;
+    $('#composerVoice').disabled = button.disabled = false;
   }
 };
 $('#mic').onclick = $('#voiceStart').onclick = () => toggleVoice().catch(err);
@@ -2446,15 +2456,25 @@ $('#panelWidgets').onclick = () => {
   const visible = $('#home').classList.toggle('widgets-open');
   $('#panelWidgets').setAttribute('aria-expanded', String(visible));
 };
-$('#topOverlay').onclick = () => handle('overlay').catch(err);
-$('#dance').onclick = () => handle('dance').catch(err);
-$('#historyBtn').onclick = () => {
-  $('#drawer').hidden = !$('#drawer').hidden;
+$('#topOverlay').onclick = () => {
+  $('#navMenu').hidePopover();
+  handle('overlay').catch(err);
 };
+$('#dance').onclick = () => handle('dance').catch(err);
+function setHistory(open) {
+  $('#drawer').hidden = !open;
+  $('#historyBtn').setAttribute('aria-expanded', String(open));
+}
+$('#historyBtn').onclick = () => setHistory($('#drawer').hidden);
+$('#drawerNewChat').onclick = newChat;
 $('#newChat').onclick = newChat;
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    $('#drawer').hidden = true;
+    if (!$('#drawer').hidden && !document.querySelector('dialog[open]')) {
+      setHistory(false);
+      $('#historyBtn').focus();
+      return;
+    }
     $('#home').classList.remove('widgets-open');
     $('#panelWidgets').setAttribute('aria-expanded', 'false');
     cache.openWidget = null;

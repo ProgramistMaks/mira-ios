@@ -100,6 +100,7 @@ try {
   await p.locator('#island').selectOption('off');
   await go('home');
   await click('#historyBtn');
+  await click('#historyProjects summary');
   await action('addProject');
   await p.locator('#projectName').fill('Мой проект');
   await p.locator('#projectRole').fill('Отвечай в метрах');

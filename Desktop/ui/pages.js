@@ -1,3 +1,5 @@
+import { themeList, defaultCustomColor } from './themes.mjs';
+export { themeList };
 import { backgroundControls } from './backgrounds.js';
 import { $, esc, ico, opt, btn, box, field, select, timerTime, timeLabel } from './shared.js';
 import { occursOn } from './calendar-dates.mjs';
@@ -25,16 +27,7 @@ const empty = (s) => '<p class="empty">' + esc(s) + '</p>';
 const acts = (...a) => '<div class="actions">' + a.join('') + '</div>';
 const heading = (title, action = '') =>
   '<div class="heading"><h2>' + esc(title) + '</h2>' + action + '</div>';
-export const themeList = [
-  ['cream', 'Кремовая'],
-  ['night', 'Ночная'],
-  ['sage', 'Шалфей'],
-  ['rose', 'Сакура'],
-  ['graphite', 'Графит'],
-  ['coal', 'Уголь'],
-  ['mist', 'Дымка'],
-  ['system', 'Как в системе'],
-];
+
 export const triggerNames = {
   ready: 'При запуске Миры',
   focusEnd: 'По окончании фокуса',
@@ -1628,6 +1621,9 @@ export function settings(s, c) {
           )
           .join('') +
         '</div>' +
+        (a.theme === 'custom'
+          ? field('Цвет фона', 'customColor', a.customColor || defaultCustomColor, 'color')
+          : '') +
         field('Акцентный цвет', 'accent', a.accent || '#6b485c', 'color') +
         acts(btn('Цвет темы', 'resetAccent', 'rotate-ccw')) +
         '<label class="field">Свечение фона<input id="glow" type="range" min="0" max="100" value="' +

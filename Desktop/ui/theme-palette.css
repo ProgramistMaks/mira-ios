@@ -1,0 +1,45 @@
+body[data-theme='paper'] {
+  color-scheme: light;
+  --paper: #eee8dd;
+  --panel: #f8f4eb;
+  --hero: #fffdf8;
+  --ink: #2b2722;
+  --line: #dcd4c7;
+  --muted: #6b655c;
+  --stage: #ded5c5;
+  --accent: #535c68;
+  --tint: #e3e0d9;
+  --on: #fffdf8;
+}
+body[data-palette-tone] {
+  --paper: var(--chosen-background);
+  --panel: color-mix(in srgb, var(--paper), var(--lift) 12%);
+  --hero: color-mix(in srgb, var(--paper), var(--lift) 19%);
+  --line: color-mix(in srgb, var(--paper), var(--ink) 23%);
+  --muted: color-mix(in srgb, var(--ink) 85%, var(--paper));
+  --stage: color-mix(in srgb, var(--paper), var(--ink) 7%);
+  --accent: var(--ink);
+  --on: var(--paper);
+  --tint: color-mix(in srgb, var(--paper), var(--ink) 12%);
+  --sage: var(--tint);
+  --gold: var(--tint);
+}
+body[data-palette-tone='dark'] {
+  color-scheme: dark;
+  --ink: #fff;
+  --lift: black;
+  --shade: #0003;
+}
+body[data-palette-tone='light'] {
+  color-scheme: light;
+  --ink: #08080a;
+  --lift: white;
+  --shade: #35204018;
+}
+body[data-theme='ocean'] {
+  --lift: #6091a9;
+  --accent: #b8e6ee;
+}
+body[data-theme='lavender'] {
+  --accent: #60467d;
+}

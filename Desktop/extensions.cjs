@@ -1,8 +1,8 @@
+const { themeIds } = require('./ui/themes.mjs');
 const { routine, endpoint, uid } = require('./core.cjs');
 const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 function contributions(input = {}, count = 0) {
-  if (!input || typeof input !== 'object' || Array.isArray(input))
-    throw Error('Неверный формат расширения');
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Неверный формат расширения');
   const result = {};
   if (input.panel) {
     const p = input.panel,
@@ -21,12 +21,13 @@ function contributions(input = {}, count = 0) {
   }
   if (input.theme) {
     const t = input.theme;
-    if (
-      !['cream', 'sage', 'night', 'rose', 'mist', 'graphite', 'coal'].includes(t.theme) ||
-      !/^#[\da-f]{6}$/i.test(t.accent)
-    )
+    if (!themeIds.includes(t.theme) || t.theme === 'system' || !/^#[\da-f]{6}$/i.test(t.accent))
       throw Error('Проверь основу и цвет темы');
     result.theme = { theme: t.theme, accent: t.accent, glass: t.glass === true };
+    if (t.theme === 'custom' && t.customColor !== undefined) {
+      if (!/^#[a-f0-9]{6}$/i.test(t.customColor)) throw Error('Проверь цвет фона темы');
+      result.theme.customColor = t.customColor;
+    }
   }
   if (input.ai) {
     if (!text(input.ai.model, 160)) throw Error('Укажи модель ИИ в наборе');

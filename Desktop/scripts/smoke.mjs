@@ -63,6 +63,7 @@ try {
   await p.locator('#introSkip').click();
   await expect(p.locator('#homeCharacter')).toHaveAttribute('aria-pressed', 'false');
   if (evidence) await p.screenshot({ path: path.join(evidence, 'home.png') });
+  await p.locator('#navMenuButton').click();
   await p.locator('#homeCharacter').click();
   await p.waitForFunction(() => document.querySelector('#avatar')?.contentWindow.companion?.ready, null, {
     timeout: 90000,
@@ -303,6 +304,7 @@ try {
     listener.close();
   }
   const next = app.waitForEvent('window');
+  await p.locator('#navMenuButton').click();
   await p.locator('#topOverlay').click();
   const overlay = await next;
   await overlay.waitForFunction(

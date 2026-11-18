@@ -67,6 +67,7 @@ try {
   });
   await p.locator('#introSkip').click();
   await expect(p.locator('#homeCharacter')).toHaveAttribute('aria-pressed', 'false');
+  await p.locator('#navMenuButton').click();
   await p.locator('#homeCharacter').click();
   await p.waitForFunction(() => document.querySelector('#avatar')?.contentWindow.companion?.ready, null, {
     timeout: 90000,

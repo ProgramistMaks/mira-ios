@@ -1,3 +1,4 @@
+import { applyPalette } from './themes.mjs';
 import { $, esc, timerTime, timeLabel } from './shared.js';
 const call = (op, task) => window.desk.call('screenAction', { op, task });
 const names = { focus: 'Фокус', tasks: 'Задачи', events: 'Календарь', notes: 'Заметки' };
@@ -8,6 +9,7 @@ async function draw() {
     s = await call('state');
   if (seq !== n) return;
   state = s;
+  applyPalette(document.body, s.theme, s.customColor);
   document.body.toggleAttribute(
     'data-dark',
     ['graphite', 'coal', 'night'].includes(s.theme) ||
