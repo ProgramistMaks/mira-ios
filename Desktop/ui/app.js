@@ -13,6 +13,7 @@ import './error-journal.js';
 import { updateBackdrop } from './backgrounds.js';
 import { WakeGate } from './wake.mjs';
 import { syncCat } from './cat.js';
+import { MusicTempo } from './music-tempo.mjs';
 import {
   $,
   esc,
@@ -60,6 +61,12 @@ const cache = { gesture: 'auto', emotion: '', draft: null, progress: null },
   music = new Audio();
 music.controls = true;
 music.preload = 'metadata';
+let musicBpm = 0;
+const musicTempo = new MusicTempo(music,bpm=>{
+  musicBpm = bpm;
+  avatar()?.setMusicTempo(bpm);
+  call('avatarMusic',{bpm}).catch(()=>{});
+});
 const wakeGate = new WakeGate();
 let wakeTimer,
   lastMicMode = 'off';
@@ -145,12 +152,17 @@ function setupAvatar() {
   a.configureChoreography(cache.gesture);
   a.configurePerformance({ emotion: cache.emotion || 'auto', variant: -1 });
   a.setFrameRate(state.settings.fps);
+  a.setMusicTempo(musicBpm);
   a.setState(sending ? 'thinking' : voice.enabled ? 'listening' : 'idle', state.settings.reduced);
   a.setMotionOutput(!!state.motionPort);
   a.setActive(sceneVisible());
   if (cache.reactionPreview) {
     a.playReaction(cache.reactionPreview);
     cache.reactionPreview = null;
+  }
+  if (cache.weatherPreview !== undefined) {
+    a.previewWeather(cache.weatherPreview);
+    delete cache.weatherPreview;
   }
 }
 avatarFrame.addEventListener('load', () => {
@@ -415,10 +427,17 @@ function setMusic() {
     music.dataset.name = state.music.name;
   }
 }
-music.addEventListener('play', () => {
-  avatar()?.dance();
-  call('motion', { id: 'dance', temporary: true });
-});
+for (const event of ['playing','seeked'])
+  music.addEventListener(event,()=>{
+    if (music.paused) return;
+    call('avatarMusic',{playing:true}).catch(()=>{});
+    musicTempo.start().catch(()=>{});
+  });
+for (const event of ['pause','ended','seeking','waiting','emptied','error'])
+  music.addEventListener(event,()=>{
+    musicTempo.reset();
+    call('avatarMusic',{playing:false}).catch(()=>{});
+  });
 function cards() {
   const s = state;
   const meta = {
@@ -1559,6 +1578,18 @@ async function handle(action, id) {
       cache.reactionPreview = null;
       return;
     }
+    case 'previewWorldWeather': {
+      cache.weatherPreview = cache.worldWeather = Number(val('worldWeather'));
+      if (!cache.modelPreview) {
+        cache.modelPreview = true;
+        render();
+      }
+      if (avatar()?.ready) {
+        avatar().previewWeather(cache.weatherPreview);
+        delete cache.weatherPreview;
+      }
+      return;
+    }
     case 'playNayuClip':
     case 'playModelClip': {
       const clip = action === 'playNayuClip' ? val('nayuClip') : id;
@@ -2417,6 +2448,7 @@ document.addEventListener('change', (e) => {
     avatarPick: { avatar: v },
     overlayHeight: { overlayHeight: +v },
     overlayAnchor: { overlayAnchor: v },
+    characterWeather: { characterWeather: v === 'on' },
     outfit: { outfit: v },
     searchFallback: { searchFallback: v === 'on' },
     voicePick: { voice: v },
@@ -2911,6 +2943,10 @@ window.desk.on(async (e) => {
     }
     if (e.type === 'dance') {
       avatar()?.dance();
+      return;
+    }
+    if (e.type === 'previewWeather') {
+      avatar()?.previewWeather(e.code);
       return;
     }
     if (e.type === 'playMusic') {

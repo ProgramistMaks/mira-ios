@@ -63,6 +63,14 @@ export const NAYU_CHOREOGRAPHY = [
 ];
 export const NAYU_IDLE = states.idle.variants.map(variant=>({id:'nayu_'+variant.clip,weight:variant.weight}));
 
+export function musicMotion(bpm, seated) {
+  const tempo = bpm < 92 ? 'slow' : bpm < 148 ? 'mid' : 'fast';
+  const id = (seated ? 'sit_dance_' : 'dance_') + tempo;
+  const state = states[id];
+  const {clip,blend:{points,maxRate}} = state.variants[0];
+  return {id, clip:'nayu_'+clip, rate:Math.min(maxRate ?? Infinity,bpm/points[0].at)};
+}
+
 const frameStride = 16 + 20*index.bones.length;
 export class NayuMotion {
   constructor(buffer) {

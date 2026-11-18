@@ -259,7 +259,7 @@ async function weather(city) {
   u.search = new URLSearchParams({
     latitude: loc.latitude,
     longitude: loc.longitude,
-    current: 'temperature_2m,weather_code',
+    current: 'temperature_2m,weather_code,is_day',
     daily: 'temperature_2m_max',
     forecast_days: '3',
     timezone: 'auto',
@@ -269,6 +269,7 @@ async function weather(city) {
     city: loc.name,
     temp: d.current.temperature_2m,
     code: d.current.weather_code,
+    isDay: d.current.is_day !== 0,
     days: d.daily.temperature_2m_max,
   };
 }

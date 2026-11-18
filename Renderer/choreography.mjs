@@ -2,7 +2,7 @@ import {Quaternion, Vector3} from 'three';
 import pack from './motions/authored.json' with {type:'json'};
 import {SHOTS, at, sampleHand, danceHands, welcomeHands} from './staged-gestures.mjs';
 import {guideHands,referencePose} from './reference-poses.mjs';
-import {NAYU_CHOREOGRAPHY,NAYU_IDLE} from './nayu-motion.mjs';
+import {NAYU_CHOREOGRAPHY,NAYU_IDLE,musicMotion} from './nayu-motion.mjs';
 
 const titles = {
   idle:'Перенос веса', ...Object.fromEntries(Object.entries(SHOTS).map(([id,shot])=>[id,shot.title])),
@@ -71,6 +71,7 @@ export class ChoreographyRig {
     this.mode='auto'; this.clip='idle'; this.age=0; this.fade=1;
     this.history=[]; this.elapsed=0; this.silence=1;
     this.seated=false; this.track=null;
+    this.desktopAction=''; this.musicTime=0; this.musicRate=1;
     this.breathCycle=0; this.inhale=0;
     this.phase='idle'; this.enabled=false; this.holdUntil=3.6; this.direct=false;
   }
@@ -80,14 +81,14 @@ export class ChoreographyRig {
         !(this.nayu && Object.hasOwn(nayuTitles,id))) id='auto';
     if(id===this.mode) return;
     this.mode=id;
-    if (!this.seated && this.clip !== 'chairRise') this.begin(id==='auto'?'idle':id);
+    if (!this.desktopAction && !this.seated && this.clip !== 'chairRise') this.begin(id==='auto'?'idle':id);
   }
   setSeated(value) {
     if (this.seated === value) return;
     this.seated = value;
-    this.begin(value ? 'desktopChair' : 'chairRise', true);
+    if (!this.desktopAction) this.begin(value ? 'desktopChair' : 'chairRise', true);
   }
-  get desktopSeating() { return this.clip === 'desktopChair' || this.clip === 'chairRise'; }
+  get desktopSeating() { return this.clip === 'desktopChair' || this.clip === 'chairRise' || (this.seated && this.desktopAction === 'music'); }
   sequence(id) { return this.nayu?.sequences[id] ?? sourceSequences[id]; }
   segmentDuration(action) {
     return (action.cycles||1)*this.trackDuration(action.id)/(action.rate||1);
@@ -141,13 +142,36 @@ export class ChoreographyRig {
     this.holdUntil=id==='chairRise'?this.duration:id==='idle'?9+this.random()*8:Math.max(this.duration,3+this.random()*3);
     this.history=[...this.history.filter(old=>old!==id),id].slice(-4);
   }
-  replay() { if (!this.desktopSeating) this.begin(this.mode==='auto'?this.clip:this.mode,true); }
+  replay() { if (!this.desktopAction && !this.desktopSeating) this.begin(this.mode==='auto'?this.clip:this.mode,true); }
   react(kind) {
-    if(this.desktopSeating || (this.mode!=='auto' && kind!=='dance')) return;
+    if(this.desktopAction || this.desktopSeating || (this.mode!=='auto' && kind!=='dance')) return;
     if(kind==='dance'){this.begin(this.nayu?'nayu_dance':'dance',true);this.holdUntil=this.nayu?this.duration:12;}
     else if(kind==='greeting')this.begin(this.nayu?'nayu_greet':'welcome',true);
     else if(kind==='arrival')this.begin(this.nayu?'nayu_welcome':'arrival',true);
     else if(kind==='touch')this.begin(this.clip==='temples'?'heart':'temples',true);
+  }
+  updateDesktopAction(next, bpm, clipStep) {
+    if (!this.nayu) return;
+    const previous = this.desktopAction;
+    const music = next === 'music' ? musicMotion(bpm,this.seated) : null;
+    if (next !== previous || (music && this.clip !== music.clip)) {
+      this.desktopAction = next;
+      if (music) {
+        this.musicTime=0; this.musicRate=music.rate;
+        this.begin(music.clip,true);
+      } else if (next === 'drag') this.begin('nayu_drag',true);
+      else if (next === 'depart') this.begin('nayu_farewell',true);
+      else if(this.seated) this.begin('desktopChair',true);
+      else if(previous==='music' && this.mode==='auto') {
+        this.begin('nayu_dance_out',true);
+        this.holdUntil=this.duration;
+      } else this.begin(this.mode==='auto'?'idle':this.mode);
+    }
+    this.music = music;
+    if (music) {
+      this.musicRate += (music.rate-this.musicRate)*Math.min(1,clipStep*5);
+      this.musicTime += clipStep*this.musicRate;
+    }
   }
   choose(phase) {
     if(this.nayu && (phase==='idle'||phase==='listening')) {
@@ -164,11 +188,12 @@ export class ChoreographyRig {
     if(!candidates.length)return this.history.find(id=>pools[phase].includes(id));
     return candidates[Math.floor(this.random()*candidates.length)];
   }
-  update(dt,{phase='idle',audio=0,reduced=false,playbackDelta=NaN}={}) {
+  update(dt,{phase='idle',audio=0,reduced=false,playbackDelta=NaN,dragging=false,departing=false,bpm=0}={}) {
     if(!this.enabled)this.begin(this.seated?'desktopChair':this.mode==='auto'?'idle':this.mode);
     dt=Math.max(0, Math.min(.05,dt));
     const clipStep=Number.isFinite(playbackDelta)?Math.max(0,Math.min(1.5,playbackDelta)):dt;
     if(reduced){
+      this.desktopAction=''; this.music=null;
       if(this.clip!=='idle')this.begin('idle');
       this.breathCycle=0;this.inhale=0;
       this.age=0;this.fade+=dt;this.wasReduced=true;
@@ -179,7 +204,9 @@ export class ChoreographyRig {
     const state=phase==='speaking'&&this.silence>.8?'listening':phase;
     const changed=state!==this.phase;
     this.phase=state;
-    if (!this.seated) {
+    this.updateDesktopAction(departing ? 'depart' : dragging ? 'drag' :
+      bpm && (phase==='idle'||phase==='listening') ? 'music' : '',bpm,clipStep);
+    if (!this.desktopAction && !this.seated) {
       if (this.clip==='chairRise' && this.age>=this.holdUntil)
         this.begin(this.mode==='auto'?'idle':this.mode);
       else if(this.mode!=='auto' && this.direct && this.clip!==this.mode && this.age>=this.holdUntil)
@@ -196,7 +223,8 @@ export class ChoreographyRig {
   }
   renderPose(dt) {
     const sequence = this.sequence(this.clip);
-    const segment = sequence ? this.segmentAt(sequence, this.age) : null;
+    const segment = this.music ? {id:this.music.clip,time:this.musicTime,loop:true} :
+      sequence ? this.segmentAt(sequence, this.age) : null;
     if (segment && this.track && this.track !== segment.id) this.prepareTransition(this.previousDt);
     this.track = segment?.id;
     this.previousDt=dt;

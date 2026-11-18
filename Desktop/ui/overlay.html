@@ -38,8 +38,7 @@
       nav:focus-within {
         opacity: 1;
       }
-      button,
-      b {
+      button {
         background: #fff8eaeb;
         border: 1px solid #d8caba;
         color: #523e49;
@@ -49,18 +48,21 @@
       button {
         cursor: pointer;
       }
-      b {
-        -webkit-app-region: drag;
-        cursor: move;
+      #dragHandle {
+        cursor: grab;
+        touch-action: none;
       }
+      #dragHandle:active { cursor: grabbing; }
+      body[data-departing] nav { visibility: hidden; }
     </style>
     <link rel="stylesheet" href="motion.css" />
   </head>
   <body>
     <iframe id="avatar" src="/renderer/index.html" title="Персонаж"></iframe>
     <nav class="overlayActions">
-      <b title="Перетащи, чтобы переместить">⠿</b><button id="open">Мира</button
+      <button id="dragHandle" title="Перетащи, чтобы переместить" aria-label="Переместить персонажа">⠿</button><button id="open">Мира</button
       ><button id="more" title="Настройки персонажа">•••</button>
+      <button id="hide" title="Скрыть персонажа" aria-label="Скрыть персонажа">×</button>
     </nav>
     <script type="module" src="overlay.js"></script>
   </body>

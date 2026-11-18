@@ -919,7 +919,14 @@ export function model(s, c) {
   let content;
   switch (tab) {
     case 'animations':
-      content = box(
+      content = box('Погода вокруг персонажа','cloud-sun',
+        select('Погода в отдельном окне','characterWeather',
+          [['on','По выбранному городу'],['off','Выключена']],a.characterWeather ? 'on' : 'off') +
+        '<div class="row">' +
+        select('Эффект для просмотра','worldWeather',[[0,'Солнце'],[3,'Облака'],[63,'Дождь'],
+          [95,'Гроза'],[73,'Снег'],[45,'Туман']],c.worldWeather ?? 0) +
+        btn('Показать эффект','previewWorldWeather','play') + '</div>',
+      ) + box(
         'Что она умеет играть',
         'orbit',
         select(

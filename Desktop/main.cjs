@@ -115,6 +115,9 @@ let activityVersion = 0;
 let aiKeyRevision = 0;
 let updating = false;
 let avatarPhase = 'idle';
+let avatarTempo = 0;
+let worldWeather = null;
+const visibleWeatherCode = weather => weather.isDay === false && weather.code < 2 ? null : weather.code;
 let lastModelCheck;
 function modelConfig() {
   const s = store.data.settings;
@@ -404,12 +407,67 @@ function overlayBounds(display, settings) {
   const y = settings.overlayAnchor.startsWith('top') ? area.y + 15 : area.y + area.height - height - 15;
   return { width, height, x, y };
 }
+let departureTimer;
+let departureId = 0;
+let dragOrigin;
+function finishDeparture({id}) {
+  if (!departureTimer || id !== departureId) return;
+  clearTimeout(departureTimer);
+  departureTimer = undefined;
+  overlay?.close();
+}
+function dragOverlay({type, x, y}) {
+  if (!overlay || departureTimer) return;
+  if (type === 'start') {
+    if (seated) endSeat(false);
+    dragOrigin = overlay.getBounds();
+  } else if (type === 'end') {
+    dragOrigin = undefined;
+  } else if (type === 'move' && dragOrigin && Number.isFinite(x) && Number.isFinite(y)) {
+    const left = dragOrigin.x + Math.round(x), top = dragOrigin.y + Math.round(y);
+    const {width, height} = dragOrigin;
+    const area = screen.getDisplayNearestPoint({x:left+Math.round(width/2), y:top+Math.round(height/2)}).workArea;
+    overlay.setPosition(
+      Math.max(area.x-width+64, Math.min(left,area.x+area.width-64)),
+      Math.max(area.y, Math.min(top,area.y+area.height-64)),
+    );
+  }
+}
+function refreshWorldWeather() {
+  if (!overlay || store.data.settings.reduced || !store.data.settings.characterWeather) return;
+  const city = store.data.settings.city;
+  if (worldWeather?.city === city && worldWeather.expires > Date.now()) return;
+  const entry = {city, code: worldWeather?.city === city ? worldWeather.code : null, expires:Date.now()+60_000};
+  worldWeather = entry;
+  overlay.webContents.send('update', {type:'worldWeather',code:entry.code});
+  network.weather(city).then(weather => {
+    if (worldWeather !== entry) return;
+    entry.code = visibleWeatherCode(weather);
+    entry.expires = Date.now()+600_000;
+    if (overlay && !overlay.isDestroyed() && store.data.settings.characterWeather && store.data.settings.city === city)
+      overlay.webContents.send('update', {type:'worldWeather',code:entry.code});
+  }).catch(() => {});
+}
 function overlayState(open) {
   if (!open) {
-    overlay?.close();
+    if (!overlay || departureTimer) return;
+    if (closing || store.data.settings.reduced || !overlay.isVisible() || overlay.webContents.isLoading()) {
+      overlay.close();
+      return;
+    }
+    if (seated) endSeat(false);
+    dragOrigin = undefined;
+    const id = ++departureId;
+    departureTimer = setTimeout(()=>finishDeparture({id}),3200);
+    overlay.webContents.send('update', {type:'departure',value:id});
     return;
   }
   if (overlay) {
+    if (departureTimer) {
+      clearTimeout(departureTimer);
+      departureTimer = undefined;
+      overlay.webContents.send('update', {type:'departure',value:0});
+    }
     overlay.show();
     return;
   }
@@ -429,12 +487,15 @@ function overlayState(open) {
   overlay.setAlwaysOnTop(true, 'floating');
   overlay.setIgnoreMouseEvents(overlayLock, { forward: true });
   overlay.on('closed', () => {
+    clearTimeout(departureTimer);
+    departureTimer = dragOrigin = undefined;
     overlay = null;
     endSeat(false);
     push({ type: 'refresh' });
     trayMenu();
   });
   overlay.loadURL('mira://desk/overlay.html');
+  refreshWorldWeather();
   trayMenu();
   push({ type: 'refresh' });
 }
@@ -569,6 +630,7 @@ function emitTrigger(event) {
 }
 function tick() {
   mail?.tick();
+  refreshWorldWeather();
   const d = store.data,
     now = Date.now();
   let dirty = false;
@@ -1220,6 +1282,7 @@ async function answer(text, chat, signal, remote = false, spokenReply = false, o
   if (/погод[ауые]/iu.test(text) && text.length < 100) {
     const loc = text.match(/\sв\s+(.+?)[?!.,]*$/iu)?.[1] || s.city;
     const w = await network.weather(loc);
+    if (!remote) push({type:'previewWeather',code:visibleWeatherCode(w)});
     return {
       text:
         w.city +
@@ -1886,6 +1949,9 @@ const actions = {
     })),
     overlay: !!overlay,
     avatarPhase,
+    avatarTempo,
+    avatarDeparting: departureTimer ? departureId : 0,
+    avatarWeather: store.data.settings.characterWeather && worldWeather?.city === store.data.settings.city ? worldWeather.code : null,
     seated,
     seatOnTaskbar,
     version: app.getVersion(),
@@ -1955,6 +2021,7 @@ const actions = {
       }
     }
     if ('searchFallback' in input) s.searchFallback = input.searchFallback === true;
+    if ('characterWeather' in input) s.characterWeather = input.characterWeather === true;
     if ('voice' in input) s.fishPending = false;
     if ('fishPending' in input) s.fishPending = input.fishPending === true;
     for (const [k, [lo, hi]] of Object.entries({
@@ -2052,6 +2119,7 @@ const actions = {
       changed();
     }
     if ('language' in input) trayMenu();
+    if ('characterWeather' in input || 'city' in input || 'reduced' in input) refreshWorldWeather();
     if ('language' in input)
       for (const w of [island?.win, overlay, ...(screenWidgets?.windows.values() || [])])
         if (w && !w.isDestroyed()) w.reload();
@@ -2261,7 +2329,11 @@ const actions = {
     return findFiles(query, ext);
   },
   url: ({ url }) => shell.openExternal(webURL(url)),
-  weather: () => network.weather(store.data.settings.city),
+  weather: async () => {
+    const weather = await network.weather(store.data.settings.city);
+    push({type:'previewWeather',code:visibleWeatherCode(weather)});
+    return weather;
+  },
   rates: network.rates,
   boardTile: ({ id, size, hide }) => {
     const row = store.data.settings.widgets.find((w) => w.id === id);
@@ -2526,6 +2598,16 @@ const actions = {
   },
   seat: ({ taskbar } = {}) => toggleSeat(taskbar === true),
   overlay: ({ open }) => overlayState(!!open),
+  overlayDrag: dragOverlay,
+  overlayDeparted: finishDeparture,
+  avatarMusic: ({ bpm, playing }) => {
+    if (typeof playing === 'boolean') {
+      main.webContents.setBackgroundThrottling(!playing);
+      if (playing) return;
+    }
+    avatarTempo = Number.isFinite(bpm) && bpm >= 55 && bpm <= 195 ? bpm : 0;
+    overlay?.webContents.send('update', {type:'avatarMusic',bpm:avatarTempo});
+  },
   show,
   overlayMenu: () => tray?.popUpContextMenu(),
   window: ({ action }) => {
@@ -2738,7 +2820,7 @@ ipcMain.handle('desk', async (e, name, data = {}) => {
     !Object.hasOwn(actions, name) ||
     (e.sender !== main?.webContents &&
       !(e.sender === island?.win?.webContents && name === 'islandAction') &&
-      !(e.sender === overlay?.webContents && ['state', 'show', 'overlayMenu', 'overlay'].includes(name)))
+      !(e.sender === overlay?.webContents && ['state', 'show', 'overlayMenu', 'overlay', 'overlayDrag', 'overlayDeparted'].includes(name)))
   )
     throw Error('Недоступно');
   try {
@@ -2769,6 +2851,7 @@ app.on('before-quit', () => {
   models?.stop();
   clearInterval(timer);
   clearInterval(cursorTimer);
+  clearTimeout(departureTimer);
   globalShortcut.unregisterAll();
 });
 app.on('window-all-closed', () => app.quit());

@@ -16,6 +16,9 @@ import { HairDetail } from './hair-detail.mjs';
 import { RenderCadence } from './frame-pacer.mjs';
 import { AnimationTimeline } from './animation-timeline.mjs';
 import { InteractiveReactions } from './interactive-reactions.mjs';
+import { DesktopPortal, DesktopWeather } from './desktop-scene-effects.mjs';
+
+type DragEvent = {type: 'start' | 'move' | 'end'; x?: number; y?: number};
 
 declare global {
   interface Window {
@@ -29,6 +32,9 @@ declare global {
       frameStats?: {fps: number; p95ms: number};
       configureChoreography(id: string): void; dance(): void; choreographyCatalog: typeof CHOREOGRAPHY;
       replayGesture(): void; playReaction(kind: string): void; configureBody(settings: Record<string, unknown>): void; bodyCatalog: typeof BODY_CATALOG; bodyStatus: Record<string, unknown>;
+      onWindowDrag?: (event: DragEvent) => void; setDragging(value: boolean): void;
+      onDepartureComplete?: () => void; setDeparting(value: boolean): void;
+      setMusicTempo(value: number): void; setWeather(code: number | null): void; previewWeather(code: number | null): void;
       configurePerformance(settings: { emotion?: string; intensity?: number; variant?: number; enabled?: boolean }): void; variantCount: number };
   }
 }
@@ -56,6 +62,9 @@ let reduced = false;
 let seated = false, seatWeight = 0;
 let pointerGaze: { x: number; y: number; until: number } | undefined;
 let requestedReaction: string | undefined;
+let dragging = false, departing = false, departureSent = false, musicTempo = 0;
+let localWeather: number | null = null;
+let weatherPreview: {code: number | null; remaining: number} | undefined;
 const speechSamples = new SpeechSamples();
 const timeline = new AnimationTimeline();
 const syncVisibility = () => {
@@ -80,6 +89,14 @@ window.companion = {
   releaseDisplayClock() { releaseNativeClock?.(); },
   configureChoreography(id) { choreographyMode = id; choreography?.configure(id); },
   dance() { choreography?.react('dance'); },
+  setDragging(value) { dragging = value === true; },
+  setDeparting(value) {
+    if (departing !== value) departureSent = false;
+    departing = value === true;
+  },
+  setMusicTempo(value) { musicTempo = Number.isFinite(value) && value >= 55 && value <= 195 ? value : 0; },
+  setWeather(code) { localWeather = code; },
+  previewWeather(code) { weatherPreview = {code,remaining:8}; },
   variantCount: VARIANT_COUNT,
   bodyCatalog: BODY_CATALOG, bodyStatus: {},
   configureBody(settings) { body.configure(settings); },
@@ -188,6 +205,8 @@ async function main() {
   const bone = (name: Parameters<typeof avatar.humanoid.getNormalizedBoneNode>[0]) => avatar.humanoid.getNormalizedBoneNode(name);
   const head = bone('head'), neck = bone('neck'), spine = bone('spine'), chest = bone('chest');
   const reactions = desktopStage ? new InteractiveReactions(scene, head, chest, height, armSign) : undefined;
+  const weather = desktopStage ? new DesktopWeather(scene,head,bone('hips'),height) : undefined;
+  const portal = desktopStage ? new DesktopPortal(scene,height,new THREE.Vector3(center.x,bounds.min.y+height*.038,center.z)) : undefined;
   const headCenter = new THREE.Vector3(), headEdge = new THREE.Vector3();
   let headZone: { x: number; y: number; rx: number; ry: number } | null = null;
   let strokePoint: {x: number; y: number} | undefined;
@@ -202,7 +221,8 @@ async function main() {
     strokePoint = undefined;
   };
   let rotation = 0;
-  let pointer: { id: number; x: number; startX: number; startY: number; moved: boolean; head: boolean } | undefined;
+  let pointer: { id: number; x: number; startX: number; startY: number; moved: boolean; head: boolean;
+    windowStart?: {x: number; y: number}; windowDragging?: boolean } | undefined;
   const ray = new THREE.Raycaster();
   const hitCharacter = (event: PointerEvent) => {
     const box = renderer.domElement.getBoundingClientRect();
@@ -212,12 +232,20 @@ async function main() {
     avatar.scene.traverse(object => {
       if (object instanceof THREE.SkinnedMesh) object.computeBoundingSphere();
     });
-    return ray.intersectObject(avatar.scene, true).some(hit => hit.object.visible);
+    return ray.intersectObject(avatar.scene, true).some(hit => {
+      for (let object: THREE.Object3D | null = hit.object; object; object = object.parent) {
+        if (!object.visible) return false;
+        if (object === avatar.scene) return true;
+      }
+      return false;
+    });
   };
   renderer.domElement.addEventListener('pointerdown', event => {
     if (pointer || !event.isPrimary || event.button !== 0) return;
     const overHead = hitHead(event);
     pointer = { id: event.pointerId, x: event.clientX, startX: event.clientX, startY: event.clientY, moved: false, head: overHead };
+    if (!departing && window.companion.onWindowDrag && !overHead && hitCharacter(event))
+      pointer.windowStart = {x: event.screenX,y: event.screenY};
     if (overHead) strokePoint = {x: event.clientX, y: event.clientY};
     renderer.domElement.setPointerCapture(event.pointerId);
   });
@@ -227,15 +255,28 @@ async function main() {
       strokePoint = {x: event.clientX, y: event.clientY};
     } else endStroke();
     if (!pointer || pointer.id !== event.pointerId) return;
+    if (pointer.windowStart) {
+      const x = event.screenX - pointer.windowStart.x, y = event.screenY - pointer.windowStart.y;
+      if (!pointer.windowDragging && Math.hypot(x,y) > 7) {
+        pointer.moved = pointer.windowDragging = true;
+        window.companion.onWindowDrag?.({type:'start'});
+      }
+      if (pointer.windowDragging) window.companion.onWindowDrag?.({type:'move',x,y});
+      return;
+    }
     if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > 8) pointer.moved = true;
     if (!reduced && !pointer.head) rotation = THREE.MathUtils.clamp(rotation + (event.clientX - pointer.x) * 0.006, -0.65, 0.65);
     pointer.x = event.clientX;
   });
+  const releasePointer = () => {
+    if (pointer?.windowDragging) window.companion.onWindowDrag?.({type:'end'});
+    pointer = undefined;
+    endStroke();
+  };
   renderer.domElement.addEventListener('pointerup', event => {
     if (!pointer || pointer.id !== event.pointerId) return;
     const tap = !pointer.moved, headTap = pointer.head && hitHead(event);
-    pointer = undefined;
-    endStroke();
+    releasePointer();
     if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     if (tap && headTap) reactions?.preview('pet');
     else if (tap && active && !reduced && hitCharacter(event)) {
@@ -243,8 +284,9 @@ async function main() {
     }
   });
   renderer.domElement.addEventListener('pointerleave', endStroke);
-  renderer.domElement.addEventListener('pointercancel', () => { pointer = undefined; endStroke(); });
-  renderer.domElement.addEventListener('lostpointercapture', () => { pointer = undefined; endStroke(); });
+  renderer.domElement.addEventListener('pointercancel', releasePointer);
+  renderer.domElement.addEventListener('lostpointercapture', releasePointer);
+  addEventListener('blur', releasePointer);
   const stance = new PlantedStance(avatar.scene, bone, height, avatar.meta.metaVersion === '0' ? -1 : 1);
   const arms = new ArmRig(bone, armSign);
   const armTargets = new ArmTargets(avatar.scene, bone, height, armSign);
@@ -310,7 +352,17 @@ async function main() {
       armTargets.apply(pose);
     } else {
       authored.setSeated(seated);
-      authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled});
+      authored.update(delta, {phase, playbackDelta:timeline.playbackDelta, audio: audioLevel, reduced: reduced || !acting.settings.enabled,
+        dragging, departing, bpm:musicTempo});
+    }
+    const portalActive = !reduced && useAuthored && (authored.clip === 'nayu_farewell' || authored.clip === 'nayu_welcome');
+    const portalLeaving = portalActive && authored.clip === 'nayu_farewell';
+    const vanish = departing && portalLeaving ? THREE.MathUtils.smoothstep(authored.age/authored.duration,.64,.98) : 0;
+    turntable.scale.setScalar(1-vanish*.96);
+    portal?.update(portalActive ? authored.age : -1,portalLeaving ? authored.duration : 2.23);
+    if (departing && !departureSent && (!portalLeaving || authored.age >= authored.duration)) {
+      departureSent = true;
+      window.companion.onDepartureComplete?.();
     }
     framingOffset = useAuthored && !reduced ? authored.viewOffset : 0;
     camera.position.y = center.y + height * (.03 + restingFrame + framingOffset);
@@ -327,10 +379,11 @@ async function main() {
     window.companion.bodyStatus.behavior = useAuthored ? authored.title : body.behaviorLabel;
     window.companion.bodyStatus.choreography = {
       clip: authored.clip, track: authored.track, mode: authored.mode, enabled: authored.enabled, time: authored.age,
+      desktopAction: authored.desktopAction, music: authored.music?.id, bpm: musicTempo, rate: authored.music?.rate,
     };
     if (requestedReaction) { reactions?.preview(requestedReaction); requestedReaction = undefined; }
     const reactionDelta = Math.min(.15, timeline.playbackDelta);
-    reactions?.update(reactionDelta, phase === 'thinking', reduced || !acting.settings.enabled, armTargets, articulation);
+    reactions?.update(reactionDelta, phase === 'thinking', reduced || !acting.settings.enabled || dragging || departing, armTargets, articulation);
     window.companion.bodyStatus.reactions = reactions?.status;
     target.position.set(pose.gazeX * height, center.y + height * (0.24 + pose.gazeY), 3);
     const faceTest = !reduced && ['face', 'manual'].includes(body.mode);
@@ -371,6 +424,15 @@ async function main() {
       }
       camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
       camera.updateMatrixWorld();
+      if (weather) {
+        if (weatherPreview) {
+          weatherPreview.remaining -= reactionDelta;
+          if (weatherPreview.remaining <= 0) weatherPreview = undefined;
+        }
+        weather.set(weatherPreview ? weatherPreview.code : localWeather);
+        weather.update(reactionDelta,camera,reduced || departing || dragging);
+        window.companion.bodyStatus.worldEffects = {weather:weather.kind,visible:!!weather.group?.visible,portal:!!portal?.group.visible};
+      }
       if (reactions && head) {
         head.getWorldPosition(headCenter);
         headCenter.y += .059 * height;

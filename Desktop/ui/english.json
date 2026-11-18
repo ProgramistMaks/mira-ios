@@ -1361,5 +1361,18 @@
   "Исходные анимации Astra": "Original Astra animations",
   "Проиграть клип": "Play clip",
   "Полные последовательности": "Full sequences",
-  "Отдельные клипы": "Individual clips"
+  "Отдельные клипы": "Individual clips",
+  "Погода вокруг персонажа": "Weather around the character",
+  "Погода в отдельном окне": "Weather in the desktop companion",
+  "По выбранному городу": "Use the selected city",
+  "Выключена": "Off",
+  "Эффект для просмотра": "Effect to preview",
+  "Показать эффект": "Preview effect",
+  "Солнце": "Sun",
+  "Облака": "Clouds",
+  "Дождь": "Rain",
+  "Гроза": "Thunderstorm",
+  "Снег": "Snow",
+  "Туман": "Fog",
+  "Переместить персонажа": "Move the character"
 }

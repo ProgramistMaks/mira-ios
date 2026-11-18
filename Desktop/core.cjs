@@ -119,6 +119,7 @@ const defaults = () => ({
     language: 'ru',
     introDone: false,
     city: 'Москва',
+    characterWeather: true,
     reduced: false,
     hotkey: 'CommandOrControl+Alt+M',
   },
