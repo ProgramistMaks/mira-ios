@@ -511,7 +511,7 @@ function renderChat() {
           '">' +
           (liveReply
             ? esc(liveReply)
-            : '<span class="waitWave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>Мира думает…') +
+            : '<span class="waitWave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>Мира думает…') +
           '</div>'
         : '');
     if (renderedChat === current || (sending && !priorIds.size)) {
