@@ -445,6 +445,24 @@ export function model(s, c) {
         btn('Настроить частоту', 'settings', 'sliders-horizontal'),
       ),
     ) +
+    box(
+      'Игры и VMC',
+      'monitor',
+      '<p class="muted">Передача движений и мимики на этом ПК. В Minecraft Java выбери VRM в моде ArmorStand и включи приём VMC на том же порту.</p>' +
+        field('Порт получателя', 'motionPort', String(s.motionPort || 39539), 'number') +
+        acts(
+          btn(s.motionPort ? 'Остановить передачу' : 'Передавать движения', 'motionOutput', 'cable'),
+          btn('Сохранить VRM', 'exportAvatar', 'download'),
+          btn(
+            'Страница мода',
+            'source',
+            'external-link',
+            '',
+            'https://github.com/TouchController/ArmorStand',
+          ),
+        ) +
+        '<p class="muted" id="frameMeter" aria-live="off"></p>',
+    ) +
     '</div>'
   );
 }

@@ -20,6 +20,8 @@ declare global {
     webkit?: { messageHandlers: { avatar: { postMessage(value: unknown): void } } };
     companion: { setState(phase: string, reduceMotion: boolean): void;
       setViewport(width: number, height: number): void; setSpeech(level: number, capturedAt: number, sequence: number): void; setFrameRate(fps: number): void; setActive(active: boolean): void; ready: boolean; phase: string;
+      setMotionOutput(enabled: boolean): void;
+      readMotionFrame?(): {bones: (string|number)[][]; face: Record<string,number>};
       setDesktopPose(seated: boolean): void; lookAtPointer(x: number, y: number): void;
       renderDisplayFrame(timestamp: number): void; releaseDisplayClock(): void;
       frameStats?: {fps: number; p95ms: number};
@@ -46,7 +48,7 @@ function resetCadence() {
   cadence.reset();
   if (window.companion) window.companion.frameStats = undefined;
 }
-let active = true;
+let active = true, motionOutput = false;
 let phase = 'idle';
 let reduced = false;
 let seated = false, seatWeight = 0;
@@ -54,7 +56,7 @@ let pointerGaze: { x: number; y: number; until: number } | undefined;
 const speechSamples = new SpeechSamples();
 const timeline = new AnimationTimeline();
 const syncVisibility = () => {
-  const visible = active && !document.hidden;
+  const visible = (active && !document.hidden) || motionOutput;
   if (visible !== timeline.active) resetCadence();
   timeline.setActive(visible);
   speechSamples.setActive(visible);
@@ -66,6 +68,7 @@ let applyResize: (() => void) | undefined;
 window.companion = {
   ready: false,
   choreographyCatalog: CHOREOGRAPHY,
+  setMotionOutput(enabled) { motionOutput = enabled; syncVisibility(); },
   setDesktopPose(value) { seated = value; },
   lookAtPointer(x, y) {
     if (Number.isFinite(x) && Number.isFinite(y)) pointerGaze = {x: THREE.MathUtils.clamp(x,-1,1), y: THREE.MathUtils.clamp(y,-1,1), until:performance.now()+950};
@@ -233,12 +236,14 @@ async function main() {
   let mouth = 0, elapsed = 0;
   let previousPhase = phase;
   acting.update(0, reduced); acting.trigger('greeting'); authored.react('greeting'); details.listenCue();
+  let lastPoseTime = 0;
   const renderFrame = (timestamp: number) => {
     // A cap is a target, not a claim about measured device performance.
     const cap = reduced ? Math.min(frameRate, 30) : frameRate;
     if (contextLost || renderer.getContext().isContextLost()) return;
     const delta = timeline.advance(timestamp, cap);
     if (delta === null) return;
+    lastPoseTime = timestamp;
     elapsed += delta;
     const audioLevel = speechSamples.level();
     const useAuthored = body.mode === 'natural' && acting.settings.variant < 0;
@@ -299,13 +304,29 @@ async function main() {
     previousPhase = phase;
     details.update(delta, phase, natural ? authored.inhale : 0, natural && body.physics);
     avatar.update(delta);
-    renderer.render(scene, camera);
+    if (active && !document.hidden) renderer.render(scene, camera);
     const sample = cadence.sample(performance.now());
     if (sample) {
       window.companion.frameStats = sample;
       window.webkit?.messageHandlers.avatar.postMessage({type:'cadence', fps:String(sample.fps), p95:String(sample.p95ms)});
     }
     if (!window.companion.ready) { window.companion.ready = true; report('ready'); }
+  };
+  const bones = Object.entries(avatar.humanoid.humanBones).map(([key,bone]) => {
+    const name = key.replace('ThumbProximal','ThumbIntermediate').replace('ThumbMetacarpal','ThumbProximal');
+    return {name: name[0].toUpperCase()+name.slice(1), node: bone.node};
+  });
+  const blendNames: Record<string,string> = {aa:'A',ih:'I',ou:'U',ee:'E',oh:'O',blink:'Blink',blinkLeft:'Blink_L',blinkRight:'Blink_R',happy:'Joy',angry:'Angry',sad:'Sorrow',relaxed:'Fun',surprised:'Surprised'};
+  window.companion.readMotionFrame = () => {
+    const now = performance.now();
+    if (motionOutput && now-lastPoseTime > 30) renderFrame(now);
+    const face: Record<string,number> = {};
+    for (const [name,wire] of Object.entries(blendNames)) face[wire] = avatar.expressionManager?.getValue(name) ?? 0;
+    return {bones: bones.map(({name,node}) => {
+      const p=node.position, q=node.quaternion;
+      // glTF right-handed coordinates to the VMC/Unity left-handed basis.
+      return [name,p.x,p.y,-p.z,-q.x,-q.y,q.z,q.w];
+    }), face};
   };
   let nativeClock = false;
   nativeTick = timestamp => {

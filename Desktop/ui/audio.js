@@ -120,7 +120,16 @@ export class Voice {
       const text = await call('transcribe', { bytes });
       if (e !== this.epoch || !text.trim()) return;
       this.onStatus('Думаю…', 'thinking');
-      const result = await this.onTurn(text);
+      let result;
+      try {
+        result = await this.onTurn(text);
+      } catch (err) {
+        if (e !== this.epoch) return;
+        this.onError(err);
+        result = /скачайте модель/iu.test(err.message)
+          ? 'Для свободного разговора выбери модель во вкладке ИИ. Я уже могу записывать заметки, ставить таймер и искать в интернете.'
+          : 'Сейчас не удалось получить ответ. Я снова слушаю.';
+      }
       if (e === this.epoch && result) await this.speak(result);
     } catch (err) {
       if (e === this.epoch) this.onError(err);
@@ -139,7 +148,7 @@ export class Voice {
     this.onStatus('Отвечаю…', 'speaking');
     try {
       const ctx = await this.context();
-      const data = await call('speech', { text });
+      const data = await call('speech', { text, continuous: this.enabled });
       if (id !== this.audioEpoch) return;
       const b = await ctx.decodeAudioData(new Uint8Array(data).buffer);
       if (id !== this.audioEpoch) return;

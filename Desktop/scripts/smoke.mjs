@@ -1,11 +1,13 @@
 // Exercise the same window and IPC routes that a person uses, including one
 // complete turn from a microphone fixture through speech playback to listening.
 import { _electron } from 'playwright';
+import { expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
+import dgram from 'node:dgram';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -74,7 +76,12 @@ try {
     '--use-fake-device-for-media-stream',
     '--use-file-for-fake-audio-capture=' + mic + '%noloop',
   ];
-  if (!windows) args.push('--no-sandbox', '--disable-dev-shm-usage', path.join(root, 'Desktop'));
+  if (!windows)
+    args.push(
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+      process.env.MIRA_APP_DIR || path.join(root, 'Desktop'),
+    );
   app = await _electron.launch({
     executablePath: executable,
     args,
@@ -107,11 +114,15 @@ try {
   await p.locator('[data-act=addBlock]').click();
   await p.locator('#nodeValue').fill('Сценарий сработал');
   await p.locator('[data-act=runRoutine]').click();
-  await p.waitForFunction(
-    async () => (await window.desk.call('state')).notes.some((x) => x.text === 'Сценарий сработал'),
-    null,
-    { timeout: 50000 },
-  );
+  await expect
+    .poll(
+      () =>
+        p.evaluate(async () =>
+          (await window.desk.call('state')).notes.some((x) => x.text === 'Сценарий сработал'),
+        ),
+      { timeout: 50000 },
+    )
+    .toBe(true);
   await p.locator('[data-go=home]').first().click();
   await p.evaluate(() => {
     window.voicePhases = [];
@@ -132,6 +143,59 @@ try {
   assert.ok(state.notes.some((x) => /купить молоко/i.test(x.text)));
   assert.ok(state.chats.some((c) => c.messages.some((m) => m.text === 'Записала в заметки.')));
   await p.locator('#voiceEnd').click();
+  // Receive a real VMC stream on loopback, including when the model page is hidden.
+  const listener = dgram.createSocket('udp4');
+  await new Promise((resolve) => listener.bind(0, '127.0.0.1', resolve));
+  try {
+    const bones = new Set(),
+      headPoses = new Set(),
+      blend = new Set();
+    listener.on('message', (data) => {
+      assert.equal(data.subarray(0, 8).toString(), '#bundle\0');
+      for (let offset = 16; offset + 4 < data.length; ) {
+        const size = data.readUInt32BE(offset),
+          m = data.subarray(offset + 4, offset + 4 + size);
+        let i = 0;
+        const readString = () => {
+          const e = m.indexOf(0, i),
+            s = m.toString('utf8', i, e);
+          i = (e + 4) & ~3;
+          return s;
+        };
+        const address = readString();
+        readString();
+        if (address === '/VMC/Ext/Bone/Pos') {
+          const name = readString();
+          bones.add(name);
+          if (name === 'Head') headPoses.add(m.subarray(i).toString('hex'));
+        }
+        if (address === '/VMC/Ext/Blend/Val') blend.add(readString());
+        offset += 4 + size;
+      }
+    });
+    await p.locator('[data-go=model]').first().click();
+    await p.locator('#motionPort').fill(String(listener.address().port));
+    await p.locator('[data-act=motionOutput]').click();
+    await expect
+      .poll(() => p.evaluate(async () => (await window.desk.call('state')).motionPort))
+      .toBe(listener.address().port);
+    await p.locator('[data-go=plugins]').first().click();
+    for (let i = 0; i < 100 && !(bones.size >= 48 && headPoses.size >= 3 && blend.has('A')); i++)
+      await new Promise((r) => setTimeout(r, 100));
+    assert.ok(
+      bones.has('LeftHand') &&
+        bones.has('LeftIndexDistal') &&
+        bones.has('RightFoot') &&
+        headPoses.size >= 3 &&
+        blend.has('Blink') &&
+        blend.has('A'),
+      'Stream must contain moving bones, fingers, feet, eyes and mouth',
+    );
+    console.log('VMC received', bones.size, 'animated bones and', blend.size, 'face channels');
+    await p.evaluate(() => window.desk.call('motionOutput', { port: 0 }));
+  } finally {
+    listener.close();
+  }
   const next = app.waitForEvent('window');
   await p.locator('#topOverlay').click();
   const overlay = await next;

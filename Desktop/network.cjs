@@ -12,7 +12,7 @@ const post = (body, key) => ({
   headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: 'Bearer ' + key } : {}) },
   body: JSON.stringify(body),
 });
-async function ai(base, key, model, messages, signal) {
+async function ai(base, key, model, messages, signal, localOptions = {}) {
   if (new URL(endpoint(base)).hostname === 'api.anthropic.com') {
     const r = await response(
       'https://api.anthropic.com/v1/messages',
@@ -45,7 +45,7 @@ async function ai(base, key, model, messages, signal) {
   }
   const r = await response(
     endpoint(base) + '/chat/completions',
-    { ...post({ model, messages, stream: false }, key), signal },
+    { ...post({ model, messages, stream: false, ...localOptions }, key), signal },
     180000,
   );
   const data = await r.json(),

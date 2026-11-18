@@ -112,32 +112,68 @@ function show() {
   main.show();
   main.focus();
 }
-function globalKeys() {
-  globalShortcut.unregisterAll();
-  const used = new Set();
-  const add = (key, fn) => {
+const registeredKeys = new Map();
+function shortcutBindings(data) {
+  const bindings = new Map();
+  const add = (key, id) => {
     if (!key) return;
-    if (used.has(key.toLowerCase()) || !globalShortcut.register(key, fn))
-      throw Error('Сочетание занято или недоступно: ' + key);
-    used.add(key.toLowerCase());
+    const normalized = key.toLowerCase();
+    if (bindings.has(normalized)) throw Error('Сочетание назначено дважды: ' + key);
+    bindings.set(normalized, { key, id });
   };
-  add(store.data.settings.hotkey, () => {
-    show();
-    push({ type: 'toggleVoice' });
-  });
-  for (const r of store.data.routines)
-    add(r.hotkey, () => execute(r).catch((e) => alert('Мира', errorText(e))));
+  add(data.settings.hotkey, 'voice');
+  for (const r of data.routines) add(r.hotkey, r.id);
+  return bindings;
+}
+function globalKeys(previous) {
+  const wanted = shortcutBindings(store.data),
+    added = [],
+    unavailable = [];
+  try {
+    for (const [normalized, { key, id }] of wanted) {
+      if (registeredKeys.has(normalized) || previous?.get(normalized)?.id === id) continue;
+      const run = () => {
+        const target = shortcutBindings(store.data).get(normalized)?.id;
+        if (target === 'voice') {
+          show();
+          push({ type: 'toggleVoice' });
+          return;
+        }
+        const r = store.data.routines.find((spec) => spec.id === target);
+        if (r) execute(r).catch((e) => alert('Мира', errorText(e)));
+      };
+      if (!globalShortcut.register(key, run)) {
+        if (!previous) {
+          unavailable.push(key);
+          continue;
+        }
+        throw Error('Сочетание занято или недоступно: ' + key);
+      }
+      registeredKeys.set(normalized, key);
+      added.push(normalized);
+    }
+  } catch (e) {
+    for (const n of added) {
+      globalShortcut.unregister(registeredKeys.get(n));
+      registeredKeys.delete(n);
+    }
+    throw e;
+  }
+  for (const [n, key] of registeredKeys)
+    if (!wanted.has(n)) {
+      globalShortcut.unregister(key);
+      registeredKeys.delete(n);
+    }
+  if (unavailable.length) throw Error('Сочетание занято или недоступно: ' + unavailable.join(', '));
 }
 function updateKeys(fn) {
   const old = structuredClone({ settings: store.data.settings, routines: store.data.routines });
+  const previous = shortcutBindings(old);
   fn();
   try {
-    globalKeys();
+    globalKeys(previous);
   } catch (e) {
     Object.assign(store.data, old);
-    try {
-      globalKeys();
-    } catch {}
     throw e;
   }
   changed();
@@ -285,15 +321,13 @@ function trayMenu() {
   );
 }
 function cpuSnapshot() {
-  return os
-    .cpus()
-    .reduce(
-      (s, c) => ({
-        idle: s.idle + c.times.idle,
-        total: s.total + Object.values(c.times).reduce((x, y) => x + y, 0),
-      }),
-      { idle: 0, total: 0 },
-    );
+  return os.cpus().reduce(
+    (s, c) => ({
+      idle: s.idle + c.times.idle,
+      total: s.total + Object.values(c.times).reduce((x, y) => x + y, 0),
+    }),
+    { idle: 0, total: 0 },
+  );
 }
 let prevCpu = cpuSnapshot(),
   gpu = null,
@@ -596,7 +630,7 @@ function getChat(id) {
   }
   return c;
 }
-async function answer(text, chat, signal, remote = false) {
+async function answer(text, chat, signal, remote = false, spokenReply = false) {
   const d = store.data,
     s = d.settings;
   let m;
@@ -715,7 +749,12 @@ async function answer(text, chat, signal, remote = false) {
     .filter((x) => !x.error)
     .slice(-16)
     .map(({ role, text: t }) => ({ role, content: t }));
-  const messages = [{ role: 'system', content: 'Тебя зовут ' + s.name + '. ' + s.role }, ...recent];
+  const style = spokenReply ? ' Ответь для разговора вслух, коротко и без разметки.' : '';
+  const localOptions =
+    s.provider === 'local'
+      ? { max_tokens: spokenReply ? 320 : 1536, chat_template_kwargs: { enable_thinking: false } }
+      : {};
+  const messages = [{ role: 'system', content: 'Тебя зовут ' + s.name + '. ' + s.role + style }, ...recent];
   const connector =
     !remote && d.tools.find((t) => normal(text).startsWith('через ' + normal(t.name) + ' '));
   if (connector) {
@@ -756,10 +795,11 @@ async function answer(text, chat, signal, remote = false) {
           },
         ],
         signal,
+        localOptions,
       ),
     };
   }
-  return { text: await network.ai(base, key, model, messages, signal) };
+  return { text: await network.ai(base, key, model, messages, signal, localOptions) };
 }
 async function chatSend(data, signal, remote = false) {
   const text = String(data.text || '')
@@ -771,7 +811,7 @@ async function chatSend(data, signal, remote = false) {
   chat.messages.push({ role: 'user', text, time: Date.now() });
   changed();
   try {
-    const a = await answer(text, chat, signal, remote);
+    const a = await answer(text, chat, signal, remote, data.voiceMode === true);
     signal.throwIfAborted();
     chat.messages.push({ role: 'assistant', ...a, time: Date.now() });
     changed();
@@ -831,7 +871,35 @@ async function readPack() {
   if ((await fsp.stat(p)).size > 512000) throw Error('Файл слишком большой');
   return JSON.parse(await fsp.readFile(p, 'utf8'));
 }
+const motionOutput = new (require('./vmc.cjs').MotionOutput)();
+function configureMotionOutput(port) {
+  motionOutput.configure(port, (e) => {
+    main?.webContents.setBackgroundThrottling(true);
+    store.data.motionPort = 0;
+    changed();
+    push({ type: 'notice', message: e.message });
+  });
+  main.webContents.setBackgroundThrottling(!port);
+}
 const actions = {
+  motionOutput: ({ port }) => {
+    const value = Number(port);
+    configureMotionOutput(value);
+    store.data.motionPort = value;
+    changed();
+  },
+  motionFrame: (frame) => motionOutput.send(frame),
+  exportAvatar: async () => {
+    const avatar = store.data.avatars.find((v) => v.id === store.data.settings.avatar);
+    const file = avatar?.path || path.join(renderer, 'character.vrm');
+    const dest = await dialog.showSaveDialog(main, {
+      defaultPath: avatar ? path.basename(avatar.name) : 'Vita.vrm',
+      filters: [{ name: 'Модель VRM', extensions: ['vrm'] }],
+    });
+    if (dest.canceled) return false;
+    if (path.resolve(file) !== path.resolve(dest.filePath)) await fsp.copyFile(file, dest.filePath);
+    return true;
+  },
   state: () => ({
     ...store.public(),
     models: models.list(),
@@ -933,12 +1001,24 @@ const actions = {
     store.data.chats = store.data.chats.filter((c) => c.id !== id);
     changed();
   },
-  speech: async ({ text }) => {
+  speech: async ({ text, continuous }) => {
     voiceJob?.abort();
     const own = new AbortController();
     voiceJob = own;
     try {
-      return await speech.speak(engines, store.data, text, secret('fish'), own.signal);
+      try {
+        return await speech.speak(engines, store.data, text, secret('fish'), own.signal);
+      } catch (e) {
+        if (own.signal.aborted || !continuous || store.data.settings.voice === 'builtin') throw e;
+        push({ type: 'notice', message: 'Выбранный голос недоступен. Отвечаю встроенным голосом.' });
+        return await speech.speak(
+          engines,
+          { ...store.data, settings: { ...store.data.settings, voice: 'builtin' } },
+          text,
+          '',
+          own.signal,
+        );
+      }
     } finally {
       if (voiceJob === own) voiceJob = null;
     }
@@ -1178,6 +1258,7 @@ function init() {
     webPreferences: prefs,
   });
   guard(main);
+  if (store.data.motionPort) configureMotionOutput(store.data.motionPort);
   main.loadURL('mira://desk/index.html');
   main.on('close', (e) => {
     if (!closing) {
@@ -1230,6 +1311,7 @@ else {
 }
 app.on('before-quit', () => {
   closing = true;
+  motionOutput.configure(0);
   stopTracking?.();
   cancel();
   executing?.abort();

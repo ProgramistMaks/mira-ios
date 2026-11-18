@@ -30,7 +30,7 @@ const cache = { gesture: 'auto', emotion: '', draft: null, progress: null },
 music.controls = true;
 music.preload = 'metadata';
 const voice = new Voice(
-  send,
+  (text) => send(text, true),
   (msg, p) => {
     liveStatus = msg;
     $('#voiceStatus').textContent = msg;
@@ -60,6 +60,7 @@ function setupAvatar() {
   a.configurePerformance({ emotion: cache.emotion || 'auto', variant: -1 });
   a.setFrameRate(state.settings.fps);
   a.setState(voice.enabled ? 'listening' : 'idle', state.settings.reduced);
+  a.setMotionOutput(!!state.motionPort);
   a.setActive((page === 'home' && state.settings.showAvatar) || page === 'model');
 }
 avatarFrame.addEventListener('load', () => {
@@ -74,6 +75,7 @@ function renderFrame() {
       avatarFrame.src = '/renderer/index.html?character=' + encodeURIComponent(state.settings.avatar);
     lastAvatar = state.settings.avatar;
   }
+  a?.setMotionOutput(!!state.motionPort);
   a?.setActive(visible);
   a?.setFrameRate(state.settings.fps);
   $('#nameplate span').textContent =
@@ -208,6 +210,7 @@ function renderChat() {
       .join('') || '<p class="empty">Разговоры сохраняются здесь.</p>';
 }
 function render() {
+  syncMotionTimer();
   if (!state) return;
   const look = state.settings;
   document.body.dataset.theme =
@@ -289,7 +292,7 @@ function closeModal() {
 function err(e) {
   toast(e.message || e);
 }
-async function send(input) {
+async function send(input, voiceMode = false) {
   if (sending) return;
   let text = String(input || '').trim();
   if (!text && !attachment) return;
@@ -300,12 +303,12 @@ async function send(input) {
   }
   nav('home');
   $('#prompt').value = '';
-  if (!current) current = await call('newChat');
   sending = true;
   renderChat();
   phase('thinking', state.settings.reduced);
   try {
-    const r = await call('send', { id: current, text });
+    if (!current) current = await call('newChat');
+    const r = await call('send', { id: current, text, voiceMode });
     current = r.id;
     return r.text;
   } finally {
@@ -546,6 +549,17 @@ async function handle(action, id) {
       return;
     case 'useModel':
       return saveSettings({ provider: 'local', model: id });
+    case 'motionOutput': {
+      const port = state.motionPort ? 0 : Number(val('motionPort'));
+      if (!state.motionPort && (!Number.isInteger(port) || port < 1 || port > 65535))
+        throw Error('Укажи порт от 1 до 65535');
+      await call('motionOutput', { port });
+      await refresh();
+      return;
+    }
+    case 'exportAvatar':
+      if (await call('exportAvatar')) toast('Модель сохранена');
+      return;
     case 'pickTheme':
       return saveSettings({ theme: id });
     case 'resetAccent':
@@ -947,8 +961,41 @@ window.desk.on(async (e) => {
     err(ex);
   }
 });
+let motionTimer = null;
+function syncMotionTimer() {
+  if (state?.motionPort && !motionTimer) {
+    let inFlight = false;
+    motionTimer = setInterval(async () => {
+      if (inFlight) return;
+      const frame = avatar()?.readMotionFrame?.();
+      if (!frame) return;
+      inFlight = true;
+      try {
+        await call('motionFrame', frame);
+      } catch (ex) {
+        err(ex);
+      } finally {
+        inFlight = false;
+      }
+    }, 1000 / 30);
+  } else if (!state?.motionPort && motionTimer) {
+    clearInterval(motionTimer);
+    motionTimer = null;
+  }
+}
 setInterval(() => {
   if (!state) return;
+  const meter = $('#frameMeter'),
+    stats = avatar()?.frameStats;
+  if (meter)
+    meter.textContent = stats
+      ? 'Отрисовка · ' +
+        Math.round(stats.fps) +
+        ' кадр/с · 95% кадров до ' +
+        Math.round(stats.p95ms) +
+        ' мс'
+      : '';
+
   $('#time').textContent = clock.format(new Date());
   document.querySelectorAll('[data-clock]').forEach((el) => (el.textContent = timerTime(state.focus)));
 }, 1000);
