@@ -208,6 +208,10 @@ export class ChoreographyRig {
       }
     }
     this.stance?.transferFeet(this.fade);
+    if (sequence && !this.desktopSeating) {
+      const hipOffset = (this.hips.position.y - this.origin.y) / this.scale;
+      this.viewOffset = Math.max(-.16, Math.min(.16, hipOffset * .65));
+    }
   }
   sampleSource(id,t,loop=true) {
     const c=pack.clips[id],frame=Math.min(c.frames-1,(loop?t%c.duration:t)*c.fps);

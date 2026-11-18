@@ -487,3 +487,12 @@ test('the jump plays takeoff and air before landing and does not restart while h
   advance(.5);
   assert.ok(landing.distanceTo(point('hips')) < 1e-5);
 });
+
+test('the seated preview lowers its framing to keep the feet in view', () => {
+  hold('chair', 2);
+  assert.equal(rig.track, 'chairIdle');
+  assert.ok(rig.viewOffset < -.07);
+  advance(3.2);
+  assert.equal(rig.track, 'chairOut');
+  assert.ok(rig.viewOffset > -.06);
+});
