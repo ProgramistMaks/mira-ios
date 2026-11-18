@@ -68,7 +68,16 @@ try {
     { cwd: path.dirname(piper), env, input: 'Запиши купить молоко.\n', encoding: 'utf8', timeout: 90000 },
   );
   assert.equal(spoken.status, 0, spoken.stderr || spoken.error?.message);
-  await writeFile(mic, microphoneWav(await readFile(voice)));
+  const generated = await readFile(voice);
+  assert.ok(
+    generated.length > 1000 && generated.toString('ascii', 0, 4) === 'RIFF',
+    'Packaged Piper must generate speech',
+  );
+  // Fixed microphone recording keeps pronunciation stable across Piper's random noise samples.
+  await writeFile(
+    mic,
+    microphoneWav(await readFile(path.join(root, 'Desktop/tests/fixtures/note-ru.wav'))),
+  );
   const args = [
     '--use-angle=swiftshader',
     '--enable-unsafe-swiftshader',
@@ -140,7 +149,10 @@ try {
     { timeout: 90000 },
   );
   const state = await p.evaluate(() => window.desk.call('state'));
-  assert.ok(state.notes.some((x) => /купить молоко/i.test(x.text)));
+  assert.ok(
+    state.notes.some((x) => /купить молоко/i.test(x.text)),
+    JSON.stringify(state.chats.map((c) => c.messages)),
+  );
   assert.ok(state.chats.some((c) => c.messages.some((m) => m.text === 'Записала в заметки.')));
   await p.locator('#voiceEnd').click();
   // Receive a real VMC stream on loopback, including when the model page is hidden.
