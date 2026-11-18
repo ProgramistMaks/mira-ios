@@ -1348,5 +1348,8 @@
   "Собрать команду": "Build a command",
   "Пример с YouTube": "YouTube example",
   "Для голосового запуска скажи": "To run by voice, say",
-  "Встать с панели": "Stand up from the taskbar"
+  "Встать с панели": "Stand up from the taskbar",
+  "Послушать текущий голос": "Preview current voice",
+  "Голос ответов": "Reply voice",
+  "Подключение Fish Audio": "Connect Fish Audio"
 }

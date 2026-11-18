@@ -754,7 +754,7 @@ export function commands(s, c) {
   }
   let inspector = '';
   if (b) {
-    let value = field('Значение', 'nodeValue', b.value);
+    let value = field(b.kind === 'url' ? 'Ссылка' : 'Значение', 'nodeValue', b.value);
     if (b.kind === 'theme' || b.kind === 'switchTheme')
       value = select('Тема', 'nodeValue', themeList, b.value);
     if (b.kind === 'file')
@@ -828,12 +828,13 @@ export function commands(s, c) {
     '<div class="workflow">' +
     side +
     '<article class="editPanel">' +
-    acts(btn('Запустить', 'runRoutine', 'play'), btn('Сохранить', 'saveRoutine', 'save', 'primary')) +
+    '<div class="workflowHeader">' +
     field('Название', 'rName', d.name) +
-    '<div class="grid">' +
-    field('Группа', 'rGroup', d.group || '') +
+    acts(btn('Запустить', 'runRoutine', 'play'), btn('Сохранить', 'saveRoutine', 'save', 'primary')) +
+    '</div><div class="workflowFields">' +
     field('Голосовая фраза', 'rPhrase', d.phrase) +
     field('Горячая клавиша', 'rHotkey', d.hotkey) +
+    field('Группа', 'rGroup', d.group || '') +
     '</div>' +
     (d.phrase ? '<p class="muted">Для голосового запуска скажи «' + esc((s.settings.wakeAlias || 'Мира') + ', ' + d.phrase) + '».</p>' : '') +
     '<div class="flowTools"><select class="control" id="kind">' +
@@ -1075,12 +1076,23 @@ function voiceLibrary(s, c) {
   const list = rows
     .map((v) => {
       const selected = a.fishVoice === v.id && (a.voice === 'fish' || a.fishPending);
+      const starred = saved.some((x) => x.id === v.id);
+      const playing = c.previewId === v.id;
+      const initials = v.title.split(/\s+/).slice(0, 2).map(word => Array.from(word)[0]).join('');
       return (
-        '<li><div><strong>' +
-        esc(v.title) +
+        '<li class="voiceCard" data-selected="' + selected + '" data-preview="' + playing + '">' +
+        '<div class="voiceCardHead"><span class="voiceGlyph" aria-hidden="true">' + esc(initials) +
+        (v.cover && /^[a-f0-9]{32}$/i.test(v.id)
+          ? '<img class="voiceCover" alt="" loading="lazy" referrerpolicy="no-referrer" src="https://public-platform.r2.fish.audio/coverimage/' + v.id + '">'
+          : '') +
+        '</span><div><strong>' + esc(v.title) +
         '</strong><small>' +
         esc([v.author, v.languages].filter(Boolean).join(' · ')) +
-        '</small></div><div class="acts">' +
+        '</small></div><button class="voiceStar" data-act="fishStar" data-id="' + esc(v.id) +
+        '" aria-pressed="' + starred + '" aria-label="' +
+        (starred ? 'Убрать из избранного' : 'В избранное') + '"><span aria-hidden="true">' +
+        (starred ? '★' : '☆') + '</span></button></div>' +
+        '<div class="voiceCardActions">' +
         (v.sample === false
           ? ''
           : btn(
@@ -1094,14 +1106,7 @@ function voiceLibrary(s, c) {
           selected ? (a.fishPending ? 'Ожидает ключ' : 'Выбран') : 'Выбрать',
           'fishPick',
           selected ? 'check' : '',
-          '',
-          v.id,
-        ) +
-        btn(
-          saved.some((x) => x.id === v.id) ? 'Убрать из избранного' : 'В избранное',
-          'fishStar',
-          'star',
-          '',
+          selected ? 'selectedVoice' : 'chooseVoice',
           v.id,
         ) +
         '</div></li>'
@@ -1111,15 +1116,27 @@ function voiceLibrary(s, c) {
   return (
     '<article class="box voiceLibrary"><h3>' +
     ico('audio-lines') +
-    'Библиотека голосов</h3>' +
+    'Озвучивание</h3><div class="voiceProvider">' +
+    select('Голос ответов', 'voicePick', [
+      ['builtin', 'Руслан · локальный'],
+      ['system', 'Голос Windows'],
+      ['speechAPI', 'Совместимый голосовой сервис'],
+      ['fish', 'Fish Audio · облако'],
+      ...s.voices.map((v) => [v.id, v.name]),
+    ], a.voice) +
+    (a.voice === 'system'
+      ? select('Установленные голоса', 'sysVoice', [['', 'По умолчанию'], ...(c.sysVoices || []).map(v => [v, v])], a.systemVoice)
+      : '') +
+    acts(btn('Послушать текущий голос', 'audition', 'play'), btn('Импорт .onnx', 'voiceFile', 'upload')) +
+    '</div><section class="voiceCatalog"><header><h4>Библиотека голосов</h4><b>Fish Audio</b></header>' +
     '<form id="fishSearchForm"><label for="fishQuery">Название или имя</label><div><input id="fishQuery" maxlength="120" placeholder="Например, Братишкин или Джарвис" value="' +
     esc(c.fishInput ?? c.fishQuery ?? '') +
     '"><button class="btn" type="submit">' +
     ico('search') +
     'Найти</button></div></form>' +
     acts(
-      btn('Результаты поиска', 'fishResults', 'list'),
-      btn('Избранное · ' + saved.length, 'fishSaved', 'star'),
+      btn('Результаты поиска', 'fishResults', 'list-checks', favorites ? '' : 'activeVoiceTab'),
+      btn('Избранное · ' + saved.length, 'fishSaved', 'heart', favorites ? 'activeVoiceTab' : ''),
     ) +
     '<div aria-live="polite">' +
     (c.fishError && !favorites
@@ -1143,7 +1160,8 @@ function voiceLibrary(s, c) {
           c.fishMore ? btn('Дальше', 'fishNext', 'chevron-right') : '',
         )
       : '') +
-    '<div class="fishAccess">' +
+    '<details class="fishAccess"' + (a.fishPending || c.fishKeyFocus ? ' open' : '') +
+    '><summary>Подключение Fish Audio</summary>' +
     (a.fishVoiceName && (a.voice === 'fish' || a.fishPending)
       ? '<strong>' +
         esc(a.fishVoiceName) +
@@ -1158,7 +1176,7 @@ function voiceLibrary(s, c) {
       'password',
     ) +
     btn('Сохранить ключ', 'keyFish', 'save') +
-    '</div></article>'
+    '</details></section></article>'
   );
 }
 export function voice(s, c) {
@@ -1242,31 +1260,6 @@ export function voice(s, c) {
           btn('Начать разговор', 'voice', 'mic', 'primary'),
           btn('Ждать обращения «' + (a.wakeAlias || 'Мира') + '»', 'standby', 'audio-lines'),
         ),
-    ) +
-    box(
-      'Озвучивание',
-      'volume-2',
-      select(
-        'Голос',
-        'voicePick',
-        [
-          ['builtin', 'Руслан · локальный'],
-          ['system', 'Голос Windows'],
-          ['speechAPI', 'Совместимый голосовой сервис'],
-          ['fish', 'Fish Audio · облако'],
-          ...s.voices.map((v) => [v.id, v.name]),
-        ],
-        a.voice,
-      ) +
-        (a.voice === 'system'
-          ? select(
-              'Установленные голоса',
-              'sysVoice',
-              [['', 'По умолчанию'], ...(c.sysVoices || []).map((v) => [v, v])],
-              a.systemVoice,
-            )
-          : '') +
-        acts(btn('Послушать пример', 'audition', 'play'), btn('Импорт .onnx', 'voiceFile', 'upload')),
     ) +
     box(
       'Голосовой сервис',

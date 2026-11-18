@@ -2218,7 +2218,7 @@ const actions = {
       if (recognitionJob === own) recognitionJob = null;
     }
   },
-  fishFavorite: ({ id, title, author, languages, sample }) => {
+  fishFavorite: ({ id, title, author, languages, sample, cover }) => {
     if (typeof id !== 'string' || !/^[-a-zA-Z0-9_]{1,100}$/.test(id)) throw Error('Недопустимый голос');
     const rows = store.data.fishFavorites || [];
     store.data.fishFavorites = rows.some((v) => v.id === id)
@@ -2231,6 +2231,7 @@ const actions = {
             author: String(author || '').slice(0, 110),
             languages: String(languages || '').slice(0, 48),
             sample: sample !== false,
+            cover: cover === true,
           },
         ].slice(-100);
     changed();

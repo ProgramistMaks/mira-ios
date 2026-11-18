@@ -311,7 +311,7 @@ export class Voice {
     }
   }
   async speak(text, fishPreview) {
-    if (this.settings?.ttsEnabled === false) return;
+    if (this.settings?.ttsEnabled === false && !fishPreview) return;
     this.hush();
     const id = this.audioEpoch;
     this.playing = true;

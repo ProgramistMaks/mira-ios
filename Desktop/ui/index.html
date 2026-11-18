@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://public-platform.r2.fish.audio/coverimage/; media-src 'self' blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'"
     />
     <title>Мира</title>
     <link rel="stylesheet" href="style.css" />
@@ -74,7 +74,7 @@
           <div id="hero">
             <div id="welcome">
               <h1>
-                <span class="possessive">твоя </span><em id="heroName">Мира</em><span class="shine">✦</span>
+                <em id="heroName">Мира</em>
               </h1>
               <p id="hello"></p>
             </div>
@@ -239,6 +239,9 @@
       <section>
         <h3>Встроенные</h3>
         <div id="availableNav"></div>
+        <button class="navExtra" data-act="buildVoiceRoutine">
+          <span data-i="workflow"></span>Собрать команду
+        </button>
         <button class="navExtra" data-act="showAvatar" id="homeCharacter" aria-pressed="false">
           <span data-i="user-round"></span>Персонаж на главной
         </button>

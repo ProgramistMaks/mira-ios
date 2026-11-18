@@ -324,6 +324,7 @@ async function fishVoices(query = '', page = 1, fetcher = fetch) {
       author: String(x.author?.nickname || '').slice(0, 110),
       languages: (x.languages || []).slice(0, 6).join(', ').toUpperCase(),
       sample: (x.samples || []).some(sampleUrl),
+      cover: x.cover_image === 'coverimage/' + x._id,
     }));
   return { items, more: data.has_more ?? data.items.length === size };
 }

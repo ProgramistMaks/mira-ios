@@ -233,6 +233,9 @@ function sections() {
     })
     .join('');
 }
+$('#content').addEventListener('error', (event) => {
+  if (event.target.classList?.contains('voiceCover')) event.target.hidden = true;
+}, true);
 $('#sectionNav').onclick = (e) => {
   const id = e.target.closest('button')?.dataset.section;
   if (id)
@@ -268,6 +271,7 @@ function renderPage() {
     page === 'voice' && ['fishQuery', 'fishKey'].includes(document.activeElement?.id)
       ? document.activeElement
       : null;
+  cache.fishKeyFocus = typing?.id === 'fishKey' || !!$('.fishAccess[open]');
   const content = $('#content');
   const subpage =
     page === 'voice'
@@ -1606,7 +1610,6 @@ async function handle(action, id) {
       await refresh();
       return;
     case 'fishPreview': {
-      if (state.settings.ttsEnabled === false) return toast('Включи озвучку кнопкой «Голос» внизу.');
       if (!cache.previewId && (voice.busy || voice.playing)) {
         toast('Сначала дождись окончания реплики');
         return;
@@ -2326,6 +2329,12 @@ document.addEventListener('change', (e) => {
     call('project', { id: v }).then(refresh).catch(err);
     return;
   }
+  if (e.target.id === 'voicePick' && v === 'fish' && !(state.keys.includes('fish') && state.settings.fishVoice)) {
+    e.target.value = state.settings.voice;
+    $('#fishQuery').focus();
+    $('#fishQuery').scrollIntoView({ block: 'nearest' });
+    return;
+  }
   const settings = {
     customColor: { customColor: v },
     accent: { accent: v },
@@ -2933,12 +2942,23 @@ function filterCommandList() {
 $('#historyQuery').oninput = renderChat;
 document.addEventListener('submit', (e) => {
   if (e.target.id === 'fishSearchForm') {
+    clearTimeout(voiceSearchTimer);
     e.preventDefault();
     handle('fishSearch').catch(err);
   }
 });
+let voiceSearchTimer;
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'fishQuery') cache.fishInput = e.target.value;
+  if (e.target.id === 'fishQuery') {
+    cache.fishInput = e.target.value;
+    clearTimeout(voiceSearchTimer);
+    cache.fishRequest = (cache.fishRequest || 0) + 1;
+    cache.fishLoading = false;
+    if (cache.fishInput.trim().length >= 2)
+      voiceSearchTimer = setTimeout(() => {
+        if (page === 'voice' && $('#fishQuery')) handle('fishSearch').catch(err);
+      }, 420);
+  }
   if (e.target.id === 'commandQuery') {
     cache.commandQuery = e.target.value;
     filterCommandList();
