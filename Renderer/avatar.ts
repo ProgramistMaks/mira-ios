@@ -163,14 +163,15 @@ async function main() {
   if (avatar.lookAt) avatar.lookAt.target = target;
   const desktopStage = location.protocol === 'mira:' && location.hostname === 'desk';
   const restingFrame = desktopStage ? .068 : 0;
-  let framingOffset = 0, verticalCenter = 0;
+  let framingOffset = 0, verticalCenter = 0, cameraDistance = 0;
   const resize = () => {
     const width = Math.max(1, nativeSize?.width ?? innerWidth);
     const viewportHeight = Math.max(1, nativeSize?.height ?? innerHeight);
     renderer.setSize(width, viewportHeight);
     camera.aspect = width / viewportHeight;
     const distance = height * (desktopStage ? .585 : .54) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    camera.position.set(0, center.y + height * 0.03, distance * Math.max(1, 0.65 / camera.aspect));
+    cameraDistance = distance * Math.max(1, 0.65 / camera.aspect);
+    camera.position.set(0, center.y + height * 0.03, cameraDistance);
     camera.lookAt(0, center.y, 0); camera.position.y += (restingFrame + framingOffset) * height; camera.updateProjectionMatrix();
     verticalCenter = camera.projectionMatrix.elements[9];
   };
@@ -281,6 +282,8 @@ async function main() {
     }
     framingOffset = useAuthored && !reduced ? authored.viewOffset : 0;
     camera.position.y = center.y + height * (.03 + restingFrame + framingOffset);
+    const previewDistance = cameraDistance * (useAuthored && !reduced && authored.fullBodyPreview ? 1.15 : 1);
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, previewDistance, 13, delta);
     seatWeight = THREE.MathUtils.damp(seatWeight, seated ? 1 : 0, 7, delta);
     if (seatWeight > .001 && (!useAuthored || reduced || !acting.settings.enabled)) {
       for (const side of ['left','right'] as const) {

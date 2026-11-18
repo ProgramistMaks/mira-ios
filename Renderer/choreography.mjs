@@ -88,6 +88,7 @@ export class ChoreographyRig {
     this.begin(value ? 'desktopChair' : 'chairRise', true);
   }
   get desktopSeating() { return this.clip === 'desktopChair' || this.clip === 'chairRise'; }
+  get fullBodyPreview() { return Boolean(sourceSequences[this.clip]) && !this.desktopSeating; }
   get duration() {
     const sequence = sourceSequences[this.clip];
     if (sequence) return sequence.reduce((time, action) => time + (action.hold ?? pack.clips[action.id].duration), 0);
