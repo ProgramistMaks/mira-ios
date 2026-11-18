@@ -201,7 +201,7 @@ async function main() {
   const arms = new ArmRig(bone, armSign);
   const armTargets = new ArmTargets(avatar.scene, bone, height, armSign);
   const articulation = new ArticulationRig(bone, armSign);
-  const secondary = new SecondaryPhysics(avatar.springBoneManager);
+  const secondary = new SecondaryPhysics(avatar.springBoneManager, details.ribs);
   resetPhysics = () => {secondary.reset(); details.rebase();};
   const detail = new HairDetail(avatar.scene);
   const bodyStatus = () => {

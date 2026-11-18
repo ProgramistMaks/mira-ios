@@ -21,7 +21,7 @@ const rig=new VitaSecondary(avatar);
 VRMUtils.rotateVRM0(avatar);
 VRMUtils.combineSkeletons(root);
 VRMUtils.combineMorphs(avatar);
-const physics=new SecondaryPhysics(avatar.springBoneManager);
+const physics=new SecondaryPhysics(avatar.springBoneManager,rig.ribs);
 const rawHead=avatar.humanoid.getRawBoneNode('head');
 const head=avatar.humanoid.getNormalizedBoneNode('head');
 const neutral=new Quaternion();
@@ -130,23 +130,31 @@ test('ears follow the head and a landing while remaining still on viewer rotatio
   root.quaternion.copy(rotation); head.quaternion.identity();
 });
 
+function chestLandmarks(){
+  const chest=avatar.humanoid.getRawBoneNode('upperChest');
+  const landmarks=[];
+  root.traverse(mesh=>{
+    if (!mesh.isSkinnedMesh) return;
+    for(const side of ['L','R']){
+      const chestJoint=b=>b.name.startsWith('J_Sec_'+side+'_Bust');
+      let vertex=-1,weight=.85,collar=-1;
+      for(let i=0;i<mesh.geometry.attributes.position.count;i++){
+        const w=influence(mesh,i,chestJoint);
+        if(w>weight) {weight=w;vertex=i;}
+        if(w===0 && influence(mesh,i,j=>j===chest)>.9) collar=i;
+      }
+      if(vertex!==-1) landmarks.push({mesh,vertex,collar});
+    }
+  });
+  return landmarks;
+}
+const landmarks=chestLandmarks();
+
 test('chest expansion moves the weighted top and body surfaces together and keeps the collar stationary',()=>{
   const chest=avatar.humanoid.getRawBoneNode('upperChest');
   assert.equal(rig.ribs.children.length,2);
   assert.equal(physics.counts.chest,4);
-  const landmarks=[];
-  root.traverse(mesh=>{
-    if (!mesh.isSkinnedMesh) return;
-    const chestJoint=b=>/^J_Sec_[LR]_Bust[12]$/.test(b.name);
-    let vertex=-1,weight=.85,collar=-1;
-    for(let i=0;i<mesh.geometry.attributes.position.count;i++){
-      const w=influence(mesh,i,chestJoint);
-      if(w>weight) {weight=w;vertex=i;}
-      if(w===0 && influence(mesh,i,j=>j===chest)>.9) collar=i;
-    }
-    if(vertex!==-1) landmarks.push({mesh,vertex,collar});
-  });
-  assert.equal(landmarks.length,2);
+  assert.equal(landmarks.length,4);
   assert.ok(landmarks.some(l=>[l.mesh.material].flat().some(m=>m.name.includes('CLOTH'))));
   assert.ok(landmarks.some(l=>[l.mesh.material].flat().some(m=>m.name.includes('SKIN'))));
   const fixed=landmarks.find(l=>l.collar!==-1);
@@ -157,7 +165,7 @@ test('chest expansion moves the weighted top and body surfaces together and keep
   rig.update(0,'idle',1,true); root.updateMatrixWorld(true);
   const shifts=landmarks.map((l,i)=>skinPoint(l.mesh,l.vertex,chest).sub(before[i]));
   shifts.forEach(v=>assert.ok(v.length()>.003 && v.length()<.0041));
-  assert.ok(shifts[0].distanceTo(shifts[1])<.0003);
+  shifts.forEach(v=>assert.ok(v.distanceTo(shifts[0])<.0003));
   assert.ok(skinPoint(fixed.mesh,fixed.collar,chest).distanceTo(collar)<1e-7);
   rig.reset();
 });
@@ -175,8 +183,82 @@ test('the original chest springs settle after a torso accent and retain their co
     motion.push(initial.angleTo(joint.bone.quaternion));
   }
   assert.ok(Math.max(...motion)>.02);
-  assert.ok(motion.at(-1)<.005);
-  assert.equal(joint.settings.gravityPower,0);
+  const tiltedEquilibrium=joint.bone.quaternion.clone();
+  physics.reset();
+  assert.ok(tiltedEquilibrium.angleTo(joint.bone.quaternion)<.001);
+  assert.ok(joint.settings.gravityPower>0);
+  assert.deepEqual(joint.settings.gravityDir.toArray(),[0,-1,0]);
+  physics.configure({wind:0});
+  for(let i=0;i<120;i++) avatar.update(1/120);
+  assert.ok(tiltedEquilibrium.angleTo(joint.bone.quaternion)<.001);
   assert.equal(joint.colliderGroups,collisions);
   chest.quaternion.identity(); avatar.update(0); physics.reset();
+});
+
+test('gravity loads both body and garment surfaces, a crouch rebounds, and rising reverses the lag',()=>{
+  const hips=avatar.humanoid.getNormalizedBoneNode('hips');
+  const chest=avatar.humanoid.getRawBoneNode('upperChest');
+  const origin=hips.position.y;
+  function heights(){
+    root.updateMatrixWorld(true);
+    return landmarks.map(l=>skinPoint(l.mesh,l.vertex,chest).y);
+  }
+  const traces=[];
+  for(const fps of [30,60,120]){
+    hips.position.y=origin;
+    physics.configure({physics:false});avatar.update(0);
+    const unloaded=heights();
+    physics.configure({});avatar.update(0);
+    const rest=heights();
+    rest.forEach((y,i)=>assert.ok(unloaded[i]-y>.005 && unloaded[i]-y<.011));
+    const trace=[];
+    for(let frame=1;frame<=fps*2;frame++){
+      const t=frame/fps;
+      const u=Math.min(1,t<=1?t/.24:(t-1)/.24);
+      const travel=.06*u*u*(3-2*u);
+      hips.position.y=origin+(t<=1?-travel:travel-.06);
+      avatar.update(1/fps);
+      if(frame%(fps/30)===0) trace.push(heights().map((y,i)=>y-rest[i]));
+    }
+    for(let marker=0;marker<landmarks.length;marker++){
+      const dy=trace.map(frame=>frame[marker]);
+      assert.ok(Math.max(...dy.slice(0,7))>.004);
+      assert.ok(Math.min(...dy.slice(7,15))<-.001);
+      assert.ok(Math.abs(dy[29])<.0001);
+      assert.ok(Math.min(...dy.slice(30,37))<-.004);
+      assert.ok(Math.max(...dy.slice(37,45))>.001);
+      assert.ok(Math.abs(dy[59])<.0001);
+    }
+    traces.push(trace);
+  }
+  for(const trace of traces.slice(1)) trace.forEach((frame,i)=>
+    frame.forEach((height,j)=>assert.ok(Math.abs(height-traces[0][i][j])<.0015)));
+  physics.reset();
+});
+
+test('Reduce Motion keeps static weight, softness changes support, and disabling physics unloads it',()=>{
+  const chest=avatar.humanoid.getRawBoneNode('upperChest');
+  const hips=avatar.humanoid.getNormalizedBoneNode('hips'), origin=hips.position.y;
+  const {mesh,vertex}=landmarks[0];
+  const height=()=>{
+    root.updateMatrixWorld(true);
+    return skinPoint(mesh,vertex,chest).y;
+  };
+  physics.configure({physics:false},true);avatar.update(0);
+  const unloaded=height();
+  physics.configure({softness:0},true);avatar.update(0);
+  const firm=height();
+  physics.configure({softness:1},true);avatar.update(0);
+  const soft=height();
+  assert.ok(unloaded-firm>.004 && firm-soft>.004);
+  hips.position.y-=.06;
+  for(let i=0;i<15;i++){
+    avatar.update(1/30);
+    assert.ok(Math.abs(height()-soft)<1e-6);
+  }
+  physics.configure({softness:1});avatar.update(0);
+  assert.ok(Math.abs(height()-soft)<.0001);
+  physics.configure({physics:false},true);avatar.update(0);
+  assert.ok(Math.abs(height()-unloaded)<1e-6);
+  hips.position.y=origin;physics.configure({});avatar.update(0);
 });
