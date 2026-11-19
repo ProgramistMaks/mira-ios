@@ -1,0 +1,124 @@
+name: Mira Cloud diagnostics
+on:
+  workflow_dispatch:
+    inputs:
+      folder_id:
+        description: Yandex Cloud folder ID
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: mira-cloud-diagnostics
+jobs:
+  diagnose:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: mira-cloud-diagnostics
+    steps:
+      - name: Collect an encrypted diagnostics report
+        id: diagnosis
+        shell: bash
+        env:
+          YC_KEY: ${{ secrets.YC_MIRA_SERVICE_ACCOUNT_KEY }}
+          YC_FOLDER: ${{ inputs.folder_id }}
+          REPORT_PUBLIC_KEY: 'MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA8J1hwLvvQ+B5drXo5wsjzdWW/kVuVBNTkqbDLZIdzJB5T2tgrIsHX/fscWwBEZOnAR62xkzCJe3yIQBeVTAsTPdgyBDYEg7esP+p6OZNcvrP5I/Mu//lOzN/tdxWXA275xDhbSUZWuGjKtddKdDHKM/DB4Tv7KS1OPoYZYCY0rwaFJjVfjX1LiEBSodc5WpjeU+oCXLRpjrWtSeM9qS7D5cK8kaYYexopAHvYgX9S3k6AKPeSUM61KjtGAqTx1JriBnwbH5Q9BIZ1SRrbLp7I4eX3c5sePuv5Dy31q19MkijzXAkvNfrxETsm8uFXQF/N49N4hUu3x6AnGvblx4db++VhUIzoJ/lRNJm0RrtQasPhlVSmEIw3NtNLD/t1UeblxSlolnzftXXXpIrXBTCgPeSz5PImaNZprmtPO9TXkQ5gsV5T4cwIXho7WB+5NscrGExA9su0WiwbyaCYDMdoYv/9AcLf+JM92JeIIK36qWUwy2LnLKOnsZO9XUO6hsfAgMBAAE='
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "$YC_KEY" ]]; then
+            printf '::error::Set YC_MIRA_SERVICE_ACCOUNT_KEY in the mira-cloud-diagnostics GitHub environment.\n'
+            exit 1
+          fi
+          if [[ ! "$YC_FOLDER" =~ ^[a-z0-9]{15,25}$ ]]; then
+            printf '::error::Enter the Yandex Cloud folder ID.\n'
+            exit 1
+          fi
+          root=$(mktemp -d "$RUNNER_TEMP/mira-cloud.XXXXXXXX")
+          trap 'rm -rf "$root"' EXIT
+          export HOME="$root/home"
+          mkdir -p "$HOME" "$root/report"
+          export REPORT_DIR="$root/report"
+          printf '%s' "$YC_KEY" > "$root/key.json"
+          unset YC_KEY
+          if ! jq -e '.service_account_id and .private_key and .id' "$root/key.json" >/dev/null 2>&1; then
+            printf '::error::The secret must contain the full authorized service account key JSON.\n'
+            exit 1
+          fi
+          curl -fsSL --retry 2 --max-time 90 https://storage.yandexcloud.net/yandexcloud-yc/release/1.47.0/linux/amd64/yc -o "$root/yc"
+          printf '%s  %s\n' 6499ad14c3248cf896e2f054968515f0dec72d09476256e01c69cbe764dd91c2 "$root/yc" | sha256sum -c --status
+          chmod 700 "$root/yc"
+          "$root/yc" config profile create mira-diagnostics >"$REPORT_DIR/setup.txt" 2>&1
+          "$root/yc" config set service-account-key "$root/key.json" >>"$REPORT_DIR/setup.txt" 2>&1
+          yc() { timeout 22s "$root/yc" --retry 1 --folder-id "$YC_FOLDER" "$@"; }
+          capture() {
+            local name=$1
+            shift
+            local result=0
+            yc "$@" >"$REPORT_DIR/$name" 2>"$REPORT_DIR/$name.stderr" || result=$?
+            printf '%s %s\n' "$name" "$result" >>"$REPORT_DIR/status.txt"
+          }
+          capture function.json serverless function get --name mira-auth --format json
+          capture database.json ydb database get --name mirabaza --format json
+          capture versions.json serverless function version list --function-name mira-auth --limit 1 --format json
+          if version=$(jq -er '.[0].id' "$REPORT_DIR/versions.json" 2>/dev/null); then
+            if yc serverless function version get --id "$version" --format json 2>"$REPORT_DIR/version.stderr" |
+                jq '{runtime,entrypoint,memory,execution_timeout,service_account_id,environment_keys:(.environment|keys? // []),network_id}' >"$REPORT_DIR/version.json"; then
+              printf 'version.json 0\n' >>"$REPORT_DIR/status.txt"
+            else
+              printf 'version.json 1\n' >>"$REPORT_DIR/status.txt"
+            fi
+          fi
+          capture recent.log serverless function logs --name mira-auth --since 72h --limit 35 --max-response-size 512K
+          if jq -e '.endpoint | type=="string"' "$REPORT_DIR/database.json" >/dev/null 2>&1; then
+            if token=$(yc iam create-token 2>"$REPORT_DIR/token.stderr"); then
+              if (cd "$root" && npm install --ignore-scripts --no-audit --no-fund --no-package-lock ydb-sdk@5.11.1) >"$REPORT_DIR/sdk-install.txt" 2>&1; then
+                (cd "$root" && YDB_DIAG_TOKEN="$token" timeout 40s node - <<'JS'
+          const fs=require('node:fs');
+          const {Driver,TokenAuthService}=require('ydb-sdk');
+          const endpoint=new URL(JSON.parse(fs.readFileSync(process.env.REPORT_DIR+'/database.json')).endpoint);
+          const database=endpoint.searchParams.get('database') || endpoint.pathname;
+          if (endpoint.protocol!=='grpcs:' || !database.startsWith('/') || database==='/') throw Error('Invalid YDB endpoint metadata');
+          const driver=new Driver({connectionString:'grpcs://'+endpoint.host+'?database='+encodeURIComponent(database),
+            authService:new TokenAuthService(process.env.YDB_DIAG_TOKEN),poolSettings:{minLimit:0,maxLimit:2}});
+          (async()=>{
+            try {
+              if (!await driver.ready(5000)) throw Error('YDB discovery timeout');
+              const {children}=await driver.schemeClient.listDirectory(database);
+              const tables=[];
+              for (const child of (children||[]).slice(0,25)) {
+                if (child.type!==2 && child.type!==13) continue;
+                const result=await driver.tableClient.withSession(session=>session.describeTable(database+'/'+child.name),4000);
+                tables.push({name:child.name,columns:result.columns,primaryKey:result.primaryKey});
+              }
+              fs.writeFileSync(process.env.REPORT_DIR+'/schema.json',JSON.stringify({tables}));
+            } finally {await driver.destroy();}
+          })().catch(error=>{console.error(error.name,error.message);process.exitCode=1;});
+          JS
+                ) >"$REPORT_DIR/schema.stdout" 2>"$REPORT_DIR/schema.stderr" && printf 'schema.json 0\n' >>"$REPORT_DIR/status.txt" || printf 'schema.json 1\n' >>"$REPORT_DIR/status.txt"
+              fi
+              unset token
+            fi
+          fi
+          tar -C "$REPORT_DIR" -czf "$root/diagnostics.tar.gz" .
+          REPORT_INPUT="$root/diagnostics.tar.gz" REPORT_OUTPUT="$RUNNER_TEMP/mira-cloud-diagnostics.enc" node - <<'JS'
+          const fs=require('node:fs');
+          const crypto=require('node:crypto');
+          const pub=crypto.createPublicKey({key:Buffer.from(process.env.REPORT_PUBLIC_KEY,'base64'),type:'spki',format:'der'});
+          const key=crypto.randomBytes(32), iv=crypto.randomBytes(12);
+          const cipher=crypto.createCipheriv('aes-256-gcm',key,iv);
+          const ct=Buffer.concat([cipher.update(fs.readFileSync(process.env.REPORT_INPUT)),cipher.final()]);
+          const wrapped=crypto.publicEncrypt({key:pub,oaepHash:'sha256'},key);
+          const encode=value=>value.toString('base64');
+          fs.writeFileSync(process.env.REPORT_OUTPUT,JSON.stringify({v:1,key:encode(wrapped),iv:encode(iv),tag:encode(cipher.getAuthTag()),data:encode(ct)}));
+          JS
+          printf 'ready=true\n' >> "$GITHUB_OUTPUT"
+          printf 'Encrypted report generated.\n'
+      - name: Save the encrypted report
+        if: steps.diagnosis.outputs.ready == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mira-cloud-diagnostics
+          path: ${{ runner.temp }}/mira-cloud-diagnostics.enc
+          retention-days: 3
+          if-no-files-found: error
