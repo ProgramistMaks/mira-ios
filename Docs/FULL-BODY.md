@@ -1,0 +1,149 @@
+# Full-body articulation and secondary motion
+
+Vita's appearance, base camera and lighting are retained. `Renderer/body.mjs`
+adds 93 bounded channels shared by the native settings and the browser test site.
+These are controls, not 93 independent animation clips. The existing 52 gestures
+and 29,952 compositional IDs remain stable.
+
+## Available movement
+
+- All 30 finger joints, including VRM-normalized thumb metacarpal/proximal/distal;
+  independent left/right phalanges, finger spread and thumb opposition.
+- Shoulder elevation/protraction; upper arm, elbow, forearm axial twist and
+  two wrist axes. Forearm rotation preserves the wrist centre.
+- Spine/chest, three neck and head axes, pelvis translation and three rotations.
+- Knee-driven foot lift, explicit foot lift/forward/side targets, ankle pitch/roll
+  and toes. Two-bone IK preserves bone lengths and the other foot's contact.
+  Manual knee input sets an IK target through chain geometry, not an exact knee
+  angle when other pelvis/foot controls are combined. This is not a walking system.
+- VRM eye yaw/pitch, separate eyelids and five existing mouth vowel morphs.
+  Face demonstration is explicitly a test. During speaking, real audio amplitude
+  retains mouth priority; phoneme extraction/lip sync is not implemented here.
+- Natural behavior adds separated finger motion, thumb opposition, mild shoulder
+  participation, neck rotation and pelvis micro-motion. Dedicated hands/body/legs/
+  face demos and manual controls replace normal gestures until reset. Transitions
+  use velocity-preserving joint following, and Reduce Motion overrides test loops too.
+
+The original Vita asset has no separate coccyx bone. This region moves through the
+pelvis. Extreme simultaneous manual joint angles can intersect body/clothing;
+there is no full-body contact or self-collision solver.
+
+## Physics and mesh
+
+The existing VRM asset has 18 spring groups and 80 simulated joints, including
+50 for hair, 18 for the skirt, 8 for sleeves and 4 for the chest. A flex point on
+each of Vita's two ear meshes lets the tip lag behind turns and footfalls while the
+base stays attached to the head. The chest and top expand together during a breath.
+A constant downward force on Vita's four chest joints models weight. At default
+softness the measured body and top vertices settle about 7–8 mm below the unloaded
+pose. The torso leads during a crouch or rise, and the surfaces briefly overshoot
+at the stop. Reduce Motion holds the loaded pose when physics is enabled.
+Original collider memberships are retained. A single VRM update hook advances springs at 120 Hz with at most six
+steps per rendered frame, bounded wind and softness settings. This is simulation
+frequency, not a claim of 120 rendered FPS. Hidden time is not replayed. Physics
+can be disabled and respects Reduce Motion; re-enabling resets stale state.
+
+Hair, skirt and sleeve motion uses bone-chain springs. It is not surface cloth
+simulation, cloth self-collision, or independently simulated rigid accessories.
+Unrigged/fixed accessories follow their parent skin bones. Making every such
+piece swing independently requires authoring its geometry, weights, attachment
+bones and collision shapes; no fake independent accessory physics is claimed.
+
+Vita initially has 26,130 triangles (hair 11,972). Optional hair subdivision
+produces 62,046 total triangles (hair 47,888), interpolating skin weights and UVs
+while retaining the original rest surface and face morphs. It does not create
+new strands or texture detail. Standard density is the default. High-density
+geometry is bounded, opt-in, and released when returning to standard. Imported
+meshes with morph targets, excessive size or unsupported geometry are not
+subdivided. More vertices do not by themselves create more physical joints.
+
+## Verification on 2026-11-17
+
+- 50 renderer unit tests: phalanx isolation, control limits, smooth reset, all
+  demo loops, incomplete rigs, nonaccumulating transforms, leg contacts, skin
+  interpolation, fixed physics steps at 30/60/120/240 rendering schedules.
+- `node Scripts/check-body-rig.mjs`: loads the actual bundled GLB/VRM with texture
+  decoding replaced by a single pixel (no browser/GPU). Checks all 30 phalanges,
+  real shoulder lift direction, supported eye/vowel controls, 5 animation modes,
+  spring transforms, normalized interpolated weights and both mesh counts.
+  Maximum normalized foot target error is below 1e-12 model units. This is
+  geometry/skeleton evidence, not visual quality or physical iPhone performance.
+- TypeScript check and renderer production build; Swift syntax parsing only,
+  without an Apple SDK. Native compile and device acceptance remain outstanding.
+- Private Site tests exercise the real control wiring in a DOM model. Managed
+  browser QA is unavailable; no substitute browser-control path was used.
+
+No paid macOS workflow was dispatched for this update. The last known GitHub
+billing block remains unresolved; no new IPA is claimed. See QUALITY.md.
+
+## Natural behavior revision
+
+`natural-behavior.mjs` replaces short repeated secondary loops with seeded,
+phase-aware events and quiet intervals: sequential finger release, palm opening,
+wrist relaxation, thumb/index gathering, finger extension/spread, one-sided
+shoulder adjustment, attentive nod and foot unloading after support transfer.
+Events avoid immediate repetition; they do not infer emotion or semantic agreement.
+Large authored arm gestures suppress competing hand events. Greeting, touch,
+manual catalogue choices, body demos and Reduce Motion retain priority.
+
+Gaze changes start in the eyes; head, neck, trunk, wrists and phalanges use
+separate critically damped response rates with velocity preserved through target
+changes. Breath duration and inhale/exhale timing vary by cycle. Weight shifts
+hold for 9–18 seconds instead of continuously rocking side to side. Natural gaze
+uses VRM's supported eye control and irregular blinks, occasionally paired.
+The upper-chest bone now participates in breathing and torso movement.
+Audio remains the sole source of speaking mouth amplitude; no synthetic lip sync.
+
+54 renderer tests pass, including deterministic event schedules, actual pauses,
+context suppression, joint limits, interruption continuity and frame-rate
+independence of the joint follower. The real Vita geometry probe runs 90 seconds
+of natural movement plus joint demonstrations; foot-target error remains below
+1e-12 model units. TypeScript/build and Swift syntax checks pass. This does not
+establish human-quality acting: visual review, contact quality and measured
+physical iPhone performance remain unverified. No paid native build dispatched.
+
+## Gesture regression repair and complete catalogue audit
+
+A user reported stationary/identical arms and an incorrect hand-to-heart gesture.
+Reproduction on the actual Vita skeleton found its old wrist about 0.40 model
+units lateral to the chest; VRM0 forward-arm yaw also pointed behind the torso.
+Body demo/manual mode could overwrite selected catalogue gestures entirely, and
+silent speaking attenuated manual previews. The looping conversational base also
+obscured differences between small preview gestures.
+
+Corrections:
+- Forward yaw now follows the VRM convention. Body elbow controls allow the
+  existing authored 2.6-radian range instead of truncating at 1.8.
+- Near-chest and left/right waving use body-relative wrist goals and two-bone IK.
+  Goals blend through complete solved joint rotations, avoiding elbow pole flips.
+  Arm lengths remain fixed; IK elbow bend is limited to 2.6 radians, forearm twist
+  to 1.2 and combined wrist bend to 0.6. Near-chest is not guaranteed cloth contact.
+- Manual catalogue previews use a quiet base, retain full gesture amplitude in
+  all conversation phases, and cancel a decorative greeting when selected.
+- Site gesture selection exits body demo mode, resumes the scene and replays the
+  selected track. Reduced Motion is respected and reported, not silently disabled.
+  Native catalogue pickers also restore body gesture mode.
+- Soft nod has a single stroke, double nod keeps two, head tilts have a sustained
+  hold, looking over a shoulder turns the torso, and shrug uses shoulder bones.
+  IDs remain stable. Similar nod/listening families are not claimed to be wholly
+  different activities; numerical trajectory uniqueness is not visual acceptance.
+
+`Scripts/check-gesture-catalog.mjs` runs all 52 tracks through the production
+PerformanceController -> BodyController -> stance/arms/articulation/targets ->
+real VRM retargeting stack at 60 Hz, 70% intensity, neutral emotion and stance.
+It checks finite/bounded controls, nonzero joint motion, fixed segment lengths,
+raw vs normalized wrist positions, IK goals and frame discontinuities, and reports
+nearby trajectories using both translation and quaternion rotation. It writes
+`/tmp/mira-gesture-audit.json`; this is a reproducible diagnostic, not a screenshot.
+
+Observed maxima: elbow 2.27536 rad; target error 4.94e-7 model units; raw skin-wrist
+retarget error 8.96e-16; tracked joint displacement 0.03248 model units/frame and
+angular displacement 0.09040 rad/frame. Wrist-goal constraints are checked at full
+reach. These are sampled motion bounds, not a claim of full-body collision safety.
+
+58 renderer tests pass, including both facing conventions, incomplete arm rigs,
+all 52 manual gestures across four phases, and replay/greeting interruption.
+13 Site tests pass, including selection from a conflicting body demo and replay.
+TypeScript, production build and Swift syntax parsing pass. Managed browser QA
+is unavailable; no alternative browser path was used. Visual review, full cloth
+collision, native compilation and physical iPhone testing remain outstanding.

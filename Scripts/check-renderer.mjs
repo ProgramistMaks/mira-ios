@@ -3,7 +3,8 @@ import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { speechProbeBundle, checkSpeech } from './check-speech.mjs';
+import { speechProbeBundle, checkSpeech, checkDisplayClock } from './check-speech.mjs';
+import { encodeVariant, VARIANT_COUNT } from '../Renderer/expression-library.mjs';
 
 const root = new URL('../Resources/Web/', import.meta.url);
 const speechProbe = await speechProbeBundle();
@@ -11,8 +12,14 @@ const morphProbe = await build({ entryPoints: ['Scripts/check-morphs.mjs'], bund
   write: false, format: 'esm', target: ['chrome120'] });
 const stanceProbe = await build({ entryPoints: ['Scripts/check-stance.mjs'], bundle: true,
   write: false, format: 'esm', target: ['chrome120'] });
+const armsProbe = await build({ entryPoints: ['Scripts/check-arms.mjs'], bundle: true,
+  write: false, format: 'esm', target: ['chrome120'] });
 const server = createServer(async (request, response) => {
   const path = new URL(request.url, 'http://localhost').pathname;
+  if(path==='/check-arms.js') {
+    response.setHeader('Content-Type','application/javascript');
+    response.end(armsProbe.outputFiles[0].contents);return;
+  }
   if (path === '/check-morphs.js') {
     response.setHeader('Content-Type', 'application/javascript');
     response.end(morphProbe.outputFiles[0].contents); return;
@@ -35,6 +42,11 @@ let browser;
 try {
   browser = await chromium.launch({ args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage();
+  // Same production source with read-only test getters. Sample pose time, not wall
+  // sleeps: software WebGL can render slower than the intended display cadence.
+  await page.route('**/avatar.js', route => route.fulfill({
+    contentType:'application/javascript', body:Buffer.from(speechProbe),
+  }));
   const errors = []; const external = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (!request.url().startsWith('http://127.0.0.1') && !request.url().startsWith('blob:')) external.push(request.url()); });
@@ -42,6 +54,12 @@ try {
   await checkSpeech(browser, address, speechProbe);
   await page.goto(address);
   await page.waitForFunction(() => window.companion?.ready === true, undefined, { timeout: 30000 });
+  await checkDisplayClock(page);
+  const arms=await page.evaluate(async () => (await import('/check-arms.js')).checkArms());
+  assert.ok(arms.minPalmTurn>1,JSON.stringify(arms));
+  assert.ok(arms.minWristFlex>.3,JSON.stringify(arms));
+  assert.ok(arms.maxWristDrift<.00001,JSON.stringify(arms));
+  console.log('Actual VRM wrist regression:',JSON.stringify(arms));
   await page.evaluate(() => { document.body.style.background = '#0e0e13'; });
   await mkdir('/tmp/companion-review', { recursive: true });
   await page.setViewportSize({ width: 390, height: 420 });
@@ -87,6 +105,52 @@ try {
   await page.waitForFunction(() => document.documentElement.dataset.motion === 'reduced');
   await page.waitForTimeout(500);
   await page.screenshot({ path: '/tmp/companion-review/reduced-motion.png' });
+  assert.equal(await page.evaluate(() => window.companion.variantCount), VARIANT_COUNT);
+  await page.setViewportSize({ width: 480, height: 720 });
+  await page.evaluate(() => {
+    document.body.style.background = '#f5f0e4';
+    window.companion.setViewport(480,720);
+    window.companion.setFrameRate(30);
+    window.companion.setState('idle',false);
+  });
+  const wristReview=process.argv.includes('--wrists');
+  for(const [name,gesture,emotion,gaze,stance] of (wristReview ? [
+    ['wrist-turn-left',48,1,0,0],['wrist-turn-right',49,1,0,0],
+    ['wrist-flex-left',50,3,0,0],['wrist-flex-right',51,3,0,0],
+  ] : [
+    ['warm-palms',8,1,0,0], ['joy-wave',14,2,1,1],
+    ['thoughtful',17,5,4,4], ['surprised',11,11,3,2],
+    ['supportive',12,8,0,3], ['confident',22,7,2,5],
+    ['natural-question',26,4,0,0], ['natural-options',27,7,0,1],
+    ['natural-outline',28,1,0,2], ['natural-listening',34,8,0,0],
+    ['natural-hands',37,3,0,4], ['natural-explanation',39,1,0,3],
+  ])) {
+    const variant=encodeVariant(gesture,emotion,gaze,stance);
+    await page.evaluate(variant => window.companion.configurePerformance({variant,intensity:1}),variant);
+    await page.waitForFunction(variant => document.documentElement.dataset.variation===String(variant),variant);
+    await page.waitForFunction(() => window.speechProbe.performanceProgress>=.34);
+    await page.evaluate(() => window.companion.setActive(false));
+    await page.screenshot({path:`/tmp/companion-review/performance-${name}.png`});
+    if(wristReview) {
+      await page.screenshot({path:`/tmp/companion-review/${name}-stroke.png`,clip:{x:0,y:150,width:480,height:280}});
+      await page.evaluate(() => window.companion.setActive(true));
+      await page.waitForFunction(() => window.speechProbe.performanceProgress>=.54);
+      await page.evaluate(() => window.companion.setActive(false));
+      await page.screenshot({path:`/tmp/companion-review/${name}-turn.png`,clip:{x:0,y:150,width:480,height:280}});
+    }
+    if(name==='natural-options') {
+      await page.evaluate(() => window.companion.setActive(true));
+      await page.waitForFunction(() => window.speechProbe.performanceProgress>=.52);
+      await page.evaluate(() => window.companion.setActive(false));
+      await page.screenshot({path:'/tmp/companion-review/performance-options-handoff.png'});
+      await page.evaluate(() => window.companion.setActive(true));
+      await page.waitForFunction(() => window.speechProbe.performanceProgress>=.92);
+      await page.evaluate(() => window.companion.setActive(false));
+      await page.screenshot({path:'/tmp/companion-review/performance-options-release.png'});
+    }
+    await page.evaluate(() => window.companion.setActive(true));
+  }
+  await page.evaluate(() => window.companion.configurePerformance({variant:-1,intensity:.7}));
   for (const [width, height] of [[390, 420], [700, 800], [300, 400]]) {
     await page.setViewportSize({ width, height });
     await page.evaluate(({ width, height }) => window.companion.setViewport(width, height), { width, height });
@@ -143,7 +207,7 @@ try {
   await broken.goto(address);
   await broken.waitForFunction(() => document.documentElement.dataset.status === 'error');
   assert.equal(await broken.evaluate(() => window.companion.ready), false);
-  console.log('PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; planted raw and normalized feet across all stance clips; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.');
+  console.log(`PASS: VRM loads; authored state poses, actual hit-tested touch, drag/background rejection, reduced motion; ${wristReview?'four wrist performances with close-up stroke/turn frames':'twelve composed performances and staged hand-off/release'}; three sizes; WebGL loss/reload recovery; equivalent optimized facial morphs; planted raw and normalized feet; actual raw/normalized hand rotation; no external fetches; explicit missing-model error. Chromium only, not WKWebView/device QA.`);
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));

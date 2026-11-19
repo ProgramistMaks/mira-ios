@@ -50,3 +50,24 @@ test('invalid inputs do not poison the next valid display callback', () => {
   }
   assert.equal(pacer.shouldRender(0, 120), true);
 });
+
+test('rounded and alternating display timestamps preserve 120 distinct render slots', () => {
+  for (const jitter of [i=>Math.floor(i*1000/120),i=>i*1000/120+(i%2?-.8:.4)]) {
+    const pacer = new FramePacer();
+    for (let i=0;i<1200;i++) {
+      const ts=jitter(i);
+      assert.equal(pacer.shouldRender(ts,120),true);
+      assert.equal(pacer.shouldRender(ts,120),false);
+    }
+  }
+});
+
+test('cadence counts rendered intervals and excludes a paused recording', async () => {
+  const {RenderCadence}=await import('./frame-pacer.mjs');
+  const meter=new RenderCadence();
+  for(let i=0;i<240;i++) assert.equal(meter.sample(i*1000/120),undefined);
+  assert.deepEqual(meter.sample(2000),{fps:120,p95ms:8.3});
+  meter.reset();
+  for(let i=0;i<120;i++) assert.equal(meter.sample(10000+i*1000/60),undefined);
+  assert.deepEqual(meter.sample(12000),{fps:60,p95ms:16.7});
+});

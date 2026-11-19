@@ -1,5 +1,9 @@
 # Liquid Glass
 
+The 2026-11-17 cream redesign uses warm paper, olive text and honey accents. The home
+keeps glass on its compact conversation dock and settings control; light chat/forms
+remain content surfaces. Browser preview glass is an approximation, not iOS evidence.
+
 Mira uses native SwiftUI Liquid Glass on iOS 26 and later. The project builds with Xcode 26.6 / iOS 26.5 SDK and keeps its iOS 18 deployment target.
 
 - `App/GlassDesign.swift` scopes availability checks to presentation components. Custom surfaces use `.glassEffect(.regular, in:)`; actions use native `.glass` / `.glassProminent` button styles and circular borders. Grouped controls share a `GlassEffectContainer`.
@@ -12,7 +16,7 @@ CI defaults to macos-26-intel / Xcode 26.6 / iOS 26.5. This configuration compil
 
 Existing UI coverage exercises keyboard input, enabled/disabled sending and minimum 44-point control bounds. A recorded iOS 26 run loaded the character after the original sixty-second deadline, so cold-launch checks now allow 120 seconds while still requiring actual character pixels. A loading indicator makes that state visible to users. Model downloads use a native alert with explicit download/cancel actions because the iOS 26 confirmation popover omitted the implicit cancel action.
 
-Visual review also found insufficient contrast in the iOS 18 send icon; prominent action icons now explicitly use the dark foreground against lavender. Those corrections now have passing iOS 26.5 UI assertions and internally reviewed screenshots. The run still failed its separate widget-route test and hit the overall job limit; see VERIFICATION.md for exact scope and the focused follow-up. Device appearance, startup speed and performance remain unverified.
+Visual review also found insufficient contrast in the iOS 18 send icon; prominent action icons now explicitly use the dark foreground against lavender in that older dark revision. Those corrections now have passing iOS 26.5 UI assertions and internally reviewed screenshots. The run still failed its separate widget-route test and hit the overall job limit; see VERIFICATION.md for exact scope and the focused follow-up. Device appearance, startup speed and performance remain unverified.
 
 Primary references:
 

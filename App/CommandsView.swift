@@ -5,13 +5,26 @@ struct CommandsView: View {
     let proposal: CommandProposal?
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    private enum Action: String, CaseIterable { case note = "Заметка", reminder = "Напомнить", search = "Поиск" }
+    @State private var action: Action = .note
     @State private var text: String
     @State private var completed = false
     init(store: CompanionStore, proposal: CommandProposal? = nil) {
         self.store = store; self.proposal = proposal
         _text = State(initialValue: proposal?.text ?? "")
     }
-    private func allows(_ kind: CommandProposal.Kind) -> Bool { proposal == nil || proposal?.kind == kind }
+    private func allows(_ kind: CommandProposal.Kind) -> Bool {
+        if let proposal { return proposal.kind == kind }
+        switch (action, kind) {
+        case (.note, .note), (.reminder, .reminder), (.search, .search): return true
+        default: return false
+        }
+    }
+    private var inputTitle: String {
+        if allows(.search) { return "Что найти?" }
+        if allows(.reminder) { return "О чём напомнить?" }
+        return "Текст заметки"
+    }
     private func acknowledge(_ detail: String, close: Bool = true) {
         if let proposal {
             guard !completed else { return }
@@ -30,18 +43,29 @@ struct CommandsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                if proposal != nil {
-                    Section {
-                        Text("Проверь текст и подтверди действие. До нажатия кнопки ничего не выполняется.")
-                            .font(.callout).foregroundStyle(.secondary)
+                Section {
+                    if proposal != nil {
+                        MiraScreenIntro(title: "Всё верно?", detail: "Проверь текст. Действие выполнится только после твоего подтверждения.", symbol: "checkmark.bubble")
+                    } else {
+                        MiraScreenIntro(title: "Небольшая помощь на каждый день", detail: "Сохрани мысль, поставь напоминание или найди информацию.", symbol: "square.stack.3d.up")
+                        Picker("Действие", selection: $action) {
+                            ForEach(Action.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }.pickerStyle(.segmented).disabled(searching || saving)
                     }
                 }
-                Section(proposal?.title ?? "Что сделать?") {
-                    TextField("Запрос, заметка или напоминание", text: $text, axis: .vertical)
+                if proposal == nil {
+                    Section {
+                        NavigationLink { RoutinesView(companion: store, routines: store.routines) } label: {
+                            MiraSettingsRow(title: "Сценарии и учёба", detail: "Одна фраза запускает цепочку блоков", symbol: "square.stack.3d.up")
+                        }
+                    }
+                }
+                Section(inputTitle) {
+                    TextField(inputTitle, text: $text, axis: .vertical)
                         .lineLimit(3...6).accessibilityIdentifier("command.input")
                         .disabled(completed || searching || saving)
                     if allows(.search) {
-                        Button(searching ? "Ищу…" : "Искать через Tavily", systemImage: "sparkle.magnifyingglass") {
+                        Button(searching ? "Ищу…" : "Искать в Мире", systemImage: "sparkle.magnifyingglass") {
                             let query = value; searching = true; hits = []
                             searchTask = Task {
                                 defer { searching = false }
@@ -57,7 +81,7 @@ struct CommandsView: View {
                                 } catch { if !Task.isCancelled { result = error.localizedDescription } }
                             }
                         }.disabled(value.isEmpty || searching || completed)
-                        Button("Найти в интернете", systemImage: "magnifyingglass") {
+                        Button("Открыть поиск в браузере", systemImage: "arrow.up.right.square") {
                             let query = value
                             var components = URLComponents(string: "https://www.google.com/search")!
                             components.queryItems = [URLQueryItem(name: "q", value: query)]
@@ -79,14 +103,13 @@ struct CommandsView: View {
                         }.disabled(value.isEmpty || completed).accessibilityIdentifier("command.saveNote")
                     }
                 }
-                if !hits.isEmpty {
+                if allows(.search) && !hits.isEmpty {
                     Section("Источники · Tavily") {
                         ForEach(hits) { hit in
                             if let url = hit.safeURL {
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Link(hit.title, destination: url).font(.headline)
+                                    MiraSourceLink(title: hit.title, url: url)
                                     Text(hit.content).font(.callout).lineLimit(6)
-                                    Text(url.host ?? "").font(.caption).foregroundStyle(.secondary)
                                 }.padding(.vertical, 6)
                             }
                         }
@@ -100,6 +123,11 @@ struct CommandsView: View {
                             .disabled(value.isEmpty || saving || completed)
                     }
                 }
+                if store.notes.isEmpty && allows(.note) && proposal == nil {
+                    Section {
+                        MiraScreenIntro(title: "Здесь будут твои заметки", detail: "Напиши первую мысль выше. Она останется на этом устройстве.", symbol: "note.text")
+                    }
+                }
                 if !store.notes.isEmpty && allows(.note) {
                     Section("Твои заметки") {
                         ForEach(store.notes) { note in
@@ -110,7 +138,8 @@ struct CommandsView: View {
                         }
                     }
                 }
-            }.navigationTitle(proposal?.title ?? "Команды")
+            }.miraForm()
+            .navigationTitle(proposal?.title ?? "Команды").navigationBarTitleDisplayMode(.inline)
             .onDisappear { searchTask?.cancel() }
             .interactiveDismissDisabled(saving)
             .toolbar {

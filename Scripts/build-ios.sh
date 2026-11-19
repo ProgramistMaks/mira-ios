@@ -14,9 +14,10 @@ npm test
 npm run build
 xcodegen generate
 xcodebuild -version
+source Scripts/duo-build-settings.sh
 xcodebuild -project Companion.xcodeproj -scheme Companion -configuration Release \
   -destination 'generic/platform=iOS' -archivePath build/Companion.xcarchive \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
+  "SWIFT_ACTIVE_COMPILATION_CONDITIONS=\$(inherited) $mira_duo_conditions" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
 python3 Scripts/check-widget-bundle.py build/Companion.xcarchive/Products/Applications/Companion.app
 package_root="$(mktemp -d "${TMPDIR:-/tmp}/mira-package.XXXXXX")"
 trap 'rm -rf "$package_root"' EXIT

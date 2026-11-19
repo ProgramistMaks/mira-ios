@@ -1,4 +1,215 @@
-# Verification — 2026-11-16
+# Verification — 2026-11-17
+
+## Continuous hand motion and changes of stance, 2026-11-18
+
+Revision `20d80b0` passed the TypeScript check, renderer build and 85 renderer tests. The local test site passed its 13 tests. During review the Chromium integration checks covered 12 composed performances, three viewport sizes, touch, speech-driven mouth movement, pause and resume, WebGL recovery and both normalized and skinned foot contact.
+
+The final greeting was captured from the front and at 41° with 120 independent animation steps per second. FFprobe reported 564 frames over 4.70 seconds. All 564 decoded composite frames had distinct checksums. The capture uses a controlled clock. Actual display cadence on the physical phone remains unmeasured. The last private iOS job stopped before a build host started, and this animation pass used local checks. [Frame and contact measurements](MOTION-REFERENCE-STUDY.md)
+
+## Seven reference performances, 2026-11-18
+
+Revision `53f8beb` passed the renderer build, TypeScript check and 81 renderer tests. The local test site uses the same motion sources and passed 13 tests. All seven performances were recorded from the app's renderer in front and three-quarter views. The 120 fps dance recording contained 738 distinct decoded frames in 6.15 seconds on a controlled animation clock. The camera comparison used 125 joint markers from 34 intermediate source frames. [Frame measurements](MOTION-REFERENCE-STUDY.md)
+
+One private iOS workflow requested an unsigned archive and simulator tests. GitHub stopped it before macOS started, citing account payment or spending-limit settings. This revision still requires an iOS package, WKWebView verification and a physical iPhone cadence measurement. [Workflow run](https://github.com/ProgramistMaks/mira-ios/actions/runs/44286589797)
+
+## High-refresh playback, 2026-11-18
+
+Native commit `2a782d1` passed 66 renderer tests, TypeScript checking and Swift source parsing. Chromium advanced Vita through 120 distinct animation steps on 120 injected display callbacks, then resumed browser scheduling after a pause. The private site passed 13 controller and contract tests. FFprobe reported 120/1 fps for the recorded 13.5-second clip. All 1,620 decoded frames had distinct checksums. These measurements cover offline rendering and clock integration. Device presentation cadence remains unverified.
+
+GitHub stopped the single package-only build before any steps ran due to an account payment issue or spending limit. [Build 44274749308](https://github.com/ProgramistMaks/mira-ios/actions/runs/44274749308).
+
+## Vita choreography, 2026-11-18
+
+Native commit `74a17a5` passed 62 renderer tests, TypeScript checking, Swift source parsing and five IPA package guard tests. All 16 clips were recorded from the app’s WebGL renderer with Vita in front and three-quarter views. The revised dance includes an alternating support-foot regression. [Reference study](MOTION-REFERENCE-STUDY.md).
+
+The single requested package-only build stopped before macOS started. GitHub reported a payment issue or spending limit. No new IPA was produced. [Build 44271794160](https://github.com/ProgramistMaks/mira-ios/actions/runs/44271794160).
+
+
+## Natural phrasing and 52 gesture tracks
+
+The catalogue expands to 29,952 combinations by appending 28 new gesture tracks.
+Existing saved selections retain their IDs. New tracks use preparation/stroke/hold/
+release, staggered body/hand timing, arm ownership, quiet secondary motion and
+PCM-driven body emphasis. Automatic selection avoids the last four gesture tracks,
+holds mood across several selections and keeps disagreement/stop/celebration manual.
+See [behavior and limits](PERFORMANCE-LIBRARY.md).
+
+- All 44 renderer tests pass. The exhaustive numerical checks now cover 29,952
+  distinct trajectories and bounds. New checks cover stable old IDs, gesture-level
+  non-repetition, mood persistence, phrase endpoints, arm ownership, actual-audio
+  onset/refractory behavior and continuous release from greeting/touch.
+- TypeScript check, renderer build and changed Swift syntax parsing pass.
+- Browser QA extends speech checks to the actual body-energy bridge, silence and
+  Reduced Motion. The choreography pass sampled twelve composed performances plus comparison-gesture
+  hand-off/release on the bundled Vita. The real-rig stance probe now checks
+  3,684 poses. These remain browser checks, not WKWebView/device evidence.
+- Independent wrist controls move palm pronation to the forearm and add separate
+  wrist flexion. Three additional arm tests verify orientation changes, fixed wrist
+  centres during isolated controls, reset/no drift and incomplete-rig handling in
+  both facing conventions, including angled forearm rest axes. A real-Vita probe
+  initially found 17.7 mm wrist drift with a fixed X-axis twist; measuring the actual
+  elbow-to-wrist axis corrects that fault. Browser review includes four wrist tracks in close-up
+  and a separate measurement of raw/normalized Vita hand rotations: palm turn
+  1.05 rad, flexion 0.32 rad, maximum isolated wrist-centre drift 5.56e-17 model units.
+  The final wrist follow-up also passed all browser speech, three-size, touch,
+  pause/resume, context-recovery, morph and stance regressions.
+- New code and catalogue add about 16 KB over the previous animation revision
+  before IPA compression. The character asset, camera and lighting are unchanged.
+
+Human-quality motion is not established by numeric uniqueness. Full visual
+self-intersection coverage, physical-device performance and reference comparison
+remain open. No paid macOS workflow or new IPA was produced for this change.
+
+## 13,824 compositional character performances
+
+The character now has 24 additive gestures × 12 emotional styles × 8 gaze targets
+× 6 grounded stances, selectable in native settings. These are distinct combinations,
+not 13,824 independent authored clips. See [catalogue and limits](PERFORMANCE-LIBRARY.md).
+
+- All 34 renderer tests pass, including exhaustive uniqueness of sampled trajectories
+  for all 13,824 identifiers, bounded joints/faces, recent-repeat exclusion, phase
+  eligibility, interruption continuity, reduced motion and frame-step consistency.
+- TypeScript checking and renderer build pass. Changed SwiftUI files pass syntax
+  parsing; this is not Apple SDK typechecking.
+- Actual-Vita Chromium QA covers six composed performances, three viewport sizes,
+  speech-driven mouth motion, touch/drag, pause/resume and context-loss recovery.
+  The real-rig probe checks 2,340 samples, including every gesture/stance pair on
+  four base poses at two points. Feet, rotations and bone lengths retain tolerance
+  below 1e-5. Optimized facial morphs match the original model (maximum delta 0).
+- Visual review identified overly wide gestures; their authored tracks were narrowed.
+  This is sampled browser evidence, not exhaustive collision testing or device QA.
+- The compiled renderer plus catalogue grows by about 17 KB before IPA compression.
+  No large clip pack, network download or separate animation service was introduced.
+
+No macOS run or new IPA was produced. Native settings, WKWebView performance and
+physical-device/reference-quality acceptance remain unverified. The latest known
+GitHub billing block was not bypassed and no paid workflow was dispatched.
+
+## Themes, Duo geometry and reference actions
+
+Latest source adds four persistent themes, removes redundant reply/home playback
+controls, adds editable routines with a study timer, optional Fish Audio voices,
+and local VRM import. Geometry responds to window size and, when compiled with an
+iOS 27.1+ SDK, documented fold/camera reserved regions. See
+[feature scope, sources and limitations](DUO-AND-REFERENCE-FEATURES.md).
+
+12 focused portable tests passed; Swift syntax, project/workflow YAML and build
+scripts checked. Browser previews cover 16 secondary screens at three widths and
+four themes in five size/fold cases. These are not native/device/service checks.
+No macOS run or IPA was produced. The prior billing block remains unresolved.
+
+## Whole-interface cream pass
+
+The native chat, model catalogue, commands and settings now share warm paper
+surfaces, source cards and readable status notices. Settings use focused navigation
+pages for voice, search, cloud, widgets, appearance and local data. Chat preserves
+draft-restore confirmation and adds explicit reply playback. Model search and
+installed filtering preserve download, verification, pause and deletion controls.
+Manual commands show one action at a time; proposed actions still require confirmation.
+Search probing requires the displayed key to be saved, and saved indicators reset
+when connection details change. No renderer, character or runtime files changed.
+
+Local verification for this pass:
+
+- Changed SwiftUI files passed Swift frontend syntax parsing (no Apple SDK typecheck).
+- All 11 labelled browser previews fit 390, 320 and 844-pixel widths, including
+  scrollable content and visible close controls. Settings, models, sample messages
+  and commands screenshots were inspected. Filtering, command tabs and suggestions
+  passed browser interaction checks; no microphone, cloud API or downloads invoked.
+- These are design previews, not native screenshots. Native navigation, accessibility,
+  Dynamic Type, keyboard layout and service behavior remain to be checked on iOS.
+- No paid macOS workflow dispatched; the previously recorded billing block remains.
+
+## Interface refinement; character explicitly retained
+
+The user confirmed that they really like Vita. This revision changes only native
+interface composition/styles and the labelled browser preview: compact Home / Commands
+/ Settings navigation, a left-aligned reply card, smaller rectangular voice controls
+and actual state labels. No renderer, camera, lighting, animation or model file changed.
+Swift syntax parsing passed. Browser review passed at 390×780, 320×568, 844×390 and
+820×1000, including all action hit targets within the frame and no horizontal overflow.
+Images are saved separately from the previous cream version. No macOS build was
+launched and native typography/glass/layout remain pending verification.
+
+
+## Cream design selected by the user — local visual review
+
+The user explicitly chose the reference's light cream direction on 2026-11-17.
+The native home now uses warm paper/olive/honey tokens, a compact wordmark/header,
+a larger character scene and a slim glass conversation dock. Chat/settings adopt
+light surfaces, and the Dynamic Island retains its system-dark surface with a
+matching honey accent. Character lighting and camera framing were adjusted.
+The original Vita asset is unchanged and still differs from the reference character.
+
+TypeScript checks, renderer build, all 27 renderer tests and Swift syntax parsing
+passed. The real bundled VRM was visually reviewed in an explicitly labelled browser
+preview at 390×780, 320×568, 844×390 and 820×1000, including active conversation and
+optional chat. Control bounds and no horizontal overflow passed. The native startup
+pixel assertion now requires character color rather than general brightness, which
+would incorrectly accept an empty cream background.
+
+These are browser design screenshots, not native screenshots. The final native
+layout/glass, accessibility sizes and physical-device voice/search remain unverified.
+No GitHub Actions run or new IPA was produced for this design change. See
+`Design/README.md` for reproduction and exact preview limitations.
+
+
+## Last macOS attempt: blocked by GitHub billing
+
+Source at the last macOS attempt: `561dd63` on `rebuild/voice-first` (draft PR #1).
+Run `43972857986` did not start any job steps. GitHub check annotation:
+“The job was not started because recent account payments have failed or your
+spending limit needs to be increased. Please check the 'Billing & plans' section
+in your settings”. This establishes an account billing/spending restriction;
+it does not distinguish a failed payment from a spending cap. No billing settings
+were changed and no further runs were dispatched.
+
+All 79 portable tests passed locally and on macOS. Device compilation/package
+validation passed for earlier rebuild source `d6a2c3d`; the subsequent chat/settings
+error-presentation correction at `561dd63` has only Swift syntax validation.
+The full native suite never executed for this rebuild, so automatic microphone
+turn-taking, actual updated playback callbacks and new UI screenshots are unverified.
+Live Tavily/device/provider testing and reference-quality acceptance remain open.
+No replacement IPA was delivered as finished. The internal older 0.2 artifact does
+not include the final modal-error correction and must not be presented as the latest
+validated app. See the scoped run records below.
+
+## 0.2 automatic-conversation rebuild — archive passed, test-launch repair
+
+User rejected the delivered candidate and confirmed automatic turn-taking plus a
+large character/minimal controls. Branch `rebuild/voice-first` replaces the old
+manual voice panel, separates chat, adds measured silence/text endpoint detection,
+session-gated microphone restart after actual playback, direct speech fallback,
+independent Apple-recognition consent and direct Tavily search with source storage.
+All 79 portable tests passed locally (2026-11-16); changed Swift sources also parsed.
+Native tests now exercise the new home/chat flow and playback completion/cancellation.
+No live Tavily credentials, microphone result or visual parity is claimed by these
+local checks. Model downloads/runtime are unchanged; weights remain outside the IPA.
+Run `43970432109` for source `d6a2c3d` passed the macOS portable suite,
+renderer checks, actual device compilation and package validation. Internal artifact
+`14278950881` was downloaded and checked again against the CI report. Version 0.2.0
+(build 2), 15,846,409 bytes; SHA256
+`d977c5cb05402398ef8b347d1849ddd481ef8f35e143354e29098592c51510c2`.
+The original package declares device families `[1, 2]` and all four orientations.
+Native execution failed before xcodebuild: the macOS Bash 3.2 script raised
+`test_selection[@]: unbound variable` when full scope expanded an empty array under
+`set -u`. This is a test-launch bug, not a native assertion result. The script now
+uses positional arguments, whose empty expansion is safe; both full/focused argument
+paths are checked locally. Simulator and xcodebuild logs are now uploaded even when
+no XCResult exists, so CI finalization does not hide the error. This internal IPA
+has not been handed to the user as a completed replacement.
+
+Follow-up `43972238536` passed portable checks, then was intentionally cancelled
+during device archiving to include a modal error-reporting correction before native
+execution. Chat now owns its search/provider error alert and draft-replacement
+dialog; settings also displays voice-service errors while presented. The updated UI
+case submits a search without a key, verifies a visible Tavily setup error over the
+chat sheet and verifies that the query is retained. No native result is claimed for
+that cancelled run.
+
+The simulator boot budget is seven minutes because the previous four-minute run
+was still finishing first-boot migration. The overall job remains bounded.
+
 
 ## User-reported layout defect — correction not yet visually verified
 
@@ -53,7 +264,7 @@ acceptance remain open. No public release was created.
 Run `43963647091` (source `3fbfd42`) passed the repaired shared/HTTP checks,
 restored the cached runtime and compiled/validated the updated device IPA. Its
 native test step failed before creating an XCResult; no simulator artifact was
-uploaded. The job is still finalizing, so the complete failure log is pending.
+uploaded. The subsequently recovered log confirms a simulator first-boot timeout at 240 seconds.
 The latest pinned voice controls and corrected warm-route test remain unverified.
 
 The user explicitly asked to speed up delivery. The workflow now saves the internal
@@ -601,3 +812,11 @@ pixels, settings, note persistence and portrait/landscape screenshots.
 - Perceived reference-voice comparison, final animation/voice quality and visual parity. Full machine transcription and feature review are recorded in REFERENCE-REVIEW.md.
 
 See QUALITY.md for the full delivery gate. Successful CI does not clear it.
+
+## Full-body controls and physics, 2026-11-17
+
+See [FULL-BODY.md](FULL-BODY.md) for 93 control channels, 50 renderer tests and
+actual Vita skeleton/mesh checks. Hair density is measured at 26,130 / 62,046
+whole-character triangles; physics uses 80 existing spring joints. These checks
+are independent of visual/device acceptance. Swift parsing does not establish
+native type checking. No new macOS run or IPA was produced for this update.

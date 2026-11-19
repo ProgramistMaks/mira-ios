@@ -11,6 +11,8 @@ export async function speechProbeBundle() {
     contents: source.replace(marker, `${marker}
       Object.defineProperty(window, 'speechProbe', { get: () => ({
         input: speechSamples.level(), mouth: avatar.expressionManager?.getValue('aa') ?? 0, elapsed,
+        bodyEnergy: acting.emphasis.energy,
+        performanceProgress: acting.age / acting.duration,
       }) });`),
     resolveDir: new URL('../Renderer/', import.meta.url).pathname, loader: 'ts',
   }, bundle: true, write: false, format: 'iife', target: ['chrome120'] });
@@ -58,6 +60,15 @@ export async function checkSpeech(browser, address, bundle) {
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => window.speechProbe.input), 0);
     assert.ok(await page.evaluate(() => window.speechProbe.mouth < 0.001));
+    // Production PCM bridge also drives restrained body emphasis, independently
+    // of phoneme/mouth feedback. Reduced Motion must still disable that layer.
+    await page.evaluate(() => { window.companion.setState('speaking',false); window.feedSpeech(.9); });
+    await page.waitForFunction(() => window.speechProbe.bodyEnergy>.7);
+    await page.evaluate(() => window.feedSpeech(0));
+    await page.waitForFunction(() => window.speechProbe.bodyEnergy<.04 && window.speechProbe.mouth<.001);
+    await page.evaluate(() => { window.companion.setState('speaking',true); window.feedSpeech(.9); });
+    await page.waitForFunction(() => window.speechProbe.mouth>.6);
+    assert.equal(await page.evaluate(() => window.speechProbe.bodyEnergy),0);
     await page.evaluate(() => window.feedSpeech(0.9));
     await page.waitForFunction(() => window.speechProbe.mouth > 0.6);
     await page.evaluate(() => window.companion.setState('idle', true));
@@ -114,4 +125,38 @@ async function checkTimeline(page) {
   await page.evaluate(() => window.companion.setActive(true));
   assert.ok(Math.abs(await step(300000) - before - 0.0125) < 1e-9);
   console.log('Timeline regression: real scene preserves time across pause/resume and advances at injected 120/240 Hz intervals. Not a device frame-rate measurement.');
+}
+
+export async function checkDisplayClock(page) {
+  // Both clocks drive the actual WebGL scene. Synthetic vsync timestamps
+  // verify elapsed pose time, independent of the test machine's GPU speed.
+  const sample=await page.evaluate(async () => {
+    const api=window.companion;
+    api.setViewport(96,128);
+    api.setFrameRate(120);
+    api.renderDisplayFrame(400000);
+    const start=window.speechProbe.elapsed;
+    let advanced=0,previous=start;
+    for(let i=1;i<=120;i++){
+      api.renderDisplayFrame(400000+Math.floor(i*1000/120));
+      const elapsed=window.speechProbe.elapsed;
+      if(elapsed>previous)advanced++;
+      previous=elapsed;
+    }
+    await new Promise(done=>setTimeout(done,160));
+    const afterWait=window.speechProbe.elapsed;
+    api.setActive(false);
+    api.renderDisplayFrame(430000);
+    api.setActive(true);
+    api.renderDisplayFrame(450000);
+    const afterResume=window.speechProbe.elapsed;
+    api.releaseDisplayClock();
+    return {advanced,seconds:previous-start,doubleAdvance:afterWait-previous,resumeJump:afterResume-previous,afterResume};
+  });
+  assert.equal(sample.advanced,120);
+  assert.ok(Math.abs(sample.seconds-1)<1e-8);
+  assert.equal(sample.doubleAdvance,0);
+  assert.equal(sample.resumeJump,0);
+  await page.waitForFunction(t=>window.speechProbe.elapsed>t,sample.afterResume);
+  console.log('Display clock: 120 unique pose advances; one second elapsed; paused and browser-clock handover passed.');
 }

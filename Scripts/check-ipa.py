@@ -67,7 +67,7 @@ def validate(path):
         device_binary(read("Frameworks/llama.framework/llama"), "Local AI runtime")
         if "@rpath/llama.framework/llama" not in libraries:
             raise ValueError("App is not linked to its bundled local AI runtime")
-        for relative in ("Web/index.html", "Web/avatar.js", "Web/ASSET-LICENSE.md", "Web/avatar.js.LEGAL.txt"):
+        for relative in ("Web/index.html", "Web/avatar.js", "Web/choreography.json", "Web/body-catalog.json", "Web/ASSET-LICENSE.md", "Web/avatar.js.LEGAL.txt"):
             read(relative)
         if not read("Web/character.vrm").startswith(b"glTF"):
             raise ValueError("Character is not a binary glTF/VRM asset")

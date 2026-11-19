@@ -8,6 +8,8 @@ let package = Package(
     platforms: [.iOS("18.0"), .macOS(.v14)],
     products: [.library(name: "MiraActivityCore", targets: ["MiraActivityCore"])],
     targets: [
+        .target(name: "MiraInteractionCore", path: "InteractionCore"),
+        .testTarget(name: "MiraInteractionCoreTests", dependencies: ["MiraInteractionCore"], path: "InteractionTests"),
         .target(name: "MiraActivityCore", path: "ActivityCore"),
         .testTarget(name: "MiraActivityCoreTests", dependencies: ["MiraActivityCore"], path: "LifecycleTests"),
         .target(name: "MiraDownloadCore", path: "DownloadCore"),

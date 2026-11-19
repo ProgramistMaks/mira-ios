@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { PlantedStance } from '../Renderer/stance.mjs';
 import { CLIPS, sampleClip } from '../Renderer/acting.mjs';
+import { GESTURES, STANCES, encodeVariant, sampleVariant } from '../Renderer/expression-library.mjs';
 
 export async function checkStance() {
   const loader = new GLTFLoader(); loader.register(parser => new VRMLoaderPlugin(parser));
@@ -33,10 +34,20 @@ export async function checkStance() {
   const originalHips = rootPosition(bone('hips'));
   const result = { samples: 0, maxNormalizedFootDrift: 0, maxRawFootDrift: 0,
     maxRawFootAngle: 0, maxLengthChange: 0, maxHipDisplacement: 0, minKneeForward: 0 };
-  for (const [name, clip] of Object.entries(CLIPS)) {
-    for (let t = 0; t <= clip.duration; t += 1 / 30) {
+  function* samples() {
+    for (const [name, clip] of Object.entries(CLIPS)) {
+      for(let t=0;t<=clip.duration;t+=1/30)yield {t,pose:sampleClip(name,t)};
+    }
+    // All gestures and stance choices on every conversational base at both peaks.
+    for(let gesture=0;gesture<GESTURES.length;gesture++)for(let stance=0;stance<STANCES.length;stance++) {
+      for(const phase of ['idle','listening','thinking','speaking'])for(const t of [.22,.43]) {
+        yield {t,pose:sampleVariant(encodeVariant(gesture,0,0,stance),t,sampleClip(phase,t*CLIPS[phase].duration),1)};
+      }
+    }
+  }
+  for (const {t,pose} of samples()) {
       turntable.rotation.y = Math.sin(t * 0.3) * 0.65;
-      stance.apply(sampleClip(name, t)); vrm.update(0);
+      stance.apply(pose); vrm.update(0);
       result.samples++;
       result.maxHipDisplacement = Math.max(result.maxHipDisplacement, originalHips.distanceTo(rootPosition(bone('hips'))));
       for (const leg of feet) {
@@ -49,7 +60,6 @@ export async function checkStance() {
         const projection = a.clone().addScaledVector(direction, b.clone().sub(a).dot(direction));
         result.minKneeForward = Math.min(result.minKneeForward, (b.z - projection.z) * forward);
       }
-    }
   }
   VRMUtils.deepDispose(vrm.scene);
   return result;

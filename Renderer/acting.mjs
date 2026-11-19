@@ -7,6 +7,9 @@ export const REST = Object.freeze({
   leftLift: 0, rightLift: 0, leftElbow: 0.10, rightElbow: 0.10,
   leftRoll: 0, rightRoll: 0, leftForward: 0, rightForward: 0, leftWrist: 0, rightWrist: 0,
   leftPalm: 0, rightPalm: 0, leftCurl: 0.16, rightCurl: 0.16,
+  leftFlex: 0, rightFlex: 0,
+  leftShoulderLift: 0, rightShoulderLift: 0, leftShoulderForward: 0, rightShoulderForward: 0,
+  leftChestReach: 0, rightChestReach: 0, leftWaveReach: 0, rightWaveReach: 0,
   gazeX: 0, gazeY: 0, smile: 0.10,
 });
 const ease = x => x * x * (3 - 2 * x);

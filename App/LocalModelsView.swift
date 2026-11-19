@@ -1,13 +1,20 @@
 import SwiftUI
 
 struct LocalModelSection: View {
+    @Environment(\.miraPalette) private var palette
     @ObservedObject var model: LocalModelStore
     let busy: Bool
     var body: some View {
         Section("Локальная модель") {
-            Text(model.selected.title)
-            Text(model.installed ? "Модель загружена · \(model.selected.sizeLabel)" : "Нужна загрузка · \(model.selected.sizeLabel)")
-                .font(.footnote).foregroundStyle(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "cpu").font(.title2).foregroundStyle(palette.accent)
+                    .frame(width: 36, height: 40).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(model.selected.title).font(.subheadline.weight(.semibold))
+                    Text(model.installed ? "Модель загружена · \(model.selected.sizeLabel)" : "Нужна загрузка · \(model.selected.sizeLabel)")
+                        .font(.footnote).foregroundStyle(palette.muted)
+                }
+            }.padding(.vertical, 4)
             if model.downloading {
                 ModelTransferStatus(model: model)
             } else if model.pausedBytes > 0 {
@@ -21,26 +28,55 @@ struct LocalModelSection: View {
 }
 
 struct LocalModelsView: View {
+    @Environment(\.miraPalette) private var palette
     @ObservedObject var model: LocalModelStore
     let busy: Bool
+    @State private var query = ""
+    @State private var installedOnly = false
     @State private var confirmDownload = false
     @State private var confirmDelete = false
     @State private var confirmLegacyDelete = false
     @State private var confirmDiscard = false
     private var memory: UInt64 { ProcessInfo.processInfo.physicalMemory }
+    private var visibleModels: [LocalModelSpec] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return LocalModelCatalog.models.filter {
+            (!installedOnly || model.installedIDs.contains($0.id)) && (text.isEmpty || "\($0.title) \($0.sizeLabel)".localizedCaseInsensitiveContains(text))
+        }
+    }
     var body: some View {
         List {
             Section {
-                Text("Оперативная память устройства: \(ByteCountFormatter.string(fromByteCount: Int64(memory), countStyle: .memory))")
-                Text("Метки ниже — предварительная оценка. iOS выделяет приложению только часть памяти. Даже рекомендуемая модель требует проверки на твоём устройстве; размер файла не равен расходу памяти.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                MiraScreenIntro(title: "ИИ на твоём iPhone", detail: "Выбери модель и загрузи её один раз. Дальше можно разговаривать без облачного сервиса.", symbol: "cpu")
+                DisclosureGroup("О памяти и совместимости") {
+                    Text("Оперативная память устройства: \(ByteCountFormatter.string(fromByteCount: Int64(memory), countStyle: .memory))")
+                    Text("Метки ниже — предварительная оценка. iOS выделяет приложению только часть памяти. Даже рекомендуемая модель требует проверки на твоём устройстве; размер файла не равен расходу памяти.")
+                        .font(.footnote).foregroundStyle(palette.muted)
+                }
+                Picker("Показать модели", selection: $installedOnly) {
+                    Text("Все модели").tag(false)
+                    Text("Загруженные").tag(true)
+                }.pickerStyle(.segmented)
             }
-            ForEach(LocalModelCatalog.models) { item in
+            if visibleModels.isEmpty {
+                Section {
+                    MiraScreenIntro(title: installedOnly ? "Пока нет загруженных моделей" : "Модель не найдена",
+                                    detail: installedOnly ? "Открой «Все модели», чтобы выбрать и скачать первую." : "Попробуй другое название или сбрось фильтр.", symbol: "magnifyingglass")
+                    Button("Показать все модели") { query = ""; installedOnly = false }
+                }
+            }
+            ForEach(visibleModels) { item in
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(item.title).font(.headline)
-                        Text(item.sizeLabel).foregroundStyle(.secondary)
-                        Text(item.guidanceText(physicalMemory: memory)).font(.subheadline)
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(item.name).font(.headline)
+                                Text(item.quantization).font(.caption.monospaced()).foregroundStyle(palette.muted)
+                            }
+                            Spacer(minLength: 4)
+                            MiraBadge(title: item.sizeLabel)
+                        }
+                        Text(item.guidanceText(physicalMemory: memory)).font(.footnote).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
                         if model.installedIDs.contains(item.id) {
                             Label("Загружена", systemImage: "internaldrive")
                                 .font(.footnote).foregroundStyle(.secondary)
@@ -50,10 +86,10 @@ struct LocalModelsView: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                         if model.selected.id == item.id {
-                            Label("Выбрана", systemImage: "checkmark.circle.fill").foregroundStyle(.purple)
+                            Label("Выбрана", systemImage: "checkmark.circle.fill").foregroundStyle(palette.accent)
                                 .accessibilityIdentifier("models.selected.\(item.id)")
                         } else {
-                            Button("Выбрать") { model.select(item) }
+                            Button("Выбрать модель", systemImage: "checkmark.circle") { model.select(item) }
                                 .disabled(busy || model.downloading)
                                 .accessibilityIdentifier("models.select.\(item.id)")
                         }
@@ -77,10 +113,10 @@ struct LocalModelsView: View {
                                     .disabled(busy)
                             }
                         }
-                        if let error = model.error { Text(error).font(.footnote).foregroundStyle(.red) }
+                        if let error = model.error { MiraNotice(text: error, symbol: "exclamationmark.circle") }
                     }
-                    Link("Источник и лицензия Apache 2.0", destination: item.sourceURL).font(.footnote)
-                }
+                    Link("Источник и лицензия Apache 2.0", destination: item.sourceURL).font(.caption)
+                }.listRowBackground(model.selected.id == item.id ? palette.honey.opacity(0.22) : palette.surface)
             }
             if model.legacyInstalled {
                 Section("Прежняя загрузка") {
@@ -89,7 +125,9 @@ struct LocalModelsView: View {
                 }
             }
         }
-        .navigationTitle("Модели")
+        .miraForm()
+        .navigationTitle("Модели").navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: "Qwen, Gemma или размер модели")
         .alert(model.pausedBytes > 0 ? "Продолжить установку?" : "Загрузить модель?", isPresented: $confirmDownload) {
             Button(model.pausedBytes == model.selected.bytes ? "Проверить" : (model.pausedBytes > 0 ? "Продолжить" : "Скачать")) { model.download() }
             Button("Отмена", role: .cancel) { }
@@ -114,6 +152,7 @@ struct LocalModelsView: View {
 }
 
 private struct ModelTransferStatus: View {
+    @Environment(\.miraPalette) private var palette
     @ObservedObject var model: LocalModelStore
     var body: some View {
         if model.pausing {

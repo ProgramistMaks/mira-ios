@@ -9,14 +9,15 @@ Videos sampled visually on 2026-11-15; full audio was machine-transcribed locall
 
 ## Required before delivery
 
-- [ ] Final high-quality anime model with hair/clothing dynamics, accurate material rendering and documented asset terms. Vita (CC0) is the current candidate; visual parity still unapproved.
-- [ ] Authored idle, listening, thinking, speaking, greeting and touch-reaction animation clips with smooth blending. Original torso/arm/hand/gaze clips now include pelvis weight shifts and dips with planted-foot leg IK and interruption-safe blending. Wider motion variety, native performance and recorded reference comparison remain unfinished.
+- [x] Character appearance selected by the user: on 2026-11-17 the user said they really like the current Vita character. Keep it; no replacement is needed to match Astra.
+- [ ] Device-verified hair/clothing dynamics and accurate material rendering for the selected character. Asset terms are documented; appearance approval alone does not validate runtime quality.
+- [ ] On-device validation of the 16-clip choreography, including the greeting, touch reactions, clip transitions and choreography during conversation. The renderer has a two-angle capture harness and Vita-specific wrist, finger and foot checks. See [motion study](MOTION-REFERENCE-STUDY.md).
 - [ ] Phoneme-aware mouth animation and device-verified audiovisual timing. Actual PCM amplitude now drives mouth opening; this is not phoneme lip sync. See SPEECH.md.
 - [ ] Natural Russian voice, interruptible playback, no feedback loop into microphone. Current Apple TTS is a functional baseline, not demonstrated parity.
-- [ ] Voice activation / push-to-talk UX and transcripts validated on device with Bluetooth, interruption, permission denial and network loss.
+- [ ] User-confirmed automatic conversation, endpoint detection, next-turn microphone restart and transcripts validated on device with Bluetooth, interruption, permission denial and network loss.
 - [ ] Local model download, cancellation and sustained inference checked on device; optional cloud connection configured and tested against a real provider; disconnect must preserve partial text and never claim completion.
-- [ ] Broader intent-to-command coverage and on-device voice-command verification. Explicit Russian note/reminder/search commands now route offline to review forms and acknowledge actual results; arbitrary model-generated actions and the reference block editor are not implemented.
-- [ ] Character and voice selection beyond a single sample avatar.
+- [ ] Broader intent-to-command coverage and on-device voice-command verification. Explicit Russian note/reminder commands open review forms; search invokes Tavily and retains source excerpts; arbitrary model-generated actions are not implemented. A bounded ordered-block editor is now in source and still needs native execution checks.
+- [ ] Native validation of character/voice selection: local VRM import and optional Fish Audio are now in source; arbitrary local TTS model import is not implemented.
 - [ ] Responsive chat/character/settings layouts checked on the actual outer and inner Duo screens, rotation, Split View, keyboard and large text.
 - [ ] Fresh macOS compile, native tests, installation after user signing and cold launch on iPhone Duo iOS 27.3.
 - [ ] Ten-minute device session with measured frame times, thermal behavior and memory. User-requested target is 120 fps on supported displays; renderer scheduling also accepts 240 for a capable future host/display. Measure actual WKWebView callback/render rates before claiming support: Info.plist opt-in and screen capability alone do not establish it. Fall back to the available display/host rate and 30 fps under thermal/low-power constraints; no crashes or unreleased microphone session.
@@ -40,6 +41,11 @@ Re-run costly model downloads/inference only when model/runtime changes or a spe
 regression justify them. The iOS workflow remains manual (`workflow_dispatch`).
 
 ## Current native status
+
+The 0.2 rebuild is not accepted: the initial device archive passed, but native tests
+did not execute. The latest source includes a modal error-reporting correction;
+its macOS run `43972857986` was blocked before any steps by GitHub billing/spending
+restrictions. No finished replacement was delivered. See VERIFICATION.md.
 
 The workspace is Linux. Native builds run in the user's private repository
 `ProgramistMaks/mira-ios`, defaulting to macos-26-intel / Xcode 26.6 / iOS 26.5.

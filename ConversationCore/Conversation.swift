@@ -22,6 +22,18 @@ struct Message: Codable, Identifiable, Equatable, Sendable {
     // Optional fields preserve previously saved conversations.
     var replyTo: UUID?
     var interruption: Interruption?
+    var sources: [SearchSource]?
+}
+
+struct SearchSource: Codable, Identifiable, Equatable, Sendable {
+    let title: String
+    let url: String
+    var id: String { url }
+    var safeURL: URL? {
+        guard let value = URL(string: url), value.scheme == "https", value.host != nil,
+              value.user == nil, value.password == nil else { return nil }
+        return value
+    }
 }
 
 enum CompanionPhase: String { case idle, listening, thinking, speaking }
@@ -35,6 +47,9 @@ struct ConnectionSettings: Codable {
     var speakReplies = true
     // Optional so existing saved settings migrate without a decoding failure.
     var liveActivitiesEnabled: Bool? = true
+    // Separate from the LLM choice: Apple recognition is an explicit preference.
+    var useAppleRecognition: Bool? = false
+    var offlineRecognition: Bool { !(useAppleRecognition ?? false) }
 
     func endpoint() throws -> URL {
         guard var url = URL(string: baseURL.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -59,7 +74,7 @@ enum CompanionError: LocalizedError {
         case .server(let code): return "Сервис временно недоступен (\(code)). Попробуй ещё раз."
         case .invalidResponse: return "Сервис вернул неполный или неподдерживаемый ответ."
         case .noSpeech: return "Распознавание речи сейчас недоступно. Можно написать сообщение."
-        case .offlineSpeechUnavailable: return "На этом устройстве недоступно локальное распознавание русской речи. В локальном режиме можно написать сообщение; запись в облако отправлена не будет."
+        case .offlineSpeechUnavailable: return "На этом устройстве недоступно локальное распознавание русской речи. В настройках голоса можно разрешить распознавание Apple через интернет или пользоваться текстом."
         case .permission: return "Нет разрешения. Его можно включить в настройках iPhone."
         case .storage: return "Не удалось сохранить данные на устройстве."
         }

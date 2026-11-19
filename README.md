@@ -1,22 +1,37 @@
 # Мира — iOS companion, internal work in progress
 
+[Private browser test site](https://mira-motion-lab.fungait8.chatgpt.site) — animation/wrist controls and browser versions of conversation, search, local AI and actions. [Scope and verification limits](Docs/WEB-TEST-SITE.md).
+
 Native SwiftUI shell with local Qwen inference through llama.cpp, optional cloud streaming chat, Russian speech recognition / Apple TTS, Tavily search, Keychain credential storage, local history/notes and confirmed EventKit reminders. A bundled Three.js/VRM scene runs inside an isolated WKWebView. It receives only animation state and audio-derived mouth amplitude, never conversation text or credentials. See [speech synchronization](Docs/SPEECH.md). Original keyframed gestures, smooth state changes and adaptive rendering are described in [character acting](Docs/ANIMATION.md). This renderer is reusable for later Android/desktop hosts.
 
-**Device-test candidate; reference-quality acceptance remains open.** See [quality gate](Docs/QUALITY.md). An unsigned IPA with the Qwen/Gemma catalogue has been compiled on macOS CI. Earlier real Swift inference passed for both model families. The current native evidence includes seventy unit tests and three UI scenarios; the remaining voice-layout and route checks are tracked below. See [verification](Docs/VERIFICATION.md) for test evidence; physical-device testing remains pending. Working name “Мира” is provisional. Vita (CC0, VRoid Project / pixiv) is the current character candidate, not an approved final design.
+**0.2 rebuild in progress; no finished replacement delivered.** The user rejected the previous IPA for missing voice, search and unsuitable layout. The new home prioritizes the character and automatic conversation, with chat in a separate sheet. 79 portable tests passed; the latest macOS verification was blocked before launch by GitHub account billing/spending limits. Native rebuild validation and physical-device acceptance remain open. See [verification](Docs/VERIFICATION.md) and [quality gate](Docs/QUALITY.md). The user explicitly approved the current Vita character (CC0, VRoid Project / pixiv) on 2026-11-17; retain it while refining the interface.
 
-Liquid Glass is implemented and has internal iOS 26 visual evidence. The current source compiles into a complete iPhone package with Xcode 26.6; workflow `43953994238` passed 70 native unit tests and three UI scenarios, then exposed a route-test relaunch error and hit the job deadline. The focused follow-up passed the repaired shared tests and device archive but failed before producing simulator evidence. Package-only run `43965968225` subsequently succeeded and produced the 15.83 MB unsigned IPA for the user’s signing/device test. Package delivery is separated from simulator QA; this run does not claim new native-test results. Earlier billing/capacity blocks are historical, not the current build status. See [verification](Docs/VERIFICATION.md) for the final test outcome and scope.
+Liquid Glass is implemented and has internal iOS 26 visual evidence. An earlier source revision compiled into a complete iPhone package with Xcode 26.6; workflow `43953994238` passed 70 native unit tests and three UI scenarios, then exposed a route-test relaunch error and hit the job deadline. The focused follow-up passed the repaired shared tests and device archive but failed before producing simulator evidence. Package-only run `43965968225` subsequently succeeded and produced the 15.83 MB unsigned IPA for the user’s signing/device test. Package delivery is separated from simulator QA; this run does not claim new native-test results. That successful package predates the current rebuild and the latest billing block. See [verification](Docs/VERIFICATION.md) for the final test outcome and scope.
 
 Subsequent renderer changes reduce facial morph data and fix readiness/reload behavior after graphics context loss. Real-model Chromium checks passed, and the current native startup/rotation test confirmed visible character pixels. Graphics-context recovery and sustained performance still need device checks. See [verification evidence](Docs/VERIFICATION.md) for measured scope and remaining limits.
 
-The six authored character motions now include pelvis weight shifts and small dips with planted feet and bending knees. Local tests cover contact stability and real VRM retargeting; native performance and reference-quality acceptance remain pending. See [animation details](Docs/ANIMATION.md).
+Vita’s motion menu now contains 16 separate clips. The automatic conversation selects the same clips as the manual picker, and «Мира, потанцуй» plays a longer dance. Body-relative wrist targets, finger shapes and planted-foot steps are checked on Vita’s actual rig. The reference study includes consecutive decoded video frames and the renderer can record the clips from two angles. [Motion study](Docs/MOTION-REFERENCE-STUDY.md).
 
 Animation settings request up to 120 fps by default, with 30/60/120/240 targets gated by the actual screen. The renderer follows host animation callbacks; 240 requires a supporting display/host, and actual high-refresh WKWebView performance has not been verified. Low power, heat and Reduce Motion retain a 30 fps cap.
 
 [Widgets and Dynamic Island](Docs/WIDGETS.md) are implemented in source: Home/Lock Screen shortcuts, conversation status, and an activity-specific Stop action. The extension now compiles and is embedded in the validated device package. The route test is being corrected to open warm links without relaunching; system presentation and physical-device QA remain pending. Re-signing must retain and sign `MiraWidgets.appex` as well as the main app.
 
-The portable Swift suite has seventy-one passing tests: twenty-two interaction cases, twelve HTTP download cases, six file-verification cases, sixteen chat-recovery cases, seven mouth-bridge cases and eight voice-conversation cases. Verification reports progress, and pausing preserves the model file. Chat replies retain interruption reasons, checkpoint streamed text and offer explicit question restoration without resending. See [chat recovery](Docs/CHAT-RECOVERY.md). Mouth updates keep only the latest pending sample and expire from capture time; local browser checks verify the actual VRM mouth response. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. Native unit/audio integration passed; device permissions, downloads and sustained inference still need verification; hosted iOS checks are batched according to the [build budget](Docs/QUALITY.md).
+The portable Swift suite has seventy-nine passing tests, including automatic conversation endpoints, stale-session rejection and the actual web client with injected HTTP responses. Verification reports progress, and pausing preserves the model file. Chat replies retain interruption reasons, checkpoint streamed text and offer explicit question restoration without resending. See [chat recovery](Docs/CHAT-RECOVERY.md). Mouth updates keep only the latest pending sample and expire from capture time; local browser checks verify the actual VRM mouth response. Run `swift test` at the repository root with Swift 5.10+, Python 3 and localhost access. Native unit/audio integration passed; device permissions, downloads and sustained inference still need verification; hosted iOS checks are batched according to the [build budget](Docs/QUALITY.md).
 
-The new [voice conversation mode](Docs/SPEECH.md) keeps an editable utterance beside a larger character scene, with explicit send, answer replay, interrupt-and-record and a real microphone meter. Ending a phrase stops capture immediately while allowing up to two seconds for final recognized words. Switching back to text preserves the draft; entering the mode never starts the microphone automatically. The draft/review/settings UI flow passed on iOS 26.5; the pinned control layout is being rechecked. Microphone and physical-device validation remain pending.
+The [automatic conversation](Docs/SPEECH.md) listens, detects the end of a phrase, answers aloud and listens again while explicitly enabled. Stop/navigation/error/background disarms it. A real voice preview works without a model; missing AI configuration is shown before recording. Optional chat preserves an editable draft. Native and physical-device verification of this rebuild is pending.
+
+## Cream design
+
+Chat, settings, model selection and commands now share cream surfaces and grouped
+navigation; the catalogue supports search and installed-only filtering. See
+[design preview instructions](Design/README.md) for the 11 secondary screen previews.
+
+The user selected the light cream reference. The native UI now uses a warm paper
+background, honey glass controls and a larger character with the conversation dock
+below it (beside it in landscape). A live [browser design preview](Design/README.md)
+uses the actual bundled VRM. It is not a native screenshot or a finished app. The user likes the current Vita
+character and asked to retain it; the remaining visual work concerns the interface. Local visual review covered
+four viewport sizes. No paid iOS build was run for this UI change.
 
 ## Renderer checks
 
@@ -50,9 +65,9 @@ Russian first-launch and signing instructions: [INSTALL-RU.md](Docs/INSTALL-RU.m
 
 - New installations default to local mode. Select and download Qwen3.5 (2B/4B/9B) or Google Gemma 4 E2B over Wi-Fi from the local catalogue; subsequent text inference runs on device without a cloud key or automatic cloud fallback. See [local AI](Docs/LOCAL-AI.md).
 - Optional cloud chat requires a compatible provider, endpoint, model and key. Keys are entered on device and stored in Keychain. Tavily provides search, not the conversational model.
-- Local-mode dictation requires on-device recognition; if unavailable, text input remains available. Cloud-mode dictation may send audio to Apple. Microphone is activated only by the recording control and stopped on background/interruption.
+- Recognition defaults to on-device processing independently of the model. An explicit setting permits Apple online recognition. Only an enabled conversation resumes listening after playback; stop/background/interruption disarms it.
 - Cloud requests use at most 40 non-interrupted messages; local requests use at most 12, trimmed to the token budget. Long-term semantic memory is not implemented.
-- Explicit Russian note/reminder/search commands work without an LLM and require action review. Manual forms remain available. Open-ended model tool use, a block editor and integrated web answers remain unfinished.
+- Explicit note/reminder commands require review. Explicit internet searches call Tavily and save real excerpts with source links; settings include an optional live connection check. Open-ended model tool use and synthesized web answers remain unfinished.
 - Natural voice parity, authored motions, real lip sync and final character acceptance remain open. UI automation covers startup, local notes and adaptive layout screenshots.
 
 ## Sources
@@ -62,3 +77,14 @@ Russian first-launch and signing instructions: [INSTALL-RU.md](Docs/INSTALL-RU.m
 - [Apple: distributing apps to registered devices](https://developer.apple.com/documentation/xcode/distributing-your-app-to-registered-devices/)
 
 No secrets, paid API use, third-party messages or external releases are part of the local implementation.
+
+
+The current source also includes four saved themes, adaptive Duo layouts, editable
+routines/study timers, optional Fish Audio and local VRM import. Physical fold
+regions require a build with the iOS 27.1+ SDK; older toolchains use size adaptation.
+These additions have not been compiled or device-validated yet. See
+[feature scope and remaining reference gaps](Docs/DUO-AND-REFERENCE-FEATURES.md).
+
+Full-body controls: [joint, physics and hair-density details](Docs/FULL-BODY.md).
+The private test site exposes these under **Тело и физика**; iOS source has the
+same settings in **Эмоции и движения**. Native device verification is pending.

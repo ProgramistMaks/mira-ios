@@ -1,5 +1,12 @@
 # Character acting and rendering
 
+The default character motion and the settings picker now use the 16-clip catalogue in `Renderer/choreography.mjs`. The sections below describe the earlier controller, which still supplies expressions and numeric diagnostic poses. [Current motion study](MOTION-REFERENCE-STUDY.md).
+
+A compositional layer now adds **29,952 selectable combinations** of 52 gestures,
+12 emotional styles, 8 gaze targets and 6 stances. These are not 29,952 independently
+authored clips. See [performance library](PERFORMANCE-LIBRARY.md) for selection,
+transitions, settings, exhaustive numeric checks and actual-rig evidence.
+
 `Renderer/acting.mjs` contains six original authored keyframe clips: idle, listening, thinking, speaking, greeting and touch. They drive the normalized VRM pelvis, torso, neck, head, upper/lower arms, wrists, finger joints and eye target. Pelvis weight shifts, small turns and dips now engage the legs through `Renderer/stance.mjs`. These are original authored motions with analytic leg IK, not motion capture or the final reference-quality animation set.
 
 - Both feet retain their initial avatar-local position and orientation. The normalized two-bone leg solver bends the knees forward, preserves segment lengths and lowers the pelvis when a shift would otherwise overextend the far leg. Foot contacts follow the parent turntable; they do not stay fixed to the browser world when the character turns.
@@ -24,3 +31,16 @@ High-refresh API sources checked on 2026-11-16:
 - https://developer.apple.com/documentation/uikit/uiscreen/maximumframespersecond
 
 The workflow's real-inference check defaults to enabled. For changes confined to character/UI code it can be disabled after verifying the local model catalogue, inference code and runtime are unchanged from a previously successful inference run. This animation update retains the runtime tested in run `43829220890`.
+
+Full-body update: independent phalanges/thumbs, shoulders, neck/pelvis, active leg
+IK, eye/mouth tests, spring tuning and optional denser hair are documented in
+[FULL-BODY.md](FULL-BODY.md). The default stance remains planted; deliberate
+foot lifts are enabled by the body demonstration/manual layer.
+
+## High-refresh playback
+
+On iOS a visible scene requesting more than 60 fps uses a CADisplayLink with a preferred frame rate clamped to the active screen. The first native tick takes ownership of WebGL rendering. A busy WebView skips the next native tick, keeping at most one call outstanding. On release, browser animation callbacks resume with a new time origin. Lower refresh settings, Reduce Motion, Low Power Mode and thermal limits retain their caps. The settings screen shows the last measured rate of WebGL frames submitted over two seconds. Panel scanout, sustained performance and thermal behavior require an iPhone measurement.
+
+Staged gestures cache the local neutral pose. Both animation and spring physics reuse calculations for unchanged parameters. Shape-preserving interpolation carries the hand through intermediate keys, while the shoulder anticipates the reach and the fingers settle after it. In the temple gesture, knee flexion absorbs each accent while the feet stay planted.
+
+A reproducible high-refresh recording uses `MOTION_REVIEW_FPS=120 MOTION_REVIEW_VIEW=front node Scripts/review-authored-motion.mjs`. Each exported frame advances the production renderer by 1/120 s. Offline export timing is independent of the host monitor.
